@@ -1,0 +1,195 @@
+-- ============================================================
+-- Sentinel — seed data
+-- ============================================================
+-- Run after schema.sql (and triggers.sql, though seeding doesn't
+-- depend on it). Three sections: departments, districts, cameras.
+-- ============================================================
+
+-- ------------------------------------------------------------
+-- Departments
+-- ------------------------------------------------------------
+-- HackathonPortal.md only names 4 of the stated 26 departments
+-- (Home/Police, Food & Civil Supplies, RTO, Municipal Corporations)
+-- — that's open question #6 from the schema review, still
+-- unresolved. Seeding all 26 with invented names would look more
+-- complete than it is; seeding just these 4 plus an explicit
+-- placeholder is the honest "good enough for now" version. Replace
+-- the placeholder once the real department list is sourced from the
+-- portal's resources page.
+INSERT INTO departments (name, category) VALUES
+    ('Home Department (Police)',            'Home/Police'),
+    ('Food & Civil Supplies Department',    'Food & Civil Supplies'),
+    ('Regional Transport Office (RTO)',     'RTO'),
+    ('Municipal Corporation',               'Municipal Corporation'),
+    ('Unassigned / Pending Department List','Placeholder — 22 of 26 departments not yet named in the brief');
+
+-- ------------------------------------------------------------
+-- Districts — all 33 Gujarat districts
+-- ------------------------------------------------------------
+-- `boundary` stays NULL for all of them — no shapefile sourced yet
+-- (Project_Context.md §9 open question), so gap-analysis polygon
+-- containment queries have nothing to run against until that's
+-- loaded. Filtering by district still works fine off the name.
+INSERT INTO districts (name) VALUES
+    ('Ahmedabad'), ('Amreli'), ('Anand'), ('Aravalli'), ('Banaskantha'),
+    ('Bharuch'), ('Bhavnagar'), ('Botad'), ('Chhota Udepur'), ('Dahod'),
+    ('Dang'), ('Devbhoomi Dwarka'), ('Gandhinagar'), ('Gir Somnath'),
+    ('Jamnagar'), ('Junagadh'), ('Kheda'), ('Kutch'), ('Mahisagar'),
+    ('Mehsana'), ('Morbi'), ('Narmada'), ('Navsari'), ('Panchmahal'),
+    ('Patan'), ('Porbandar'), ('Rajkot'), ('Sabarkantha'), ('Surat'),
+    ('Surendranagar'), ('Tapi'), ('Vadodara'), ('Valsad');
+
+-- ------------------------------------------------------------
+-- Cameras — from GET /api/ingest on the government camera grid
+-- ------------------------------------------------------------
+-- Straight mirror of the 30-camera catalogue: source_grid_id,
+-- name, location_label, live status, and stream properties/URLs
+-- come directly from the grid response.
+--
+-- `department_id` is left NULL for all 30 — the grid catalogue
+-- has no department field, and it isn't ours to guess; that's a
+-- registry-onboarding decision, not something inferable from a
+-- location string.
+--
+-- `district_id` is set ONLY where the location label unambiguously
+-- names or clearly implies a real place (e.g. "...-junagadh",
+-- "DISTRICT NAVSARI" spelled out, Adalaj → Gandhinagar, Gandhidham
+-- → Kutch, Bilimora → Navsari). Ambiguous ones (a bare
+-- "Janpath", an unqualified "ONGC Office", "Mohanpura") are left
+-- NULL rather than guessed — a wrong district silently poisons
+-- gap-analysis and district filtering, a NULL just says "not yet
+-- placed," which is the true state. `location` (the actual lat/lng
+-- point) is NULL for every row: the grid gives a text label, not
+-- coordinates, so geocoding is separate follow-up work, not
+-- something this seed can respond to.
+--
+-- `connectivity_status` is derived from the grid's own `live` flag
+-- (online if live, offline otherwise) — it's a reasonable seed
+-- default, not the same thing as our registry's health tracking
+-- long-term, which will diverge once cameras are actually monitored.
+
+INSERT INTO cameras (
+    source_grid_id, name, location_label, district_id,
+    connectivity_status, is_live, codec,
+    stream_width, stream_height, stream_fps, bitrate_kbps,
+    rtsp_url, whep_url, hls_url, grid_synced_at
+) VALUES
+    ('1',  'Camera 1',  '01 Chiman bhai Bridge', NULL,
+     'online', true, NULL, NULL, NULL, NULL, NULL,
+     'rtsp://live.corp8.cloud:8554/stream/1',  'http://live.corp8.cloud:8889/stream/1/whep',  '/live/stream/1/index.m3u8',  now()),
+
+    ('2',  'Camera 2',  '02 Janpath', NULL,
+     'online', true, NULL, NULL, NULL, NULL, NULL,
+     'rtsp://live.corp8.cloud:8554/stream/2',  'http://live.corp8.cloud:8889/stream/2/whep',  '/live/stream/2/index.m3u8',  now()),
+
+    ('3',  'Camera 3',  '03 O.N.G.C. Office', NULL,
+     'online', true, NULL, NULL, NULL, NULL, NULL,
+     'rtsp://live.corp8.cloud:8554/stream/3',  'http://live.corp8.cloud:8889/stream/3/whep',  '/live/stream/3/index.m3u8',  now()),
+
+    ('4',  'Camera 4',  '04 Paldi Circle', NULL,
+     'online', true, NULL, NULL, NULL, NULL, NULL,
+     'rtsp://live.corp8.cloud:8554/stream/4',  'http://live.corp8.cloud:8889/stream/4/whep',  '/live/stream/4/index.m3u8',  now()),
+
+    ('5',  'Camera 5',  '05 Visat teen Rasta', NULL,
+     'online', true, NULL, NULL, NULL, NULL, NULL,
+     'rtsp://live.corp8.cloud:8554/stream/5',  'http://live.corp8.cloud:8889/stream/5/whep',  '/live/stream/5/index.m3u8',  now()),
+
+    ('6',  'Camera 6',  '06 Timbavadi gate-Junagadh', (SELECT id FROM districts WHERE name = 'Junagadh'),
+     'online', true, 'hevc', 1920, 1080, 25.0, 1923,
+     'rtsp://live.corp8.cloud:8554/stream/6',  'http://live.corp8.cloud:8889/stream/6/whep',  '/live/stream/6/index.m3u8',  now()),
+
+    ('7',  'Camera 7',  '07 hero-showroom-gir-somnath', (SELECT id FROM districts WHERE name = 'Gir Somnath'),
+     'online', true, NULL, NULL, NULL, NULL, NULL,
+     'rtsp://live.corp8.cloud:8554/stream/7',  'http://live.corp8.cloud:8889/stream/7/whep',  '/live/stream/7/index.m3u8',  now()),
+
+    ('8',  'Camera 8',  '08 majewadi-gate-junagadh', (SELECT id FROM districts WHERE name = 'Junagadh'),
+     'online', true, NULL, NULL, NULL, NULL, NULL,
+     'rtsp://live.corp8.cloud:8554/stream/8',  'http://live.corp8.cloud:8889/stream/8/whep',  '/live/stream/8/index.m3u8',  now()),
+
+    ('9',  'Camera 9',  '09 new-bypass-near-by-circle-junagadh-2', (SELECT id FROM districts WHERE name = 'Junagadh'),
+     'online', true, NULL, NULL, NULL, NULL, NULL,
+     'rtsp://live.corp8.cloud:8554/stream/9',  'http://live.corp8.cloud:8889/stream/9/whep',  '/live/stream/9/index.m3u8',  now()),
+
+    ('10', 'Camera 10', '10 char-chowk-road-2-junagadh', (SELECT id FROM districts WHERE name = 'Junagadh'),
+     'online', true, NULL, NULL, NULL, NULL, NULL,
+     'rtsp://live.corp8.cloud:8554/stream/10', 'http://live.corp8.cloud:8889/stream/10/whep', '/live/stream/10/index.m3u8', now()),
+
+    ('11', 'Camera 11', '11 dolatpara-junagadh', (SELECT id FROM districts WHERE name = 'Junagadh'),
+     'online', true, NULL, NULL, NULL, NULL, NULL,
+     'rtsp://live.corp8.cloud:8554/stream/11', 'http://live.corp8.cloud:8889/stream/11/whep', '/live/stream/11/index.m3u8', now()),
+
+    ('12', 'Camera 12', '12 Tri Mandir Adalaj Tollnaka', (SELECT id FROM districts WHERE name = 'Gandhinagar'),
+     'online', true, NULL, NULL, NULL, NULL, NULL,
+     'rtsp://live.corp8.cloud:8554/stream/12', 'http://live.corp8.cloud:8889/stream/12/whep', '/live/stream/12/index.m3u8', now()),
+
+    ('13', 'Camera 13', '13 CN Vidhyalaya', NULL,
+     'online', true, 'h264', 1920, 1080, 12.5, 902,
+     'rtsp://live.corp8.cloud:8554/stream/13', 'http://live.corp8.cloud:8889/stream/13/whep', '/live/stream/13/index.m3u8', now()),
+
+    ('14', 'Camera 14', '14 Delight', NULL,
+     'online', true, 'h264', 1920, 1080, 12.5, 980,
+     'rtsp://live.corp8.cloud:8554/stream/14', 'http://live.corp8.cloud:8889/stream/14/whep', '/live/stream/14/index.m3u8', now()),
+
+    ('15', 'Camera 15', '15 Suvidha park', NULL,
+     'online', true, 'h264', 1920, 1080, 12.5, 690,
+     'rtsp://live.corp8.cloud:8554/stream/15', 'http://live.corp8.cloud:8889/stream/15/whep', '/live/stream/15/index.m3u8', now()),
+
+    ('16', 'Camera 16', '16 Visat P2', NULL,
+     'online', true, 'h264', 1920, 1080, 12.5, 961,
+     'rtsp://live.corp8.cloud:8554/stream/16', 'http://live.corp8.cloud:8889/stream/16/whep', '/live/stream/16/index.m3u8', now()),
+
+    ('17', 'Camera 17', '17 Rajkot Bus Port CCTV', (SELECT id FROM districts WHERE name = 'Rajkot'),
+     'online', true, 'hevc', 1920, 1080, 24.98, 671,
+     'rtsp://live.corp8.cloud:8554/stream/17', 'http://live.corp8.cloud:8889/stream/17/whep', '/live/stream/17/index.m3u8', now()),
+
+    ('18', 'Camera 18', '18 Rajkot CCTV', (SELECT id FROM districts WHERE name = 'Rajkot'),
+     'online', true, NULL, NULL, NULL, NULL, NULL,
+     'rtsp://live.corp8.cloud:8554/stream/18', 'http://live.corp8.cloud:8889/stream/18/whep', '/live/stream/18/index.m3u8', now()),
+
+    ('19', 'Camera 19', '19 KHAPARIA GRAM PANCHAYAT , TALUKA GANDEVI, DISTRICT NAVSARI', (SELECT id FROM districts WHERE name = 'Navsari'),
+     'online', true, NULL, NULL, NULL, NULL, NULL,
+     'rtsp://live.corp8.cloud:8554/stream/19', 'http://live.corp8.cloud:8889/stream/19/whep', '/live/stream/19/index.m3u8', now()),
+
+    ('20', 'Camera 20', '20 Mohanpura', NULL,
+     'online', true, NULL, NULL, NULL, NULL, NULL,
+     'rtsp://live.corp8.cloud:8554/stream/20', 'http://live.corp8.cloud:8889/stream/20/whep', '/live/stream/20/index.m3u8', now()),
+
+    ('21', 'Camera 21', '23 Patan Dethali Char Rasta', (SELECT id FROM districts WHERE name = 'Patan'),
+     'online', true, NULL, NULL, NULL, NULL, NULL,
+     'rtsp://live.corp8.cloud:8554/stream/21', 'http://live.corp8.cloud:8889/stream/21/whep', '/live/stream/21/index.m3u8', now()),
+
+    ('22', 'Camera 22', '28 BK Mervada tran Rasta', NULL,
+     'online', true, 'hevc', 1920, 1080, 25.0, 2091,
+     'rtsp://live.corp8.cloud:8554/stream/22', 'http://live.corp8.cloud:8889/stream/22/whep', '/live/stream/22/index.m3u8', now()),
+
+    ('23', 'Camera 23', '30 kheram', NULL,
+     'online', true, 'h264', 1280, 720, 25.0, 4001,
+     'rtsp://live.corp8.cloud:8554/stream/23', 'http://live.corp8.cloud:8889/stream/23/whep', '/live/stream/23/index.m3u8', now()),
+
+    ('24', 'Camera 24', '33 dehgam', (SELECT id FROM districts WHERE name = 'Gandhinagar'),
+     'online', true, NULL, NULL, NULL, NULL, NULL,
+     'rtsp://live.corp8.cloud:8554/stream/24', 'http://live.corp8.cloud:8889/stream/24/whep', '/live/stream/24/index.m3u8', now()),
+
+    ('25', 'Camera 25', '34 dhanori', NULL,
+     'online', true, NULL, NULL, NULL, NULL, NULL,
+     'rtsp://live.corp8.cloud:8554/stream/25', 'http://live.corp8.cloud:8889/stream/25/whep', '/live/stream/25/index.m3u8', now()),
+
+    ('26', 'Camera 26', '35 TANKAL', NULL,
+     'online', true, 'hevc', 2560, 1440, 13.35, 2411,
+     'rtsp://live.corp8.cloud:8554/stream/26', 'http://live.corp8.cloud:8889/stream/26/whep', '/live/stream/26/index.m3u8', now()),
+
+    ('27', 'Camera 27', '36 bilimora', (SELECT id FROM districts WHERE name = 'Navsari'),
+     'online', true, 'h264', 1280, 960, 24.86, 1112,
+     'rtsp://live.corp8.cloud:8554/stream/27', 'http://live.corp8.cloud:8889/stream/27/whep', '/live/stream/27/index.m3u8', now()),
+
+    ('28', 'Camera 28', '37 bilimora', (SELECT id FROM districts WHERE name = 'Navsari'),
+     'online', true, NULL, NULL, NULL, NULL, NULL,
+     'rtsp://live.corp8.cloud:8554/stream/28', 'http://live.corp8.cloud:8889/stream/28/whep', '/live/stream/28/index.m3u8', now()),
+
+    ('29', 'Camera 29', '38 bilimora', (SELECT id FROM districts WHERE name = 'Navsari'),
+     'online', true, 'h264', 1280, 960, 24.78, 907,
+     'rtsp://live.corp8.cloud:8554/stream/29', 'http://live.corp8.cloud:8889/stream/29/whep', '/live/stream/29/index.m3u8', now()),
+
+    ('30', 'Camera 30', 'Gandhidham Rambaugh p2', (SELECT id FROM districts WHERE name = 'Kutch'),
+     'online', true, NULL, NULL, NULL, NULL, NULL,
+     'rtsp://live.corp8.cloud:8554/stream/30', 'http://live.corp8.cloud:8889/stream/30/whep', '/live/stream/30/index.m3u8', now());
