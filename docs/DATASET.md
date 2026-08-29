@@ -1,8 +1,116 @@
 # Dataset
 
+This file covers **two different datasets** that both happen to be called
+"the dataset" in conversation, and they're easy to conflate — keep them
+separate:
+
+1. **Camera registry inventory** — real, already sourced, already seeded.
+   What Model 1 actually has. Documented in full below.
+2. **Model 2 evaluation dataset** — hand-labeled ANPR test data. Still not
+   decided, still needs an owner. Second half of this file.
+
+If you're wiring up the map/registry, you want §1. If you're building the
+detection/OCR/tracking pipeline and need something to measure precision/
+recall against, you want §2.
+
+---
+
+## 1. Camera registry inventory
+
+**Status: real.** Sourced, profiled, seeded, running.
+
+### Source & provenance
+
+30 cameras, pulled from `GET /api/ingest` on the government camera grid —
+the grid's own read-only catalogue (see `docs/API_Contract.md` §0 and
+`model2-analytics/README.md`), not something we synthesized. Each record
+gives an id/number, a free-text location label, live status, codec,
+resolution/fps/bitrate (when known), and RTSP/WHEP/HLS URLs.
+
+This is mirrored as-is into `cameras` via `shared/db/seed.sql`, which is
+loaded automatically the first time `docker compose up -d db` runs
+against an empty volume (see `infra/README.md`). Schema reference:
+`shared/db/schema.sql`; visual: `docs/schema_erd.svg`.
+
+### What's actually in it
+
+Numbers below are pulled directly from the seeded table, not estimated:
+
+| Field | Coverage | Detail |
+|---|---|---|
+| `source_grid_id` / `name` / `location_label` | 30 / 30 | every camera has these — they come straight off the grid |
+| `is_live` | 30 / 30 `true` | the grid reports every one of these 30 as currently live |
+| `district_id` | 16 / 30 | see mapping below — the rest are `NULL`, not guessed |
+| `department_id` | 0 / 30 | the grid has no concept of department — this is entirely an onboarding-time decision, not inferable from the catalogue |
+| `location` (real lat/lng point) | 0 / 30 | the grid gives a text label, never coordinates — geocoding is separate follow-up work, see caveats below |
+| `codec` / resolution / fps / bitrate | 11 / 30 | the other 19 report blank codec and `0` for width/height/fps/bitrate — the grid itself doesn't have this metadata for them, not a gap in our seeding |
+
+Of the 11 cameras with real stream metadata: **7 are H.264, 4 are HEVC**,
+resolution ranges from 1280×720 up to 2560×1440, frame rate from 12.5 to
+25 fps, bitrate from 671 to 4001 kbps. Mixed codec/resolution across the
+grid is expected and already called out in `model2-analytics/README.md`
+— don't assume a uniform stream shape when building against this.
+
+District breakdown (of the 16 that got assigned):
+
+| District | Cameras |
+|---|---|
+| Junagadh | 5 |
+| Navsari | 4 |
+| Gandhinagar | 2 |
+| Rajkot | 2 |
+| Kutch | 1 |
+| Patan | 1 |
+| Gir Somnath | 1 |
+
+### Data quality caveats — read before building anything on top of this
+
+- **District assignment is deliberately incomplete, not wrong.**
+  `district_id` was only set where the location label unambiguously named
+  or clearly implied a real place (an explicit "DISTRICT NAVSARI", a
+  "-junagadh" suffix, "Adalaj" → Gandhinagar, "Gandhidham" → Kutch,
+  "Bilimora" → Navsari). Labels like "Janpath", "O.N.G.C. Office," or
+  "Mohanpura" are too generic to place safely and were left `NULL` on
+  purpose — a wrong district silently poisons gap-analysis and district
+  filtering, a `NULL` just tells the truth about what we don't know yet.
+- **The embedded number in `location_label` is not a reliable index.**
+  For source_grid_ids 1–20, the number written into the label matches the
+  id (`"06 Timbavadi gate-Junagadh"` = id 6). Starting at id 21, this
+  stops holding: id 21's label starts with "23", id 22's with "28", and
+  it climbs from there (23→30, 24→33, ... 29→38) before id 30 drops the
+  numbering entirely ("Gandhidham Rambaugh p2"). Whatever that embedded
+  number means at the source (site number, install order, something
+  else), it diverges from `source_grid_id`/`number` partway through the
+  set — don't use it as a sort key or an implied id anywhere.
+- **No department can be inferred from this data.** All 30 cameras need
+  a real onboarding decision before `department_id` means anything —
+  this dataset only tells you the cameras exist and roughly where.
+- **No GPS coordinates exist yet.** `location` is `NULL` for all 30.
+  Getting real points requires either geocoding the label text (noisy —
+  see above) or a manual/departmental confirmation step during
+  onboarding. Don't backfill this by guessing coordinates from the
+  label; leave it `NULL` until it's actually known, same reasoning as
+  the district gaps.
+- **This is 30 cameras, not ~50.** The hackathon's Step 4 evaluation
+  references "approximately 50 heterogeneous cameras" — this catalogue
+  currently returns 30. Re-poll `/api/ingest` closer to evaluation time
+  rather than assuming this snapshot is final.
+
+### Refreshing this dataset
+
+The grid catalogue can change (`docs/API_Contract.md` says as much —
+"camera ids can change," don't hard-code). If you re-pull `/api/ingest`
+and get a different/larger set, update `shared/db/seed.sql` to match
+rather than hand-patching the database, so a fresh `docker compose up`
+still reproduces the current inventory from scratch.
+
+---
+
+## 2. Model 2 evaluation dataset
+
 **Status: not yet decided.** Owner: TBD.
 
-## Model 2 storage — deliberately not decided here either
+### Model 2 storage — also deliberately not decided
 
 `shared/db/schema.sql` covers Model 1 and the shared foundation only:
 `departments`, `districts`, `users`, `cameras`, `status_history`. There
@@ -21,14 +129,14 @@ real table or a derived view, and how many watchlist types exist —
 exactly the kind of premature commitment that gets expensively
 unpicked later. Model 1 doesn't need any of it to stand alone.
 
-When Model 2 work starts, its schema belongs in its own migration
-file (e.g. `shared/db/schema_model2.sql`) once the actual pipeline
-choices are made, informed by whatever this file ends up saying about
-the dataset. Until then, treat `docs/API_Contract.md` §2 (detections,
+When Model 2 work starts, its schema belongs in its own migration file
+(e.g. `shared/db/schema_model2.sql`) once the actual pipeline choices
+are made, informed by whatever this section ends up saying about the
+eval dataset. Until then, treat `docs/API_Contract.md` §2 (detections,
 alerts, vehicle-tracks endpoints) as aspirational shape, not a contract
 against a real table.
 
-## What we need
+### What we need
 
 - A recorded feed we control, for two purposes:
   1. The "Own-Feed Demonstration" deliverable (see `HackathonPortal.md`).
@@ -38,7 +146,12 @@ against a real table.
 - Enough labeled vehicle/plate instances to get a meaningful confusion
   matrix, not just a handful of clips.
 
-## Options on the table (none decided yet)
+This is a different dataset from §1 above — §1 is *which cameras exist
+and where*, this is *labeled footage to measure the analytics pipeline
+against*. The camera registry doesn't help with this; it's a separate
+sourcing job.
+
+### Options on the table (none decided yet)
 
 - Synthesize: record our own footage (parking lot, street-facing window,
   etc.) and hand-label plates.
@@ -48,7 +161,7 @@ against a real table.
   the eval harness numbers, since those don't have to come from the same
   source.
 
-## Constraints to keep in mind whenever this gets decided
+### Constraints to keep in mind whenever this gets decided
 
 - Plate detectors trained on US/EU plates underperform on Indian plate
   proportions/fonts (`Project_Context.md` §4) — whatever we use has to
@@ -58,6 +171,6 @@ against a real table.
   dataset is for building/validating the pipeline beforehand, not a
   substitute for handling live RTSP per `model2-analytics/README.md`.
 
-Fill this file in once a direction is picked — what was chosen, how many
-clips/plates, labeling method, where it lives (not committed to git if
-it's large — note the actual storage location here instead).
+Fill this section in once a direction is picked — what was chosen, how
+many clips/plates, labeling method, where it lives (not committed to git
+if it's large — note the actual storage location here instead).

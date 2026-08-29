@@ -1,0 +1,173 @@
+<svg viewBox="0 0 1160 758" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica, Arial, sans-serif">
+<rect x="0" y="0" width="1160" height="758" fill="#fbfbfc"/>
+<defs>
+<marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+<path d="M0,0 L0,6 L9,3 z" fill="#6b7690"/>
+</marker>
+</defs>
+<text x="580.0" y="30" text-anchor="middle" font-size="20" font-weight="700" fill="#1a2233">Sentinel — Model 1 + shared foundation schema</text>
+<text x="580.0" y="50" text-anchor="middle" font-size="12.5" fill="#5b6478">Model 2 (detections / tracks / watchlists / alerts) intentionally not included — see docs/DATASET.md</text>
+<g>
+<rect x="60" y="70" width="280" height="120" rx="6" fill="#ffffff" stroke="#33415c" stroke-width="1.5"/>
+<rect x="60" y="70" width="280" height="32" rx="6" fill="#2b3a55"/>
+<rect x="60" y="94" width="280" height="8" fill="#2b3a55"/>
+<text x="200.0" y="91.0" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#ffffff" letter-spacing="0.5">DEPARTMENTS</text>
+<rect x="61" y="102" width="278" height="22" fill="#f4f6fa"/>
+<rect x="68" y="105" width="20" height="16" rx="3" fill="#f4e1ab" stroke="#8a5a00" stroke-width="0.75"/>
+<text x="78" y="116.5" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#8a5a00">PK</text>
+<text x="94" y="117.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#8a5a00">id  uuid</text>
+<rect x="61" y="124" width="278" height="22" fill="#ffffff"/>
+<text x="72" y="139.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#33415c">name  text</text>
+<rect x="61" y="146" width="278" height="22" fill="#f4f6fa"/>
+<text x="72" y="161.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#33415c">category  text</text>
+<rect x="61" y="168" width="278" height="22" fill="#ffffff"/>
+<text x="72" y="183.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#33415c">created_at  timestamptz</text>
+<rect x="60" y="70" width="280" height="120" rx="6" fill="none" stroke="#33415c" stroke-width="1.5"/>
+</g>
+<g>
+<rect x="820" y="70" width="280" height="120" rx="6" fill="#ffffff" stroke="#33415c" stroke-width="1.5"/>
+<rect x="820" y="70" width="280" height="32" rx="6" fill="#2b3a55"/>
+<rect x="820" y="94" width="280" height="8" fill="#2b3a55"/>
+<text x="960.0" y="91.0" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#ffffff" letter-spacing="0.5">DISTRICTS</text>
+<rect x="821" y="102" width="278" height="22" fill="#f4f6fa"/>
+<rect x="828" y="105" width="20" height="16" rx="3" fill="#f4e1ab" stroke="#8a5a00" stroke-width="0.75"/>
+<text x="838" y="116.5" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#8a5a00">PK</text>
+<text x="854" y="117.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#8a5a00">id  uuid</text>
+<rect x="821" y="124" width="278" height="22" fill="#ffffff"/>
+<text x="832" y="139.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#33415c">name  text</text>
+<rect x="821" y="146" width="278" height="22" fill="#f4f6fa"/>
+<text x="832" y="161.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#33415c">boundary  geography(multipolygon)</text>
+<rect x="821" y="168" width="278" height="22" fill="#ffffff"/>
+<text x="832" y="183.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#33415c">created_at  timestamptz</text>
+<rect x="820" y="70" width="280" height="120" rx="6" fill="none" stroke="#33415c" stroke-width="1.5"/>
+</g>
+<g>
+<rect x="60" y="240" width="280" height="208" rx="6" fill="#ffffff" stroke="#33415c" stroke-width="1.5"/>
+<rect x="60" y="240" width="280" height="32" rx="6" fill="#2b3a55"/>
+<rect x="60" y="264" width="280" height="8" fill="#2b3a55"/>
+<text x="200.0" y="261.0" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#ffffff" letter-spacing="0.5">USERS</text>
+<rect x="61" y="272" width="278" height="22" fill="#f4f6fa"/>
+<rect x="68" y="275" width="20" height="16" rx="3" fill="#f4e1ab" stroke="#8a5a00" stroke-width="0.75"/>
+<text x="78" y="286.5" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#8a5a00">PK</text>
+<text x="94" y="287.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#8a5a00">id  uuid</text>
+<rect x="61" y="294" width="278" height="22" fill="#ffffff"/>
+<text x="72" y="309.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#33415c">username  text</text>
+<rect x="61" y="316" width="278" height="22" fill="#f4f6fa"/>
+<text x="72" y="331.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#33415c">email  text</text>
+<rect x="61" y="338" width="278" height="22" fill="#ffffff"/>
+<text x="72" y="353.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#33415c">hashed_password  text</text>
+<rect x="61" y="360" width="278" height="22" fill="#f4f6fa"/>
+<text x="72" y="375.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#33415c">role  dept_admin/operator/viewer</text>
+<rect x="61" y="382" width="278" height="22" fill="#ffffff"/>
+<rect x="68" y="385" width="20" height="16" rx="3" fill="#cfe3f0" stroke="#1f5f8b" stroke-width="0.75"/>
+<text x="78" y="396.5" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#1f5f8b">FK</text>
+<text x="94" y="397.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#1f5f8b">department_id  uuid</text>
+<rect x="61" y="404" width="278" height="22" fill="#f4f6fa"/>
+<text x="72" y="419.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#33415c">is_active  boolean</text>
+<rect x="61" y="426" width="278" height="22" fill="#ffffff"/>
+<text x="72" y="441.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#33415c">created_at  timestamptz</text>
+<rect x="60" y="240" width="280" height="208" rx="6" fill="none" stroke="#33415c" stroke-width="1.5"/>
+</g>
+<g>
+<rect x="420" y="70" width="340" height="406" rx="6" fill="#ffffff" stroke="#33415c" stroke-width="1.5"/>
+<rect x="420" y="70" width="340" height="32" rx="6" fill="#2b3a55"/>
+<rect x="420" y="94" width="340" height="8" fill="#2b3a55"/>
+<text x="590.0" y="91.0" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#ffffff" letter-spacing="0.5">CAMERAS</text>
+<rect x="421" y="102" width="338" height="22" fill="#f4f6fa"/>
+<rect x="428" y="105" width="20" height="16" rx="3" fill="#f4e1ab" stroke="#8a5a00" stroke-width="0.75"/>
+<text x="438" y="116.5" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#8a5a00">PK</text>
+<text x="454" y="117.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#8a5a00">id  uuid</text>
+<rect x="421" y="124" width="338" height="22" fill="#ffffff"/>
+<text x="432" y="139.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#33415c">name  text</text>
+<rect x="421" y="146" width="338" height="22" fill="#f4f6fa"/>
+<rect x="428" y="149" width="20" height="16" rx="3" fill="#cfe3f0" stroke="#1f5f8b" stroke-width="0.75"/>
+<text x="438" y="160.5" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#1f5f8b">FK</text>
+<text x="454" y="161.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#1f5f8b">department_id  (nullable)</text>
+<rect x="421" y="168" width="338" height="22" fill="#ffffff"/>
+<rect x="428" y="171" width="20" height="16" rx="3" fill="#cfe3f0" stroke="#1f5f8b" stroke-width="0.75"/>
+<text x="438" y="182.5" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#1f5f8b">FK</text>
+<text x="454" y="183.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#1f5f8b">district_id  (nullable)</text>
+<rect x="421" y="190" width="338" height="22" fill="#f4f6fa"/>
+<text x="432" y="205.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#33415c">location  geography(point), nullable</text>
+<rect x="421" y="212" width="338" height="22" fill="#ffffff"/>
+<text x="432" y="227.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#33415c">camera_type / ownership</text>
+<rect x="421" y="234" width="338" height="22" fill="#f4f6fa"/>
+<text x="432" y="249.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#33415c">storage_type / retention_days</text>
+<rect x="421" y="256" width="338" height="22" fill="#ffffff"/>
+<text x="432" y="271.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#33415c">vms_url  text</text>
+<rect x="421" y="278" width="338" height="22" fill="#f4f6fa"/>
+<text x="432" y="293.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#33415c">connectivity_status  text</text>
+<rect x="421" y="300" width="338" height="22" fill="#ffffff"/>
+<text x="432" y="315.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#33415c">is_active / decommissioned_at</text>
+<rect x="421" y="322" width="338" height="22" fill="#f4f6fa"/>
+<text x="432" y="337.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#33415c">source_grid_id  text, unique</text>
+<rect x="421" y="344" width="338" height="22" fill="#ffffff"/>
+<text x="432" y="359.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#33415c">location_label  raw grid string</text>
+<rect x="421" y="366" width="338" height="22" fill="#f4f6fa"/>
+<text x="432" y="381.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#33415c">is_live / codec / stream w·h·fps</text>
+<rect x="421" y="388" width="338" height="22" fill="#ffffff"/>
+<text x="432" y="403.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#33415c">bitrate_kbps</text>
+<rect x="421" y="410" width="338" height="22" fill="#f4f6fa"/>
+<text x="432" y="425.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#33415c">rtsp_url / whep_url / hls_url</text>
+<rect x="421" y="432" width="338" height="22" fill="#ffffff"/>
+<text x="432" y="447.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#33415c">grid_synced_at</text>
+<rect x="421" y="454" width="338" height="22" fill="#f4f6fa"/>
+<text x="432" y="469.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#33415c">created_at / updated_at</text>
+<rect x="420" y="70" width="340" height="406" rx="6" fill="none" stroke="#33415c" stroke-width="1.5"/>
+</g>
+<g>
+<rect x="420" y="526" width="340" height="142" rx="6" fill="#ffffff" stroke="#33415c" stroke-width="1.5"/>
+<rect x="420" y="526" width="340" height="32" rx="6" fill="#2b3a55"/>
+<rect x="420" y="550" width="340" height="8" fill="#2b3a55"/>
+<text x="590.0" y="547.0" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#ffffff" letter-spacing="0.5">STATUS_HISTORY</text>
+<rect x="421" y="558" width="338" height="22" fill="#f4f6fa"/>
+<rect x="428" y="561" width="20" height="16" rx="3" fill="#f4e1ab" stroke="#8a5a00" stroke-width="0.75"/>
+<text x="438" y="572.5" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#8a5a00">PK</text>
+<text x="454" y="573.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="700" fill="#8a5a00">id  uuid</text>
+<rect x="421" y="580" width="338" height="22" fill="#ffffff"/>
+<rect x="428" y="583" width="20" height="16" rx="3" fill="#cfe3f0" stroke="#1f5f8b" stroke-width="0.75"/>
+<text x="438" y="594.5" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#1f5f8b">FK</text>
+<text x="454" y="595.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#1f5f8b">camera_id  uuid</text>
+<rect x="421" y="602" width="338" height="22" fill="#f4f6fa"/>
+<text x="432" y="617.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#33415c">changed_field / old_value / new_value</text>
+<rect x="421" y="624" width="338" height="22" fill="#ffffff"/>
+<rect x="428" y="627" width="20" height="16" rx="3" fill="#cfe3f0" stroke="#1f5f8b" stroke-width="0.75"/>
+<text x="438" y="638.5" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="8.5" font-weight="700" fill="#1f5f8b">FK</text>
+<text x="454" y="639.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#1f5f8b">changed_by  uuid, nullable</text>
+<rect x="421" y="646" width="338" height="22" fill="#f4f6fa"/>
+<text x="432" y="661.5" font-family="Helvetica, Arial, sans-serif" font-size="11.5" font-weight="400" fill="#33415c">changed_at  timestamptz</text>
+<rect x="420" y="526" width="340" height="142" rx="6" fill="none" stroke="#33415c" stroke-width="1.5"/>
+</g>
+<line x1="144.0" y1="190" x2="144.0" y2="240" stroke="#6b7690" stroke-width="1.75" marker-end="url(#arrow)"/>
+<circle cx="144.0" cy="190" r="9" fill="#ffffff" stroke="#6b7690" stroke-width="1.5"/>
+<text x="144.0" y="193.5" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="10" font-weight="700" fill="#6b7690">1</text>
+<circle cx="144.0" cy="240" r="9" fill="#ffffff" stroke="#6b7690" stroke-width="1.5"/>
+<text x="144.0" y="243.5" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="10" font-weight="700" fill="#6b7690">N</text>
+<line x1="340" y1="160.0" x2="420" y2="110.6" stroke="#6b7690" stroke-width="1.75" marker-end="url(#arrow)"/>
+<circle cx="340" cy="160.0" r="9" fill="#ffffff" stroke="#6b7690" stroke-width="1.5"/>
+<text x="340" y="163.5" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="10" font-weight="700" fill="#6b7690">1</text>
+<circle cx="420" cy="110.6" r="9" fill="#ffffff" stroke="#6b7690" stroke-width="1.5"/>
+<text x="420" y="114.1" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="10" font-weight="700" fill="#6b7690">N</text>
+<line x1="820" y1="160.0" x2="760" y2="130.9" stroke="#6b7690" stroke-width="1.75" marker-end="url(#arrow)"/>
+<circle cx="820" cy="160.0" r="9" fill="#ffffff" stroke="#6b7690" stroke-width="1.5"/>
+<text x="820" y="163.5" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="10" font-weight="700" fill="#6b7690">1</text>
+<circle cx="760" cy="130.9" r="9" fill="#ffffff" stroke="#6b7690" stroke-width="1.5"/>
+<text x="760" y="134.4" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="10" font-weight="700" fill="#6b7690">N</text>
+<line x1="340" y1="416.79999999999995" x2="420" y2="625.4" stroke="#6b7690" stroke-width="1.75" marker-end="url(#arrow)"/>
+<circle cx="340" cy="416.79999999999995" r="9" fill="#ffffff" stroke="#6b7690" stroke-width="1.5"/>
+<text x="340" y="420.29999999999995" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="10" font-weight="700" fill="#6b7690">1</text>
+<circle cx="420" cy="625.4" r="9" fill="#ffffff" stroke="#6b7690" stroke-width="1.5"/>
+<text x="420" y="628.9" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="10" font-weight="700" fill="#6b7690">N</text>
+<line x1="590.0" y1="476" x2="590.0" y2="526" stroke="#6b7690" stroke-width="1.75" marker-end="url(#arrow)"/>
+<circle cx="590.0" cy="476" r="9" fill="#ffffff" stroke="#6b7690" stroke-width="1.5"/>
+<text x="590.0" y="479.5" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="10" font-weight="700" fill="#6b7690">1</text>
+<circle cx="590.0" cy="526" r="9" fill="#ffffff" stroke="#6b7690" stroke-width="1.5"/>
+<text x="590.0" y="529.5" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="10" font-weight="700" fill="#6b7690">N</text>
+<rect x="60" y="692" width="20" height="16" rx="3" fill="#f4e1ab" stroke="#8a5a00" stroke-width="0.75"/>
+<text x="70" y="703.5" text-anchor="middle" font-size="8.5" font-weight="700" fill="#8a5a00">PK</text>
+<text x="90" y="704" font-size="11.5" fill="#33415c">primary key</text>
+<rect x="200" y="692" width="20" height="16" rx="3" fill="#cfe3f0" stroke="#1f5f8b" stroke-width="0.75"/>
+<text x="210" y="703.5" text-anchor="middle" font-size="8.5" font-weight="700" fill="#1f5f8b">FK</text>
+<text x="230" y="704" font-size="11.5" fill="#33415c">foreign key</text>
+<text x="330" y="704" font-size="11.5" fill="#5b6478">nullable FKs on cameras/users mean onboarding can happen before assignment</text>
+</svg>
