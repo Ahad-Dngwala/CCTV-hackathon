@@ -1,5 +1,5 @@
 # Skeleton — see infra/README.md for what gets added and when.
-# Only `db` is real right now; everything else follows as the app exists.
+# `db` is real and self-seeding; everything else follows as the app exists.
 
 services:
   db:
@@ -12,10 +12,26 @@ services:
       - "5432:5432"
     volumes:
       - sentinel_pgdata:/var/lib/postgresql/data
+      # Postgres runs every *.sql/*.sh under docker-entrypoint-initdb.d
+      # in sorted-name order, but ONLY the very first time the data
+      # volume is empty. The image itself already drops in a
+      # `10_postgis.sh` that bootstraps the postgis extension, so ours
+      # are numbered 20/30/40 to run after it, in the same schema ->
+      # triggers -> seed order they were built and hand-tested in.
+      - ../shared/db/schema.sql:/docker-entrypoint-initdb.d/20-schema.sql:ro
+      - ../shared/db/triggers.sql:/docker-entrypoint-initdb.d/30-triggers.sql:ro
+      - ../shared/db/seed.sql:/docker-entrypoint-initdb.d/40-seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinel -d sentinel"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   # app:
   #   build: ..
-  #   depends_on: [db]
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
   #   ports: ["8000:8000"]
 
   # mediamtx:
