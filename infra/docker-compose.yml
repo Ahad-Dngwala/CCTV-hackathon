@@ -1,5 +1,5 @@
-# Skeleton — see infra/README.md for what gets added and when.
-# `db` is real and self-seeding; everything else follows as the app exists.
+# Sentinel infrastructure — see infra/README.md for what gets added and when.
+# `db` is real and self-seeding; `app` is the Model 1 FastAPI service.
 
 services:
   db:
@@ -27,12 +27,17 @@ services:
       timeout: 5s
       retries: 10
 
-  # app:
-  #   build: ..
-  #   depends_on:
-  #     db:
-  #       condition: service_healthy
-  #   ports: ["8000:8000"]
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: "postgresql://sentinel:sentinel_dev@db:5432/sentinel"
 
   # mediamtx:
   #   image: bluenviron/mediamtx:latest

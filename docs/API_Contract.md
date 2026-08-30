@@ -49,7 +49,7 @@ Owner: `model1-registry`. Data model reference: `Project_Context.md` §3.
 | `POST /api/v1/cameras/bulk` | CSV bulk import — see `Project_Context.md` §8, no wizard UX | ✅ |
 | `GET /api/v1/cameras/{id}` | Camera detail incl. metadata + `vms_url` | ✅ |
 | `PATCH /api/v1/cameras/{id}` | Update camera; writes a `status_history` row | ✅ |
-| `DELETE /api/v1/cameras/{id}` | Remove camera | 🚧 |
+| `DELETE /api/v1/cameras/{id}` | Soft delete camera (sets `is_active = false`, trigger timestamps `decommissioned_at`) | ✅ |
 | `GET /api/v1/cameras/{id}/history` | Audit trail for one camera | ✅ |
 | `GET /api/v1/departments` | List departments | ✅ |
 | `GET /api/v1/districts` | List districts incl. PostGIS boundary (GeoJSON) | ✅ |

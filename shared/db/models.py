@@ -16,7 +16,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
-    Real,
+    REAL,
     String,
     Text,
     CheckConstraint,
@@ -122,7 +122,7 @@ class Camera(Base):
     codec = Column(Text)
     stream_width = Column(Integer)
     stream_height = Column(Integer)
-    stream_fps = Column(Real)
+    stream_fps = Column(REAL)
     bitrate_kbps = Column(Integer)
     rtsp_url = Column(Text)
     whep_url = Column(Text)
