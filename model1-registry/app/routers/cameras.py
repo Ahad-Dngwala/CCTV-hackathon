@@ -32,6 +32,9 @@ from shared.schemas.camera import (
     GeoJSONPoint,
 )
 
+from app.auth.dependencies import get_current_user, require_role
+from shared.db.models import User as UserModel
+
 router = APIRouter(prefix="/api/v1/cameras", tags=["cameras"])
 
 
@@ -126,7 +129,16 @@ def list_cameras(
 
 
 @router.post("", response_model=CameraSchema, status_code=201)
-def create_camera(body: CameraCreate, db: Session = Depends(get_db)):
+def create_camera(
+    body: CameraCreate,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(require_role("dept_admin")),
+):
+    if current_user.department_id and body.department_id and body.department_id != current_user.department_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Department administrators can only create cameras in their assigned department.",
+        )
     cam = CameraModel(
         name=body.name,
         department_id=body.department_id,
@@ -140,6 +152,7 @@ def create_camera(body: CameraCreate, db: Session = Depends(get_db)):
     )
     _set_location(cam, body.latitude, body.longitude)
     db.add(cam)
+    db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": str(current_user.id)})
     db.commit()
     db.refresh(cam)
     # Eagerly load relationships for the response
@@ -149,7 +162,11 @@ def create_camera(body: CameraCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/bulk", response_model=BulkImportResult)
-async def bulk_import(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def bulk_import(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(require_role("dept_admin")),
+):
     """
     CSV bulk import — parse rows, validate, insert.
     Returns count of created/skipped/errored.  No wizard, no preview step.
@@ -201,6 +218,12 @@ async def bulk_import(file: UploadFile = File(...), db: Session = Depends(get_db
                 if dept:
                     cam.department_id = dept.id
 
+            # Enforce department scoping for dept_admin during bulk import
+            if current_user.department_id and cam.department_id and cam.department_id != current_user.department_id:
+                errors.append(f"Row {i}: cannot import camera for another department")
+                errored += 1
+                continue
+
             # District by name lookup
             dist_name = row.get("district", "").strip()
             if dist_name:
@@ -231,6 +254,7 @@ async def bulk_import(file: UploadFile = File(...), db: Session = Depends(get_db
             errored += 1
 
     if created > 0:
+        db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": str(current_user.id)})
         db.commit()
 
     return BulkImportResult(
@@ -256,11 +280,20 @@ def get_camera(camera_id: uuid.UUID, db: Session = Depends(get_db)):
 
 @router.patch("/{camera_id}", response_model=CameraSchema)
 def update_camera(
-    camera_id: uuid.UUID, body: CameraUpdate, db: Session = Depends(get_db)
+    camera_id: uuid.UUID,
+    body: CameraUpdate,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(require_role("dept_admin")),
 ):
     cam = db.query(CameraModel).filter(CameraModel.id == camera_id).first()
     if not cam:
         raise HTTPException(status_code=404, detail="Camera not found")
+
+    if current_user.department_id and cam.department_id != current_user.department_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Department administrators can only manage cameras in their assigned department.",
+        )
 
     update_data = body.model_dump(exclude_unset=True)
     lat = update_data.pop("latitude", None)
@@ -271,6 +304,7 @@ def update_camera(
 
     _set_location(cam, lat, lon)
 
+    db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": str(current_user.id)})
     db.commit()
     db.refresh(cam)
     # Eagerly load relationships
@@ -280,7 +314,11 @@ def update_camera(
 
 
 @router.delete("/{camera_id}", response_model=CameraSchema)
-def delete_camera(camera_id: uuid.UUID, db: Session = Depends(get_db)):
+def delete_camera(
+    camera_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(require_role("dept_admin")),
+):
     """
     Soft delete — sets is_active = false.
     The DB trigger automatically timestamps decommissioned_at and
@@ -292,7 +330,14 @@ def delete_camera(camera_id: uuid.UUID, db: Session = Depends(get_db)):
     if not cam.is_active:
         raise HTTPException(status_code=400, detail="Camera is already deactivated")
 
+    if current_user.department_id and cam.department_id != current_user.department_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Department administrators can only manage cameras in their assigned department.",
+        )
+
     cam.is_active = False
+    db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": str(current_user.id)})
     db.commit()
     db.refresh(cam)
     _ = cam.department

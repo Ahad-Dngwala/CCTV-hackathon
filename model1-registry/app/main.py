@@ -22,7 +22,7 @@ if (local_repo_root / "shared").exists() and str(local_repo_root) not in sys.pat
     sys.path.insert(0, str(local_repo_root))
 
 from app.config import settings  # noqa: E402
-from app.routers import cameras, departments, districts, pages  # noqa: E402
+from app.routers import auth, cameras, departments, districts, pages  # noqa: E402
 from shared.db.session import init_engine  # noqa: E402
 
 
@@ -48,6 +48,7 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 
 # ── Routers ──────────────────────────────────────────────────────
 
+app.include_router(auth.router)
 app.include_router(cameras.router)
 app.include_router(departments.router)
 app.include_router(districts.router)

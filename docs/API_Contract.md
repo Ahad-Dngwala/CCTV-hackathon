@@ -19,7 +19,7 @@ Status markers used below:
 - Auth: JWT bearer token (`Authorization: Bearer <token>`), issued by
   `POST /api/v1/auth/login`. Three roles per `Project_Context.md` §6:
   `dept_admin`, `operator`, `viewer`. Enforced at the router dependency
-  level, not just hidden in the UI. 🚧
+  level, not just hidden in the UI. ✅
 - Errors: standard shape —
   ```json
   { "error": { "code": "string", "message": "string", "details": {} } }
