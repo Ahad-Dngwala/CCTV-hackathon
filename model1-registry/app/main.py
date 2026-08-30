@@ -8,6 +8,7 @@ Run with:  uvicorn app.main:app --reload
 
 import os
 import sys
+import importlib.util as _ilu
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -46,7 +47,7 @@ BASE_DIR = Path(__file__).resolve().parent
 app.state.templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
-# ── Routers ──────────────────────────────────────────────────────
+# ── Model 1 Routers ──────────────────────────────────────────────
 
 app.include_router(auth.router)
 app.include_router(audit.router)
@@ -56,12 +57,40 @@ app.include_router(districts.router)
 app.include_router(gap_analysis.router)
 app.include_router(pages.router)
 
-# ── Model 2 Routers ──────────────────────────────────────────────
-try:
-    if str(local_repo_root / "model2-analytics") not in sys.path:
-        sys.path.insert(0, str(local_repo_root / "model2-analytics"))
-    from app.routers.watchlist import router as watchlist_router
-    app.include_router(watchlist_router)
-except Exception as e:
-    print(f"Note: Model 2 watchlist router not mounted: {e}")
+# ── Model 2 Routers (auto-discovery) ─────────────────────────────
+# Every *.py file in model2-analytics/app/routers/ that exposes a
+# `router` attribute is automatically loaded and mounted here.
+#
+# Adding a new Model 2 feature:
+#   1. Create  model2-analytics/app/routers/<feature>.py
+#   2. Define  router = APIRouter(...)  inside it
+#   Done — no changes to this file needed.
+#
+# Works both in Docker (/model2-analytics/app/routers/)
+# and locally (<repo_root>/model2-analytics/app/routers/).
 
+_M2_ROUTERS_DIR_CANDIDATES = [
+    Path("/model2-analytics/app/routers"),                              # Docker
+    local_repo_root / "model2-analytics" / "app" / "routers",          # Local dev
+]
+_m2_routers_dir = next((p for p in _M2_ROUTERS_DIR_CANDIDATES if p.is_dir()), None)
+
+if _m2_routers_dir:
+    for _router_file in sorted(_m2_routers_dir.glob("*.py")):
+        if _router_file.name.startswith("_"):       # skip __init__.py, etc.
+            continue
+        try:
+            _spec = _ilu.spec_from_file_location(
+                f"model2.routers.{_router_file.stem}", _router_file
+            )
+            _mod = _ilu.module_from_spec(_spec)
+            _spec.loader.exec_module(_mod)
+            if hasattr(_mod, "router"):
+                app.include_router(_mod.router)
+                print(f"[model2] mounted : {_router_file.name}")
+            else:
+                print(f"[model2] skipped  : {_router_file.name}  (no `router` attribute)")
+        except Exception as _exc:
+            print(f"[model2] ERROR    : {_router_file.name}  → {_exc}")
+else:
+    print("[model2] routers directory not found — Model 2 endpoints unavailable.")
