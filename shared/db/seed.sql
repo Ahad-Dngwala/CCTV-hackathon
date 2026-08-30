@@ -224,3 +224,60 @@ INSERT INTO cameras (
      ST_GeogFromText('SRID=4326;POINT(70.117200 23.076800)'),
      'online', true, NULL, NULL, NULL, NULL, NULL,
      'rtsp://live.corp8.cloud:8554/stream/30', 'http://live.corp8.cloud:8889/stream/30/whep', '/live/stream/30/index.m3u8', now());
+
+-- ------------------------------------------------------------
+-- Model 2 Sample / Seed Data — Watchlists, Tracks, Detections, Alerts
+-- ------------------------------------------------------------
+
+INSERT INTO vehicles_watchlist (id, plate_number, category, reported_date, description, status)
+VALUES
+    ('a0000000-0000-0000-0000-000000000001', 'GJ01AB1234', 'stolen', '2026-08-25', 'White Swift stolen in Ahmedabad district', 'active'),
+    ('a0000000-0000-0000-0000-000000000002', 'GJ05CD5678', 'wanted', '2026-08-28', 'Black SUV wanted in connection with Home Dept investigation', 'active'),
+    ('a0000000-0000-0000-0000-000000000003', 'GJ03EF9012', 'blacklisted', '2026-08-20', 'Repeated traffic violations - RTO watchlist', 'active')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO vehicle_tracks (id, plate_number, vehicle_color, vehicle_type, first_seen, last_seen, is_watchlisted)
+VALUES
+    ('b0000000-0000-0000-0000-000000000001', 'GJ01AB1234', 'White', 'Hatchback', NOW() - INTERVAL '3 hours', NOW() - INTERVAL '30 minutes', true)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO detections (id, camera_id, timestamp, detected_plate, confidence, cropped_image_path, vehicle_track_id)
+SELECT 
+    'c0000000-0000-0000-0000-000000000001',
+    c.id,
+    NOW() - INTERVAL '3 hours',
+    'GJ01AB1234',
+    0.95,
+    '/storage/crops/c0000000-0000-0000-0000-000000000001.jpg',
+    'b0000000-0000-0000-0000-000000000001'
+FROM cameras c LIMIT 1
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO detections (id, camera_id, timestamp, detected_plate, confidence, cropped_image_path, vehicle_track_id)
+SELECT 
+    'c0000000-0000-0000-0000-000000000002',
+    c.id,
+    NOW() - INTERVAL '1 hour 30 minutes',
+    'GJ01AB1234',
+    0.92,
+    '/storage/crops/c0000000-0000-0000-0000-000000000002.jpg',
+    'b0000000-0000-0000-0000-000000000001'
+FROM cameras c OFFSET 1 LIMIT 1
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO detections (id, camera_id, timestamp, detected_plate, confidence, cropped_image_path, vehicle_track_id)
+SELECT 
+    'c0000000-0000-0000-0000-000000000003',
+    c.id,
+    NOW() - INTERVAL '30 minutes',
+    'GJ01AB1234',
+    0.98,
+    '/storage/crops/c0000000-0000-0000-0000-000000000003.jpg',
+    'b0000000-0000-0000-0000-000000000001'
+FROM cameras c OFFSET 2 LIMIT 1
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO alerts (id, detection_id, watchlist_id, alert_type, severity, created_at)
+VALUES
+    ('d0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000001', 'vehicle_match', 'critical', NOW() - INTERVAL '30 minutes')
+ON CONFLICT (id) DO NOTHING;

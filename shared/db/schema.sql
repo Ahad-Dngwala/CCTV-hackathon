@@ -1,14 +1,6 @@
 -- ============================================================
 -- Sentinel — Model 1 (Registry & GIS) + shared foundation schema
 -- ============================================================
--- Scope note: Model 2 (detections, tracks, watchlists, alerts,
--- ground-truth annotations) is intentionally NOT defined here.
--- See docs/DATASET.md and Project_Context.md §4 — that schema is
--- owned by whoever builds the analytics pipeline, once they've
--- decided how they want to store embeddings/tracks/matches. This
--- file only covers what Model 1 needs to stand alone: departments,
--- districts, users, cameras, and the camera audit trail.
---
 -- Tested against a real Postgres 16 + PostGIS 3.4 instance
 -- (matching infra/docker-compose.yml, db name `sentinel`) —
 -- every statement below actually ran clean, not just eyeballed.
@@ -16,6 +8,7 @@
 
 CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;   -- gen_random_uuid()
+CREATE EXTENSION IF NOT EXISTS vector;     -- pgvector, for appearance-embedding fallback matching
 
 -- ============================================================
 -- Shared foundation
@@ -121,3 +114,73 @@ CREATE TABLE status_history (
     changed_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_status_history_camera ON status_history (camera_id, changed_at DESC);
+
+-- ============================================================
+-- Model 2 — Unified Viewer & Analytics
+-- ============================================================
+
+-- Watchlists
+CREATE TABLE vehicles_watchlist (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    plate_number  TEXT NOT NULL,             -- always store normalized (uppercase, no spaces)
+    category      TEXT NOT NULL CHECK (category IN ('stolen', 'wanted', 'blacklisted')),
+    reported_date DATE,
+    department_id UUID REFERENCES departments(id) ON DELETE SET NULL,
+    description   TEXT,
+    status        TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'resolved')),
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_vehicles_watchlist_plate ON vehicles_watchlist (plate_number) WHERE status = 'active';
+
+-- Bonus scope — persons watchlist
+CREATE TABLE persons_watchlist (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name           TEXT NOT NULL,
+    category       TEXT NOT NULL CHECK (category IN ('wanted', 'missing', 'suspect')),
+    face_embedding VECTOR(512),
+    status         TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'resolved')),
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Vehicle tracks — resolved global identity for vehicles
+CREATE TABLE vehicle_tracks (
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    plate_number          TEXT,               -- nullable: a track can exist before plate is read
+    appearance_embedding  VECTOR(512),         -- representative embedding for fallback matching
+    vehicle_color         TEXT,
+    vehicle_type          TEXT,
+    first_seen            TIMESTAMPTZ NOT NULL,
+    last_seen             TIMESTAMPTZ NOT NULL,
+    is_watchlisted        BOOLEAN NOT NULL DEFAULT false
+);
+CREATE INDEX idx_vehicle_tracks_plate ON vehicle_tracks (plate_number);
+CREATE INDEX idx_vehicle_tracks_embedding ON vehicle_tracks USING hnsw (appearance_embedding vector_cosine_ops);
+
+-- Detections — individual vehicle sightings at cameras
+CREATE TABLE detections (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    camera_id           UUID NOT NULL REFERENCES cameras(id) ON DELETE RESTRICT,
+    "timestamp"         TIMESTAMPTZ NOT NULL,
+    detected_plate       TEXT,                -- specific sighting's OCR output
+    confidence           REAL,
+    cropped_image_path   TEXT,
+    vehicle_track_id     UUID REFERENCES vehicle_tracks(id) ON DELETE SET NULL,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_detections_camera_time ON detections (camera_id, "timestamp" DESC);
+CREATE INDEX idx_detections_track_time ON detections (vehicle_track_id, "timestamp");
+CREATE INDEX idx_detections_plate ON detections (detected_plate);
+
+-- Alerts — generated on watchlist match
+CREATE TABLE alerts (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    detection_id     UUID NOT NULL REFERENCES detections(id) ON DELETE CASCADE,
+    watchlist_id     UUID NOT NULL REFERENCES vehicles_watchlist(id) ON DELETE RESTRICT,
+    alert_type       TEXT NOT NULL DEFAULT 'vehicle_match',
+    severity         TEXT CHECK (severity IN ('low', 'medium', 'high', 'critical')),
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    acknowledged_by  UUID REFERENCES users(id) ON DELETE SET NULL,
+    acknowledged_at  TIMESTAMPTZ
+);
+CREATE INDEX idx_alerts_watchlist ON alerts (watchlist_id);
+CREATE INDEX idx_alerts_created ON alerts (created_at DESC);
