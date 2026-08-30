@@ -24,6 +24,7 @@
         {{ row.cam.updated_at.strftime('%Y-%m-%d %H:%M') if row.cam.updated_at else '—' }}
     </td>
     <td>
+        {% if not user or user.role == 'dept_admin' %}
         <div style="display: flex; gap: 0.35rem;">
             <button type="button"
                     class="btn btn--secondary btn--sm"
@@ -34,10 +35,13 @@
                 ✏️
             </button>
             <button type="button" class="btn btn--danger btn--sm"
-                    onclick="cameraListPage().deactivateCamera('{{ row.cam.id }}')">
+                    onclick="deactivateCamera('{{ row.cam.id }}')">
                 🗑️
             </button>
         </div>
+        {% else %}
+        <span style="font-size: 0.8rem; color: var(--text-muted);">Read only</span>
+        {% endif %}
     </td>
 </tr>
 {% endfor %}

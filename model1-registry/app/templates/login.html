@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}Sentinel — Login{% endblock %}
+
+{% block content %}
+<div class="login-wrapper" style="min-height: calc(100vh - 120px); display: flex; align-items: center; justify-content: center; padding: 2rem 1rem;">
+    <div class="card" style="width: 100%; max-width: 420px; backdrop-filter: blur(16px); background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 1rem; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); padding: 2.5rem 2rem;">
+        
+        <div style="text-align: center; margin-bottom: 2rem;">
+            <div style="font-size: 3rem; margin-bottom: 0.5rem;">🛡️</div>
+            <h2 style="font-size: 1.5rem; font-weight: 700; color: #f8fafc; margin-bottom: 0.25rem;">Sentinel Command Portal</h2>
+            <p style="color: #94a3b8; font-size: 0.875rem;">Sign in with your operational credentials</p>
+        </div>
+
+        <div id="login-error" class="form-error" style="display: none; background: rgba(239, 68, 68, 0.15); border: 1px solid var(--danger); color: #fca5a5; padding: 0.75rem 1rem; border-radius: 0.5rem; margin-bottom: 1.5rem; font-size: 0.875rem; text-align: center;">
+        </div>
+
+        <form id="login-form">
+            <div class="form-group" style="margin-bottom: 1.25rem;">
+                <label class="form-label" for="username" style="display: block; font-size: 0.85rem; font-weight: 600; color: #cbd5e1; margin-bottom: 0.5rem;">Username</label>
+                <input class="form-input" type="text" id="username" name="username" required placeholder="e.g. admin_home" style="width: 100%; padding: 0.75rem 1rem; background: rgba(30, 41, 59, 0.8); border: 1px solid #334155; border-radius: 0.5rem; color: #f8fafc; font-size: 0.95rem;">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 1.75rem;">
+                <label class="form-label" for="password" style="display: block; font-size: 0.85rem; font-weight: 600; color: #cbd5e1; margin-bottom: 0.5rem;">Password</label>
+                <input class="form-input" type="password" id="password" name="password" required placeholder="••••••••" style="width: 100%; padding: 0.75rem 1rem; background: rgba(30, 41, 59, 0.8); border: 1px solid #334155; border-radius: 0.5rem; color: #f8fafc; font-size: 0.95rem;">
+            </div>
+
+            <button type="submit" id="btn-login-submit" class="btn btn--primary" style="width: 100%; padding: 0.85rem; font-weight: 600; font-size: 1rem; border-radius: 0.5rem;">
+                Sign In ➔
+            </button>
+        </form>
+
+        <div style="margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid #334155; font-size: 0.8rem; color: #64748b; text-align: center;">
+            Demo Credentials: <code>admin_home</code> / <code>operator1</code> / <code>viewer1</code> (Password: <code>password123</code>)
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('login-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const errDiv = document.getElementById('login-error');
+    errDiv.style.display = 'none';
+
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value;
+
+    try {
+        const res = await fetch('/api/v1/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+            window.location.href = '/';
+        } else {
+            errDiv.textContent = data.detail || 'Authentication failed. Please check credentials.';
+            errDiv.style.display = 'block';
+        }
+    } catch (err) {
+        console.error('Login error:', err);
+        errDiv.textContent = 'Server communication error. Please try again.';
+        errDiv.style.display = 'block';
+    }
+});
+</script>
+{% endblock %}
