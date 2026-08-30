@@ -236,6 +236,64 @@ def districts_page(
     )
 
 
+# ── Audit Log page ─────────────────────────────────────────────
+
+
+@router.get("/audit", response_class=HTMLResponse)
+def audit_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: Optional[UserModel] = Depends(get_optional_current_user),
+):
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+
+    from shared.db.models import StatusHistory as StatusHistoryModel
+
+    rows = (
+        db.query(StatusHistoryModel)
+        .options(joinedload(StatusHistoryModel.camera))
+        .order_by(StatusHistoryModel.changed_at.desc())
+        .limit(200)
+        .all()
+    )
+
+    user_ids = {r.changed_by for r in rows if r.changed_by is not None}
+    users_by_id = {}
+    if user_ids:
+        users = db.query(UserModel).filter(UserModel.id.in_(user_ids)).all()
+        users_by_id = {u.id: u.username for u in users}
+
+    audit_rows = []
+    for r in rows:
+        camera_name = r.camera.name if r.camera else "Unknown Camera"
+        changed_by_user = (
+            users_by_id.get(r.changed_by, "System / Direct DB")
+            if r.changed_by
+            else "System / Direct DB"
+        )
+        audit_rows.append(
+            {
+                "changed_at": (
+                    r.changed_at.strftime("%Y-%m-%d %H:%M:%S")
+                    if r.changed_at
+                    else "—"
+                ),
+                "camera_name": camera_name,
+                "changed_field": r.changed_field,
+                "old_value": r.old_value,
+                "new_value": r.new_value,
+                "changed_by_user": changed_by_user,
+            }
+        )
+
+    return request.app.state.templates.TemplateResponse(
+        request=request,
+        name="audit.html",
+        context={"user": user, "audit_rows": audit_rows},
+    )
+
+
 # ── Phase 9 — Model 2 placeholders ─────────────────────────────
 
 

@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Sentinel — Audit Log{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1 class="page-title">
+            <span class="page-title-icon">📜</span> System Audit Log
+        </h1>
+        <p style="color: var(--text-secondary); font-size: 0.9rem;">
+            Global trail of camera registry modifications, status transitions, and user activities.
+        </p>
+    </div>
+
+    <!-- Audit log table wrapper -->
+    <div class="table-wrapper">
+        <table class="data-table" id="audit-table">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Camera</th>
+                    <th>Changed Field</th>
+                    <th>Old Value</th>
+                    <th>New Value</th>
+                    <th>Changed By</th>
+                </tr>
+            </thead>
+            <tbody id="audit-tbody">
+                {% if audit_rows %}
+                {% for row in audit_rows %}
+                <tr>
+                    <td style="font-size: 0.8rem; font-family: monospace; color: var(--text-muted);">
+                        {{ row.changed_at }}
+                    </td>
+                    <td style="font-weight: 600; color: var(--text-primary);">
+                        {{ row.camera_name }}
+                    </td>
+                    <td>
+                        <span class="badge badge--maintenance" style="font-family: monospace;">{{ row.changed_field }}</span>
+                    </td>
+                    <td style="font-size: 0.85rem; color: var(--text-secondary);">
+                        {{ row.old_value if row.old_value else '—' }}
+                    </td>
+                    <td style="font-size: 0.85rem; font-weight: 500; color: var(--accent-light);">
+                        {{ row.new_value if row.new_value else '—' }}
+                    </td>
+                    <td>
+                        <span class="badge badge--online" style="font-size: 0.8rem;">👤 {{ row.changed_by_user }}</span>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% else %}
+                <tr>
+                    <td colspan="6">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📋</div>
+                            <div class="empty-state-text">No audit log entries recorded yet.</div>
+                        </div>
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
