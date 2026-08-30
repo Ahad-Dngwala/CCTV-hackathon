@@ -31,7 +31,7 @@ Compose automatically builds `infra/Dockerfile.db` for the database and `infra/D
 On initial boot, PostgreSQL runs scripts mounted from `shared/db/`:
 1. `20-schema.sql` — Creates extensions (`postgis`, `pgcrypto`, `vector`), tables, constraints, and indexes.
 2. `30-triggers.sql` — Sets `updated_at` timestamps and logs audit entries in `status_history`.
-3. `40-seed.sql` — Populates 5 departments, 33 Gujarat districts, 30 seed cameras with rich metadata, and sample vehicle watchlists/alerts.
+3. `40-seed.sql` — Populates 5 departments, 4 default RBAC users (`admin_home`, `admin_rto`, `operator1`, `viewer1`), 33 Gujarat districts with PostGIS MultiPolygon boundaries, 30 seed cameras with rich metadata, and sample vehicle watchlists/alerts.
 
 ### Resetting Data (Clean Re-seed)
 
