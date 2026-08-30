@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}Sentinel — Gap Analysis{% endblock %}
+
+{% block content %}
+<div class="page-container" x-data="gapAnalysisPage()" x-init="load()">
+    <div class="page-header">
+        <h1 class="page-title">
+            <span class="page-title-icon">📊</span> Surveillance Gap Analysis
+        </h1>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <span class="badge badge--info">1km Buffer Radius</span>
+            <span class="badge badge--online" x-text="items.length + ' Districts Analyzed'"></span>
+        </div>
+    </div>
+
+    <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-md); padding: 1rem 1.25rem; margin-bottom: 1.5rem; font-size: 0.875rem; color: var(--text-secondary);">
+        💡 <strong>PostGIS Spatial Analysis:</strong> Identifies unmonitored geographic holes across Gujarat districts by calculating the spatial difference between district MultiPolygon boundaries and a 1km circular monitoring buffer around active cameras.
+    </div>
+
+    <!-- Ranked coverage table -->
+    <div class="table-wrapper">
+        <table class="data-table" id="gap-table">
+            <thead>
+                <tr>
+                    <th>Rank</th>
+                    <th>District Name</th>
+                    <th>Active Cameras</th>
+                    <th>Total Area (sq km)</th>
+                    <th>Uncovered Area (sq km)</th>
+                    <th>Coverage %</th>
+                </tr>
+            </thead>
+            <tbody id="gap-tbody">
+                <template x-if="loading">
+                    <tr>
+                        <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                            Calculating spatial PostGIS coverage...
+                        </td>
+                    </tr>
+                </template>
+                <template x-for="(item, index) in items" :key="item.district_id">
+                    <tr>
+                        <td style="font-weight: 700; color: var(--text-muted);" x-text="'#' + (index + 1)"></td>
+                        <td style="font-weight: 600; color: var(--text-primary);" x-text="item.district_name"></td>
+                        <td>
+                            <span style="font-weight: 700;" x-text="item.camera_count"></span>
+                            <span style="font-size: 0.8rem; color: var(--text-muted);"> cams</span>
+                        </td>
+                        <td style="font-size: 0.85rem; font-family: monospace; color: var(--text-secondary);" x-text="item.district_area_sq_km.toLocaleString() + ' km²'"></td>
+                        <td style="font-size: 0.85rem; font-family: monospace; color: #fca5a5;" x-text="item.uncovered_area_sq_km.toLocaleString() + ' km²'"></td>
+                        <td>
+                            <span class="badge"
+                                  :class="{
+                                      'badge--offline': item.coverage_pct < 1.0,
+                                      'badge--maintenance': item.coverage_pct >= 1.0 && item.coverage_pct < 5.0,
+                                      'badge--online': item.coverage_pct >= 5.0
+                                  }"
+                                  style="font-size: 0.85rem; font-weight: 700;"
+                                  x-text="item.coverage_pct + '%'">
+                            </span>
+                        </td>
+                    </tr>
+                </template>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function gapAnalysisPage() {
+    return {
+        items: [],
+        loading: true,
+        async load() {
+            try {
+                const res = await fetch('/api/v1/gap-analysis');
+                this.items = await res.json();
+            } catch (e) {
+                console.error('Failed to load gap analysis:', e);
+            } finally {
+                this.loading = false;
+            }
+        }
+    };
+}
+</script>
+{% endblock %}

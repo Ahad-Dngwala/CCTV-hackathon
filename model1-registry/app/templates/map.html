@@ -23,6 +23,17 @@
                 <!-- Populated by JS -->
             </div>
         </div>
+
+        <!-- Spatial Overlays -->
+        <div class="map-control-card" id="overlay-toggle-card">
+            <div class="map-control-title">Spatial Overlays</div>
+            <div class="checkbox-list">
+                <label class="checkbox-item">
+                    <input type="checkbox" @change="toggleGapOverlay($event.target.checked)">
+                    <span>📊 Uncovered Regions</span>
+                </label>
+            </div>
+        </div>
     </div>
 
     <!-- Bottom stats -->

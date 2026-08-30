@@ -17,6 +17,8 @@ function mapDashboard() {
         districts: [],
         selectedDistrict: '',
         activeDepartments: new Set(),
+        gapOverlayLayer: null,
+        showGapOverlay: false,
 
         async init() {
             // Initialise Leaflet map centered on Gujarat
@@ -242,6 +244,86 @@ function mapDashboard() {
             document.getElementById('stat-offline').textContent = offline;
             document.getElementById('stat-maintenance').textContent = maintenance;
             document.getElementById('stat-total').textContent = total;
+        },
+
+        async toggleGapOverlay(enable) {
+            this.showGapOverlay = enable;
+            if (!enable) {
+                if (this.gapOverlayLayer) {
+                    this.map.removeLayer(this.gapOverlayLayer);
+                    this.gapOverlayLayer = null;
+                }
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/v1/gap-analysis');
+                const gapData = await res.json();
+
+                if (this.gapOverlayLayer) {
+                    this.map.removeLayer(this.gapOverlayLayer);
+                }
+
+                const featureCollection = {
+                    type: 'FeatureCollection',
+                    features: []
+                };
+
+                gapData.forEach(item => {
+                    if (item.uncovered_geojson) {
+                        featureCollection.features.push({
+                            type: 'Feature',
+                            properties: {
+                                district_name: item.district_name,
+                                camera_count: item.camera_count,
+                                coverage_pct: item.coverage_pct,
+                                uncovered_area_sq_km: item.uncovered_area_sq_km
+                            },
+                            geometry: item.uncovered_geojson
+                        });
+                    }
+                });
+
+                this.gapOverlayLayer = L.geoJSON(featureCollection, {
+                    style: function(feature) {
+                        return {
+                            color: '#ef4444',
+                            weight: 2,
+                            opacity: 0.85,
+                            fillColor: '#ef4444',
+                            fillOpacity: 0.25
+                        };
+                    },
+                    onEachFeature: function(feature, layer) {
+                        const p = feature.properties;
+                        layer.bindPopup(`
+                            <div class="popup-content">
+                                <div class="popup-title">🚨 Uncovered Region</div>
+                                <div class="popup-row">
+                                    <span class="popup-label">District</span>
+                                    <span class="popup-value">${p.district_name}</span>
+                                </div>
+                                <div class="popup-row">
+                                    <span class="popup-label">Cameras</span>
+                                    <span class="popup-value">${p.camera_count} active</span>
+                                </div>
+                                <div class="popup-row">
+                                    <span class="popup-label">Coverage</span>
+                                    <span class="popup-value">${p.coverage_pct}%</span>
+                                </div>
+                                <div class="popup-row">
+                                    <span class="popup-label">Uncovered Area</span>
+                                    <span class="popup-value">${p.uncovered_area_sq_km} sq km</span>
+                                </div>
+                            </div>
+                        `);
+                    }
+                });
+
+                this.map.addLayer(this.gapOverlayLayer);
+            } catch (e) {
+                console.error('Failed to load gap-analysis overlay:', e);
+            }
         },
     };
 }

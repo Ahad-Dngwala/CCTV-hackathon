@@ -294,6 +294,21 @@ def audit_page(
     )
 
 
+# ── Gap Analysis page ───────────────────────────────────────────
+
+
+@router.get("/gap-analysis", response_class=HTMLResponse)
+def gap_analysis_page(
+    request: Request,
+    user: Optional[UserModel] = Depends(get_optional_current_user),
+):
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+    return request.app.state.templates.TemplateResponse(
+        request=request, name="gap_analysis.html", context={"user": user}
+    )
+
+
 # ── Phase 9 — Model 2 placeholders ─────────────────────────────
 
 
