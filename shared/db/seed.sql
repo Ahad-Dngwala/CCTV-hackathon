@@ -16,16 +16,53 @@ INSERT INTO departments (name, category) VALUES
     ('Unassigned / Pending Department List','Placeholder — 22 of 26 departments not yet named in the brief');
 
 -- ------------------------------------------------------------
--- Districts — all 33 Gujarat districts
+-- Users (Authentication & RBAC)
 -- ------------------------------------------------------------
-INSERT INTO districts (name) VALUES
-    ('Ahmedabad'), ('Amreli'), ('Anand'), ('Aravalli'), ('Banaskantha'),
-    ('Bharuch'), ('Bhavnagar'), ('Botad'), ('Chhota Udepur'), ('Dahod'),
-    ('Dang'), ('Devbhoomi Dwarka'), ('Gandhinagar'), ('Gir Somnath'),
-    ('Jamnagar'), ('Junagadh'), ('Kheda'), ('Kutch'), ('Mahisagar'),
-    ('Mehsana'), ('Morbi'), ('Narmada'), ('Navsari'), ('Panchmahal'),
-    ('Patan'), ('Porbandar'), ('Rajkot'), ('Sabarkantha'), ('Surat'),
-    ('Surendranagar'), ('Tapi'), ('Vadodara'), ('Valsad');
+INSERT INTO users (username, email, hashed_password, role, department_id)
+VALUES
+    ('admin_home', 'admin.home@sentinel.gujarat.gov.in', '$2b$12$vLHB6Nu1G9aXJoy0O2otYOWD4gEM4sm02d1Gy3wEhGKYjsvUXRUXW', 'dept_admin', (SELECT id FROM departments WHERE name = 'Home Department (Police)')),
+    ('admin_rto',  'admin.rto@sentinel.gujarat.gov.in',  '$2b$12$vLHB6Nu1G9aXJoy0O2otYOWD4gEM4sm02d1Gy3wEhGKYjsvUXRUXW', 'dept_admin', (SELECT id FROM departments WHERE name = 'Regional Transport Office (RTO)')),
+    ('operator1',  'operator1@sentinel.gujarat.gov.in',  '$2b$12$vLHB6Nu1G9aXJoy0O2otYOWD4gEM4sm02d1Gy3wEhGKYjsvUXRUXW', 'operator',   NULL),
+    ('viewer1',    'viewer1@sentinel.gujarat.gov.in',    '$2b$12$vLHB6Nu1G9aXJoy0O2otYOWD4gEM4sm02d1Gy3wEhGKYjsvUXRUXW', 'viewer',     NULL)
+ON CONFLICT (username) DO NOTHING;
+
+-- ------------------------------------------------------------
+-- Districts — all 33 Gujarat districts with PostGIS MultiPolygon boundaries
+-- ------------------------------------------------------------
+INSERT INTO districts (name, boundary) VALUES
+    ('Ahmedabad',       ST_GeogFromText('SRID=4326;MULTIPOLYGON(((72.2 22.6, 72.8 22.6, 72.8 23.3, 72.2 23.3, 72.2 22.6)))')),
+    ('Amreli',          ST_GeogFromText('SRID=4326;MULTIPOLYGON(((70.9 21.0, 71.7 21.0, 71.7 21.8, 70.9 21.8, 70.9 21.0)))')),
+    ('Anand',           ST_GeogFromText('SRID=4326;MULTIPOLYGON(((72.7 22.2, 73.2 22.2, 73.2 22.7, 72.7 22.7, 72.7 22.2)))')),
+    ('Aravalli',        ST_GeogFromText('SRID=4326;MULTIPOLYGON(((73.1 23.4, 73.7 23.4, 73.7 24.0, 73.2 24.0, 73.1 23.4)))')),
+    ('Banaskantha',     ST_GeogFromText('SRID=4326;MULTIPOLYGON(((71.3 23.8, 72.8 23.8, 72.9 24.6, 71.4 24.5, 71.3 23.8)))')),
+    ('Bharuch',         ST_GeogFromText('SRID=4326;MULTIPOLYGON(((72.5 21.4, 73.3 21.4, 73.3 22.1, 72.5 22.1, 72.5 21.4)))')),
+    ('Bhavnagar',       ST_GeogFromText('SRID=4326;MULTIPOLYGON(((71.5 21.3, 72.4 21.3, 72.4 22.1, 71.5 22.1, 71.5 21.3)))')),
+    ('Botad',           ST_GeogFromText('SRID=4326;MULTIPOLYGON(((71.4 21.9, 71.9 21.9, 71.9 22.4, 71.4 22.4, 71.4 21.9)))')),
+    ('Chhota Udepur',   ST_GeogFromText('SRID=4326;MULTIPOLYGON(((73.7 22.0, 74.3 22.0, 74.3 22.5, 73.7 22.5, 73.7 22.0)))')),
+    ('Dahod',           ST_GeogFromText('SRID=4326;MULTIPOLYGON(((73.8 22.6, 74.5 22.6, 74.5 23.3, 73.8 23.3, 73.8 22.6)))')),
+    ('Dang',            ST_GeogFromText('SRID=4326;MULTIPOLYGON(((73.5 20.6, 73.9 20.6, 73.9 21.1, 73.5 21.1, 73.5 20.6)))')),
+    ('Devbhoomi Dwarka',ST_GeogFromText('SRID=4326;MULTIPOLYGON(((68.9 21.8, 69.7 21.8, 69.7 22.5, 68.9 22.5, 68.9 21.8)))')),
+    ('Gandhinagar',     ST_GeogFromText('SRID=4326;MULTIPOLYGON(((72.5 23.0, 72.9 23.0, 72.9 23.5, 72.5 23.5, 72.5 23.0)))')),
+    ('Gir Somnath',     ST_GeogFromText('SRID=4326;MULTIPOLYGON(((70.3 20.6, 71.1 20.6, 71.1 21.1, 70.3 21.1, 70.3 20.6)))')),
+    ('Jamnagar',        ST_GeogFromText('SRID=4326;MULTIPOLYGON(((69.6 22.1, 70.5 22.1, 70.5 22.8, 69.6 22.8, 69.6 22.1)))')),
+    ('Junagadh',        ST_GeogFromText('SRID=4326;MULTIPOLYGON(((70.1 21.1, 70.8 21.1, 70.8 21.7, 70.1 21.7, 70.1 21.1)))')),
+    ('Kheda',           ST_GeogFromText('SRID=4326;MULTIPOLYGON(((72.6 22.5, 73.2 22.5, 73.2 23.1, 72.6 23.1, 72.6 22.5)))')),
+    ('Kutch',           ST_GeogFromText('SRID=4326;MULTIPOLYGON(((68.5 22.8, 71.3 22.8, 71.5 24.5, 68.8 24.6, 68.5 22.8)))')),
+    ('Mahisagar',       ST_GeogFromText('SRID=4326;MULTIPOLYGON(((73.2 23.0, 73.8 23.0, 73.8 23.5, 73.2 23.5, 73.2 23.0)))')),
+    ('Mehsana',         ST_GeogFromText('SRID=4326;MULTIPOLYGON(((72.0 23.3, 72.7 23.3, 72.7 23.9, 72.1 23.9, 72.0 23.3)))')),
+    ('Morbi',           ST_GeogFromText('SRID=4326;MULTIPOLYGON(((70.4 22.5, 71.2 22.5, 71.2 23.2, 70.4 23.2, 70.4 22.5)))')),
+    ('Narmada',         ST_GeogFromText('SRID=4326;MULTIPOLYGON(((73.2 21.4, 73.9 21.4, 73.9 21.9, 73.2 21.9, 73.2 21.4)))')),
+    ('Navsari',         ST_GeogFromText('SRID=4326;MULTIPOLYGON(((72.8 20.6, 73.3 20.6, 73.3 21.0, 72.8 21.0, 72.8 20.6)))')),
+    ('Panchmahal',      ST_GeogFromText('SRID=4326;MULTIPOLYGON(((73.3 22.4, 73.9 22.4, 73.9 23.0, 73.3 23.0, 73.3 22.4)))')),
+    ('Patan',           ST_GeogFromText('SRID=4326;MULTIPOLYGON(((71.4 23.5, 72.3 23.5, 72.3 24.1, 71.5 24.1, 71.4 23.5)))')),
+    ('Porbandar',       ST_GeogFromText('SRID=4326;MULTIPOLYGON(((69.4 21.3, 70.0 21.3, 70.0 21.9, 69.4 21.9, 69.4 21.3)))')),
+    ('Rajkot',          ST_GeogFromText('SRID=4326;MULTIPOLYGON(((70.5 21.9, 71.3 21.9, 71.3 22.7, 70.5 22.7, 70.5 21.9)))')),
+    ('Sabarkantha',     ST_GeogFromText('SRID=4326;MULTIPOLYGON(((72.8 23.5, 73.4 23.5, 73.4 24.2, 72.9 24.2, 72.8 23.5)))')),
+    ('Surat',           ST_GeogFromText('SRID=4326;MULTIPOLYGON(((72.6 21.0, 73.3 21.0, 73.3 21.5, 72.6 21.5, 72.6 21.0)))')),
+    ('Surendranagar',   ST_GeogFromText('SRID=4326;MULTIPOLYGON(((71.1 22.3, 72.2 22.3, 72.2 23.3, 71.1 23.3, 71.1 22.3)))')),
+    ('Tapi',            ST_GeogFromText('SRID=4326;MULTIPOLYGON(((73.2 20.9, 73.9 20.9, 73.9 21.5, 73.2 21.5, 73.2 20.9)))')),
+    ('Vadodara',        ST_GeogFromText('SRID=4326;MULTIPOLYGON(((73.0 21.9, 73.6 21.9, 73.6 22.5, 73.0 22.5, 73.0 21.9)))')),
+    ('Valsad',          ST_GeogFromText('SRID=4326;MULTIPOLYGON(((72.7 20.1, 73.3 20.1, 73.3 20.7, 72.7 20.7, 72.7 20.1)))'));
 
 -- ------------------------------------------------------------
 -- Cameras — from GET /api/ingest on the government camera grid
