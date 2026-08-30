@@ -25,15 +25,15 @@
     </td>
     <td>
         <div style="display: flex; gap: 0.35rem;">
-            <a href="/cameras/{{ row.cam.id }}/edit"
-               class="btn btn--secondary btn--sm"
-               hx-get="/cameras/{{ row.cam.id }}/edit"
-               hx-target="#form-container"
-               hx-swap="innerHTML"
-               onclick="document.querySelector('[x-data]').__x.$data.showFormModal = true; return false;">
+            <button type="button"
+                    class="btn btn--secondary btn--sm"
+                    hx-get="/cameras/{{ row.cam.id }}/edit"
+                    hx-target="#form-container"
+                    hx-swap="innerHTML"
+                    hx-on::after-swap="window.dispatchEvent(new CustomEvent('open-modal'))">
                 ✏️
-            </a>
-            <button class="btn btn--danger btn--sm"
+            </button>
+            <button type="button" class="btn btn--danger btn--sm"
                     onclick="cameraListPage().deactivateCamera('{{ row.cam.id }}')">
                 🗑️
             </button>

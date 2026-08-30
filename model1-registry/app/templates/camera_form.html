@@ -1,5 +1,5 @@
 {# Shared create/edit form — rendered inside a modal via HTMX #}
-<div class="modal-backdrop" onclick="if(event.target===this){document.querySelector('[x-data]').__x.$data.showFormModal=false; this.remove();}">
+<div class="modal-backdrop" onclick="if(event.target===this){window.dispatchEvent(new CustomEvent('close-modal')); document.getElementById('form-container').innerHTML='';}">
     <div class="modal-content">
         <div class="modal-title">
             {% if camera %}✏️ Edit Camera{% else %}➕ New Camera{% endif %}
@@ -138,7 +138,7 @@
 
             <div class="modal-actions">
                 <button type="button" class="btn btn--secondary"
-                        onclick="document.querySelector('[x-data]').__x.$data.showFormModal=false; document.getElementById('form-container').innerHTML='';">
+                        onclick="window.dispatchEvent(new CustomEvent('close-modal')); document.getElementById('form-container').innerHTML='';">
                     Cancel
                 </button>
                 <button type="submit" class="btn btn--primary">
@@ -182,7 +182,7 @@ document.getElementById('camera-form').addEventListener('submit', async function
 
         if (res.ok) {
             // Close modal and refresh table
-            document.querySelector('[x-data]').__x.$data.showFormModal = false;
+            window.dispatchEvent(new CustomEvent('close-modal'));
             document.getElementById('form-container').innerHTML = '';
             htmx.trigger('#cameras-tbody', 'load');
         } else {
