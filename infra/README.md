@@ -47,7 +47,7 @@ re-run**, the init scripts only fire on an empty volume — you need to
 actually drop the data:
 
 ```bash
-docker compose down -v   # -v removes the sentinel_pgdata volume — destructive, dev-only
+docker compose down -v --rmi local
 docker compose up -d db
 ```
 

@@ -7,8 +7,8 @@ These are the user-facing pages, separate from the /api/v1 JSON routers.
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Form, Query, Request, UploadFile, File
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session, joinedload
 
 from shared.db.models import Camera as CameraModel
@@ -25,7 +25,7 @@ router = APIRouter(tags=["pages"])
 @router.get("/", response_class=HTMLResponse)
 def map_page(request: Request):
     return request.app.state.templates.TemplateResponse(
-        "map.html", {"request": request}
+        request=request, name="map.html"
     )
 
 
@@ -44,9 +44,9 @@ def cameras_list_page(
     districts = db.query(DistModel).order_by(DistModel.name).all()
 
     return request.app.state.templates.TemplateResponse(
-        "cameras_list.html",
-        {
-            "request": request,
+        request=request,
+        name="cameras_list.html",
+        context={
             "departments": departments,
             "districts": districts,
             "selected_department": department_id or "",
@@ -99,8 +99,9 @@ def cameras_table_partial(
         camera_rows.append({"cam": cam, "location_str": loc_str})
 
     return request.app.state.templates.TemplateResponse(
-        "cameras_table_partial.html",
-        {"request": request, "camera_rows": camera_rows},
+        request=request,
+        name="cameras_table_partial.html",
+        context={"camera_rows": camera_rows},
     )
 
 
@@ -112,9 +113,9 @@ def camera_new_form(request: Request, db: Session = Depends(get_db)):
     departments = db.query(DeptModel).order_by(DeptModel.name).all()
     districts = db.query(DistModel).order_by(DistModel.name).all()
     return request.app.state.templates.TemplateResponse(
-        "camera_form.html",
-        {
-            "request": request,
+        request=request,
+        name="camera_form.html",
+        context={
             "camera": None,
             "departments": departments,
             "districts": districts,
@@ -147,15 +148,16 @@ def camera_edit_form(
     if cam.location is not None:
         try:
             from geoalchemy2.shape import to_shape
+
             point = to_shape(cam.location)
             lat, lon = point.y, point.x
         except Exception:
             pass
 
     return request.app.state.templates.TemplateResponse(
-        "camera_form.html",
-        {
-            "request": request,
+        request=request,
+        name="camera_form.html",
+        context={
             "camera": cam,
             "camera_lat": lat,
             "camera_lon": lon,
@@ -172,7 +174,7 @@ def camera_edit_form(
 @router.get("/departments", response_class=HTMLResponse)
 def departments_page(request: Request, db: Session = Depends(get_db)):
     return request.app.state.templates.TemplateResponse(
-        "departments_list.html", {"request": request}
+        request=request, name="departments_list.html"
     )
 
 
@@ -182,7 +184,7 @@ def departments_page(request: Request, db: Session = Depends(get_db)):
 @router.get("/districts", response_class=HTMLResponse)
 def districts_page(request: Request, db: Session = Depends(get_db)):
     return request.app.state.templates.TemplateResponse(
-        "districts_list.html", {"request": request}
+        request=request, name="districts_list.html"
     )
 
 
@@ -192,9 +194,9 @@ def districts_page(request: Request, db: Session = Depends(get_db)):
 @router.get("/detections", response_class=HTMLResponse)
 def detections_placeholder(request: Request):
     return request.app.state.templates.TemplateResponse(
-        "placeholder.html",
-        {
-            "request": request,
+        request=request,
+        name="placeholder.html",
+        context={
             "page_title": "Detections",
             "description": "Model 2 — not built yet, see docs/API_Contract.md §2",
         },
@@ -204,9 +206,9 @@ def detections_placeholder(request: Request):
 @router.get("/watchlist", response_class=HTMLResponse)
 def watchlist_placeholder(request: Request):
     return request.app.state.templates.TemplateResponse(
-        "placeholder.html",
-        {
-            "request": request,
+        request=request,
+        name="placeholder.html",
+        context={
             "page_title": "Watchlist",
             "description": "Model 2 — not built yet, see docs/API_Contract.md §2",
         },
@@ -216,9 +218,9 @@ def watchlist_placeholder(request: Request):
 @router.get("/alerts", response_class=HTMLResponse)
 def alerts_placeholder(request: Request):
     return request.app.state.templates.TemplateResponse(
-        "placeholder.html",
-        {
-            "request": request,
+        request=request,
+        name="placeholder.html",
+        context={
             "page_title": "Alerts",
             "description": "Model 2 — not built yet, see docs/API_Contract.md §2",
         },
