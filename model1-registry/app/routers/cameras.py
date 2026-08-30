@@ -134,17 +134,21 @@ def create_camera(
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(require_role("dept_admin")),
 ):
+    department_id = body.department_id
     if current_user.department_id:
-        if not body.department_id:
-            body.department_id = current_user.department_id
-        elif body.department_id != current_user.department_id:
+        if department_id and department_id != current_user.department_id:
             raise HTTPException(
                 status_code=403,
                 detail="Department administrators can only create cameras in their assigned department.",
             )
+        # Left blank on the form -> default to the admin's own department,
+        # rather than silently creating a camera with no department that
+        # no dept_admin (including this one) could later manage.
+        department_id = department_id or current_user.department_id
+
     cam = CameraModel(
         name=body.name,
-        department_id=body.department_id,
+        department_id=department_id,
         district_id=body.district_id,
         camera_type=body.camera_type,
         ownership=body.ownership,
@@ -292,14 +296,11 @@ def update_camera(
     if not cam:
         raise HTTPException(status_code=404, detail="Camera not found")
 
-    if current_user.department_id:
-        if cam.department_id != current_user.department_id or (
-            body.department_id and body.department_id != current_user.department_id
-        ):
-            raise HTTPException(
-                status_code=403,
-                detail="Department administrators can only manage cameras in their assigned department.",
-            )
+    if current_user.department_id and cam.department_id != current_user.department_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Department administrators can only manage cameras in their assigned department.",
+        )
 
     update_data = body.model_dump(exclude_unset=True)
     lat = update_data.pop("latitude", None)

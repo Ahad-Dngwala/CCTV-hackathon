@@ -560,6 +560,26 @@ body {
     margin-top: 0.25rem;
 }
 
+.form-banner {
+    font-size: 0.85rem;
+    line-height: 1.5;
+    padding: 0.65rem 0.9rem;
+    border-radius: var(--radius-md);
+    margin-bottom: 1rem;
+}
+
+.form-banner--danger {
+    color: var(--danger);
+    background: var(--danger-bg);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.form-banner--warning {
+    color: var(--warning);
+    background: var(--warning-bg);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
 .form-row {
     display: grid;
     grid-template-columns: 1fr 1fr;

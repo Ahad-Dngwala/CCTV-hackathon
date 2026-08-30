@@ -141,10 +141,18 @@ def camera_new_form(
     db: Session = Depends(get_db),
     user: Optional[UserModel] = Depends(get_optional_current_user),
 ):
-    if user and user.role == "dept_admin" and user.department_id:
-        departments = db.query(DeptModel).filter(DeptModel.id == user.department_id).all()
-    else:
-        departments = db.query(DeptModel).order_by(DeptModel.name).all()
+    # Only dept_admins can ever POST /api/v1/cameras (require_role("dept_admin")
+    # on the API side) — matching that here means we never render a form that
+    # is guaranteed to fail on submit for anyone else.
+    if not user or user.role != "dept_admin":
+        return RedirectResponse(url="/cameras", status_code=302)
+
+    departments = db.query(DeptModel).order_by(DeptModel.name).all()
+    if user.department_id:
+        # A department-scoped admin can only ever create within their own
+        # department (create_camera 403s / now defaults otherwise) — don't
+        # offer choices that will fail.
+        departments = [d for d in departments if d.id == user.department_id]
     districts = db.query(DistModel).order_by(DistModel.name).all()
     return request.app.state.templates.TemplateResponse(
         request=request,
@@ -155,6 +163,7 @@ def camera_new_form(
             "departments": departments,
             "districts": districts,
             "errors": {},
+            "editable": True,
         },
     )
 
@@ -166,6 +175,9 @@ def camera_edit_form(
     db: Session = Depends(get_db),
     user: Optional[UserModel] = Depends(get_optional_current_user),
 ):
+    if not user or user.role != "dept_admin":
+        return RedirectResponse(url="/cameras", status_code=302)
+
     cam = (
         db.query(CameraModel)
         .options(
@@ -178,10 +190,14 @@ def camera_edit_form(
     if not cam:
         return HTMLResponse(status_code=404, content="Camera not found")
 
-    if user and user.role == "dept_admin" and user.department_id:
-        departments = db.query(DeptModel).filter(DeptModel.id == user.department_id).all()
-    else:
-        departments = db.query(DeptModel).order_by(DeptModel.name).all()
+    # Mirrors the 403 condition in PATCH/DELETE /api/v1/cameras/{id} exactly.
+    # If this dept_admin can't save changes to this camera, say so up front
+    # instead of letting them fill out a form that will fail on submit.
+    editable = not (user.department_id and cam.department_id != user.department_id)
+
+    departments = db.query(DeptModel).order_by(DeptModel.name).all()
+    if user.department_id and editable:
+        departments = [d for d in departments if d.id == user.department_id]
     districts = db.query(DistModel).order_by(DistModel.name).all()
 
     # Extract lat/lon from PostGIS geography
@@ -206,6 +222,7 @@ def camera_edit_form(
             "departments": departments,
             "districts": districts,
             "errors": {},
+            "editable": editable,
         },
     )
 

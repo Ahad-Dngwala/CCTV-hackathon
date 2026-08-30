@@ -24,21 +24,36 @@
         {{ row.cam.updated_at.strftime('%Y-%m-%d %H:%M') if row.cam.updated_at else '—' }}
     </td>
     <td>
-        {% if not user or user.role == 'dept_admin' %}
-        <div style="display: flex; gap: 0.35rem;">
-            <button type="button"
-                    class="btn btn--secondary btn--sm"
-                    hx-get="/cameras/{{ row.cam.id }}/edit"
-                    hx-target="#form-container"
-                    hx-swap="innerHTML"
-                    hx-on::after-swap="window.dispatchEvent(new CustomEvent('open-modal'))">
-                ✏️
-            </button>
-            <button type="button" class="btn btn--danger btn--sm"
-                    onclick="deactivateCamera('{{ row.cam.id }}')">
-                🗑️
-            </button>
-        </div>
+        {% if user and user.role == 'dept_admin' %}
+            {% if not user.department_id or row.cam.department_id == user.department_id %}
+            <div style="display: flex; gap: 0.35rem;">
+                <button type="button"
+                        class="btn btn--secondary btn--sm"
+                        hx-get="/cameras/{{ row.cam.id }}/edit"
+                        hx-target="#form-container"
+                        hx-swap="innerHTML"
+                        hx-on::after-swap="window.dispatchEvent(new CustomEvent('open-modal'))">
+                    ✏️
+                </button>
+                <button type="button" class="btn btn--danger btn--sm"
+                        onclick="deactivateCamera('{{ row.cam.id }}')">
+                    🗑️
+                </button>
+            </div>
+            {% else %}
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <button type="button"
+                        class="btn btn--secondary btn--sm"
+                        title="Belongs to {{ row.cam.department.name if row.cam.department else 'another department' }} — view only"
+                        hx-get="/cameras/{{ row.cam.id }}/edit"
+                        hx-target="#form-container"
+                        hx-swap="innerHTML"
+                        hx-on::after-swap="window.dispatchEvent(new CustomEvent('open-modal'))">
+                    👁️
+                </button>
+                <span style="font-size: 0.75rem; color: var(--text-muted);">Not your dept</span>
+            </div>
+            {% endif %}
         {% else %}
         <span style="font-size: 0.8rem; color: var(--text-muted);">Read only</span>
         {% endif %}

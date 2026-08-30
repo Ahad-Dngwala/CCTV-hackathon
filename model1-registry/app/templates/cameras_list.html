@@ -8,7 +8,7 @@
         <h1 class="page-title">
             <span class="page-title-icon">📷</span> Camera Registry
         </h1>
-        {% if not user or user.role == 'dept_admin' %}
+        {% if user and user.role == 'dept_admin' %}
         <div style="display: flex; gap: 0.75rem;">
             <button class="btn btn--secondary" @click="showBulkModal = true" id="btn-bulk-import">
                 📁 CSV Import
@@ -21,6 +21,8 @@
         </div>
         {% endif %}
     </div>
+
+    <div id="camera-toast" class="form-banner form-banner--danger" style="display:none;"></div>
 
     <!-- Filters (HTMX-driven) -->
     <div class="filter-bar" id="camera-filters">
@@ -173,12 +175,25 @@ function cameraListPage() {
 
 function deactivateCamera(id) {
     if (!confirm('Deactivate this camera? This is a soft delete.')) return;
+    const toast = document.getElementById('camera-toast');
     fetch(`/api/v1/cameras/${id}`, { method: 'DELETE' })
-        .then(res => {
+        .then(async (res) => {
             if (res.ok) {
+                if (toast) toast.style.display = 'none';
                 htmx.trigger('#cameras-tbody', 'load');
             } else {
-                res.json().then(d => alert(d.detail || 'Error'));
+                const d = await res.json().catch(() => null);
+                if (toast) {
+                    toast.textContent = (d && d.detail) || 'Could not deactivate this camera.';
+                    toast.style.display = 'block';
+                    toast.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+            }
+        })
+        .catch(() => {
+            if (toast) {
+                toast.textContent = 'Could not reach the server. Please try again.';
+                toast.style.display = 'block';
             }
         });
 }
