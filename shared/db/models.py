@@ -20,6 +20,7 @@ from sqlalchemy import (
     String,
     Text,
     CheckConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, relationship
@@ -169,5 +170,5 @@ class StatusHistory(Base):
     camera = relationship("Camera", back_populates="status_history")
 
     __table_args__ = (
-        Index("idx_status_history_camera", "camera_id", "changed_at"),
+        Index("idx_status_history_camera", "camera_id", text("changed_at DESC")),
     )

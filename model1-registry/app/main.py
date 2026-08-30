@@ -15,10 +15,11 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-# ── Make `shared` importable when running from model1-registry/ ─
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+# ── Make `shared` importable when running locally ─────────────────
+current_dir = Path(__file__).resolve().parent
+local_repo_root = current_dir.parent.parent
+if (local_repo_root / "shared").exists() and str(local_repo_root) not in sys.path:
+    sys.path.insert(0, str(local_repo_root))
 
 from app.config import settings  # noqa: E402
 from app.routers import cameras, departments, districts, pages  # noqa: E402

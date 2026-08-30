@@ -166,19 +166,19 @@ function cameraListPage() {
                 console.error('Bulk import failed:', e);
             }
         },
-
-        deactivateCamera(id) {
-            if (!confirm('Deactivate this camera? This is a soft delete.')) return;
-            fetch(`/api/v1/cameras/${id}`, { method: 'DELETE' })
-                .then(res => {
-                    if (res.ok) {
-                        htmx.trigger('#cameras-tbody', 'load');
-                    } else {
-                        res.json().then(d => alert(d.detail || 'Error'));
-                    }
-                });
-        },
     };
+}
+
+function deactivateCamera(id) {
+    if (!confirm('Deactivate this camera? This is a soft delete.')) return;
+    fetch(`/api/v1/cameras/${id}`, { method: 'DELETE' })
+        .then(res => {
+            if (res.ok) {
+                htmx.trigger('#cameras-tbody', 'load');
+            } else {
+                res.json().then(d => alert(d.detail || 'Error'));
+            }
+        });
 }
 </script>
 {% endblock %}

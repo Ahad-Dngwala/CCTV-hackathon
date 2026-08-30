@@ -6,15 +6,8 @@
         </div>
 
         <form id="camera-form"
-            {% if camera %}
-              hx-patch="/api/v1/cameras/{{ camera.id }}"
-            {% else %}
-              hx-post="/api/v1/cameras"
-            {% endif %}
-            hx-ext="json-enc"
-            hx-target="#form-container"
-            hx-swap="innerHTML"
-            hx-headers='{"Content-Type": "application/json"}'
+            data-url="{% if camera %}/api/v1/cameras/{{ camera.id }}{% else %}/api/v1/cameras{% endif %}"
+            data-method="{% if camera %}PATCH{% else %}POST{% endif %}"
         >
             <div class="form-group">
                 <label class="form-label" for="cam-name">Camera Name *</label>
@@ -168,10 +161,9 @@ document.getElementById('camera-form').addEventListener('submit', async function
         }
     }
 
-    // Determine method and URL from hx attributes
-    const isEdit = form.hasAttribute('hx-patch');
-    const url = isEdit ? form.getAttribute('hx-patch') : form.getAttribute('hx-post');
-    const method = isEdit ? 'PATCH' : 'POST';
+    // Determine method and URL from data attributes
+    const url = form.getAttribute('data-url');
+    const method = form.getAttribute('data-method');
 
     try {
         const res = await fetch(url, {

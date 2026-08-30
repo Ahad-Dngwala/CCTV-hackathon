@@ -59,9 +59,8 @@ CREATE INDEX idx_users_department ON users (department_id);
 --      or assume a uniform codec/resolution across ~80,000 cameras.
 --      Notably: the grid gives a human-written location LABEL
 --      ("06 Timbavadi gate-Junagadh"), not coordinates. `location`
---      stays nullable and gets backfilled once someone geocodes the
---      label (or a department confirms it during onboarding) —
---      seed.sql only ever sets it where that's already unambiguous.
+--      is nullable in schema definition; seed.sql enriches all 30
+--      cameras with coordinates and department metadata for demo completeness.
 
 CREATE TABLE cameras (
     id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),

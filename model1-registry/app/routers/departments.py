@@ -15,7 +15,7 @@ from shared.schemas.department import Department as DepartmentSchema
 router = APIRouter(prefix="/api/v1/departments", tags=["departments"])
 
 
-@router.get("", response_model=list[dict])
+@router.get("", response_model=list[DepartmentSchema])
 def list_departments(db: Session = Depends(get_db)):
     """List all departments with a camera count per department."""
     rows = (
@@ -32,13 +32,14 @@ def list_departments(db: Session = Depends(get_db)):
         .order_by(DepartmentModel.name)
         .all()
     )
-    return [
-        {
-            "id": str(dept.id),
+    result = []
+    for dept, count in rows:
+        dept_dict = {
+            "id": dept.id,
             "name": dept.name,
             "category": dept.category,
-            "created_at": dept.created_at.isoformat(),
+            "created_at": dept.created_at,
             "camera_count": count,
         }
-        for dept, count in rows
-    ]
+        result.append(dept_dict)
+    return result

@@ -19,5 +19,6 @@ class DepartmentCreate(DepartmentBase):
 class Department(DepartmentBase):
     id: uuid.UUID
     created_at: datetime
+    camera_count: int = 0
 
     model_config = {"from_attributes": True}

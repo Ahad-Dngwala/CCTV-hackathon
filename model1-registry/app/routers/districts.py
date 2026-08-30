@@ -11,13 +11,14 @@ from shared.db.models import Camera as CameraModel
 from shared.db.models import District as DistrictModel
 from shared.db.session import get_db
 
+from shared.schemas.district import District as DistrictSchema
+
 router = APIRouter(prefix="/api/v1/districts", tags=["districts"])
 
 
-@router.get("")
+@router.get("", response_model=list[DistrictSchema])
 def list_districts(db: Session = Depends(get_db)):
-    """List all 33 Gujarat districts with camera count.
-    `boundary` is returned as null — no shapefile sourced yet."""
+    """List all 33 Gujarat districts with camera count."""
     rows = (
         db.query(
             DistrictModel,
@@ -32,13 +33,13 @@ def list_districts(db: Session = Depends(get_db)):
         .order_by(DistrictModel.name)
         .all()
     )
-    return [
-        {
-            "id": str(dist.id),
+    result = []
+    for dist, count in rows:
+        result.append({
+            "id": dist.id,
             "name": dist.name,
-            "boundary": None,  # NULL for all — no shapefile sourced (§9)
-            "created_at": dist.created_at.isoformat(),
+            "boundary": None,  # null until populated in Phase 5
+            "created_at": dist.created_at,
             "camera_count": count,
-        }
-        for dist, count in rows
-    ]
+        })
+    return result

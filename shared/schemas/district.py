@@ -19,5 +19,6 @@ class District(DistrictBase):
     id: uuid.UUID
     boundary: Optional[Any] = None  # GeoJSON or null
     created_at: datetime
+    camera_count: int = 0
 
     model_config = {"from_attributes": True}
