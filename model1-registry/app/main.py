@@ -55,3 +55,13 @@ app.include_router(departments.router)
 app.include_router(districts.router)
 app.include_router(gap_analysis.router)
 app.include_router(pages.router)
+
+# ── Model 2 Routers ──────────────────────────────────────────────
+try:
+    if str(local_repo_root / "model2-analytics") not in sys.path:
+        sys.path.insert(0, str(local_repo_root / "model2-analytics"))
+    from app.routers.watchlist import router as watchlist_router
+    app.include_router(watchlist_router)
+except Exception as e:
+    print(f"Note: Model 2 watchlist router not mounted: {e}")
+

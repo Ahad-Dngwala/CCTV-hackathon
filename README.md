@@ -31,6 +31,7 @@ The entire platform (PostgreSQL + PostGIS database and the FastAPI application) 
    - **Interactive Map Dashboard**: `http://localhost:8000/`
    - **Command Login Portal**: `http://localhost:8000/login`
    - **Camera Registry & CRUD**: `http://localhost:8000/cameras`
+   - **Vehicle Watchlist (Model 2)**: `http://localhost:8000/watchlist`
    - **Department Management**: `http://localhost:8000/departments`
    - **District Overview**: `http://localhost:8000/districts`
    - **System Audit Log**: `http://localhost:8000/audit`
@@ -57,7 +58,7 @@ The entire platform (PostgreSQL + PostGIS database and the FastAPI application) 
 - **Database**: PostgreSQL 16 + PostGIS 3.4 + `pgvector` extension
 - **ORM & Migrations**: SQLAlchemy 2.0 + GeoAlchemy2
 - **Frontend Architecture**: Server-rendered Jinja2 templates + HTMX + Alpine.js (via CDN, no Node build step)
-- **Mapping & GIS**: Leaflet.js + `Leaflet.markercluster` + OpenStreetMap tiles
+- **Live Video & Analytics**: HLS.js in-browser streaming, RTSP/HLS feeds, ANPR watchlist matching
 - **Containerization**: Docker Compose (`infra/docker-compose.yml`)
 
 ---
@@ -78,6 +79,8 @@ The entire platform (PostgreSQL + PostGIS database and the FastAPI application) 
 ├── model1-registry/         Model 1 — Registry & GIS Foundation
 │   └── app/                 FastAPI application (routers, templates, static CSS/JS)
 ├── model2-analytics/        Model 2 — Analytics & Vehicle Tracking (ANPR, Watchlists, Alerts)
+│   ├── app/routers/         Watchlist CRUD router
+│   └── pipeline/            Analytics & ANPR pipeline architecture
 └── infra/                   Docker environment (`docker-compose.yml`, `Dockerfile`, `Dockerfile.db`)
 ```
 
@@ -100,8 +103,15 @@ The entire platform (PostgreSQL + PostGIS database and the FastAPI application) 
 - `GET /api/v1/districts` — List all 33 Gujarat districts with camera counts and GeoJSON boundaries
 - `GET /api/v1/gap-analysis` — PostGIS spatial camera coverage calculation (1km buffer)
 
+### Model 2 — Vehicle Watchlist & Surveillance Analytics
+- `GET /api/v1/watchlist/vehicles` — List & search vehicle targets (filter by `category`, `status`, `plate_number`, `department_id`)
+- `POST /api/v1/watchlist/vehicles` — Add new vehicle target (with Indian plate format validation & duplicate checks)
+- `GET /api/v1/watchlist/vehicles/{id}` — Get single watchlist target detail
+- `PATCH /api/v1/watchlist/vehicles/{id}` — Update target case status (`active` / `resolved`) or details
+- `DELETE /api/v1/watchlist/vehicles/{id}` — Delete watchlist target and cascade associated alerts
+
 ---
 
 ## 📄 License & Project Context
 
-See [Project_Context.md](file:///c:/Hackathons/Sentinel-CCTV-Hackathon/Project_Context.md) for full architectural background, rationale, and design principles.
+See [Project_Context.md](file:///c:/Users/Asus%20f15/QuantumMachineLearning/Project_Context.md) for full architectural background, rationale, and design principles.
