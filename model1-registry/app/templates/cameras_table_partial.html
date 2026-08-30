@@ -1,0 +1,53 @@
+{# HTMX partial — the <tbody> content for the cameras table #}
+{% if camera_rows %}
+{% for row in camera_rows %}
+<tr>
+    <td style="font-weight: 600;">{{ row.cam.name }}</td>
+    <td>{{ row.cam.department.name if row.cam.department else '—' }}</td>
+    <td>{{ row.cam.district.name if row.cam.district else '—' }}</td>
+    <td>
+        <span class="badge badge--{{ row.cam.connectivity_status }}">
+            <span class="badge-dot badge-dot--{{ row.cam.connectivity_status }}"></span>
+            {{ row.cam.connectivity_status }}
+        </span>
+    </td>
+    <td>{{ row.cam.camera_type or '—' }}</td>
+    <td>{{ row.cam.ownership or '—' }}</td>
+    <td>
+        {% if row.location_str %}
+            <span style="font-size: 0.8rem; font-family: monospace;">{{ row.location_str }}</span>
+        {% else %}
+            <span class="badge badge--unmapped">unmapped</span>
+        {% endif %}
+    </td>
+    <td style="font-size: 0.8rem; color: var(--text-muted);">
+        {{ row.cam.updated_at.strftime('%Y-%m-%d %H:%M') if row.cam.updated_at else '—' }}
+    </td>
+    <td>
+        <div style="display: flex; gap: 0.35rem;">
+            <a href="/cameras/{{ row.cam.id }}/edit"
+               class="btn btn--secondary btn--sm"
+               hx-get="/cameras/{{ row.cam.id }}/edit"
+               hx-target="#form-container"
+               hx-swap="innerHTML"
+               onclick="document.querySelector('[x-data]').__x.$data.showFormModal = true; return false;">
+                ✏️
+            </a>
+            <button class="btn btn--danger btn--sm"
+                    onclick="cameraListPage().deactivateCamera('{{ row.cam.id }}')">
+                🗑️
+            </button>
+        </div>
+    </td>
+</tr>
+{% endfor %}
+{% else %}
+<tr>
+    <td colspan="9">
+        <div class="empty-state">
+            <div class="empty-state-icon">📷</div>
+            <div class="empty-state-text">No cameras found matching filters.</div>
+        </div>
+    </td>
+</tr>
+{% endif %}

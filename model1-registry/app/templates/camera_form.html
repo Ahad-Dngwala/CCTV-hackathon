@@ -1,0 +1,197 @@
+{# Shared create/edit form — rendered inside a modal via HTMX #}
+<div class="modal-backdrop" onclick="if(event.target===this){document.querySelector('[x-data]').__x.$data.showFormModal=false; this.remove();}">
+    <div class="modal-content">
+        <div class="modal-title">
+            {% if camera %}✏️ Edit Camera{% else %}➕ New Camera{% endif %}
+        </div>
+
+        <form id="camera-form"
+            {% if camera %}
+              hx-patch="/api/v1/cameras/{{ camera.id }}"
+            {% else %}
+              hx-post="/api/v1/cameras"
+            {% endif %}
+            hx-ext="json-enc"
+            hx-target="#form-container"
+            hx-swap="innerHTML"
+            hx-headers='{"Content-Type": "application/json"}'
+        >
+            <div class="form-group">
+                <label class="form-label" for="cam-name">Camera Name *</label>
+                <input class="form-input" type="text" id="cam-name" name="name"
+                       value="{{ camera.name if camera else '' }}" required
+                       placeholder="e.g. Junction Cam A12">
+                {% if errors.get('name') %}
+                <div class="form-error">{{ errors.name }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="cam-department">Department</label>
+                    <select class="form-select" id="cam-department" name="department_id">
+                        <option value="">— Select —</option>
+                        {% for dept in departments %}
+                        <option value="{{ dept.id }}"
+                            {% if camera and camera.department_id and camera.department_id|string == dept.id|string %}selected{% endif %}>
+                            {{ dept.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="cam-district">District</label>
+                    <select class="form-select" id="cam-district" name="district_id">
+                        <option value="">— Select —</option>
+                        {% for dist in districts %}
+                        <option value="{{ dist.id }}"
+                            {% if camera and camera.district_id and camera.district_id|string == dist.id|string %}selected{% endif %}>
+                            {{ dist.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="cam-type">Camera Type</label>
+                    <select class="form-select" id="cam-type" name="camera_type">
+                        <option value="">— Select —</option>
+                        {% for t in ['fixed', 'PTZ', 'dome', 'bullet'] %}
+                        <option value="{{ t }}"
+                            {% if camera and camera.camera_type == t %}selected{% endif %}>
+                            {{ t }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="cam-ownership">Ownership</label>
+                    <select class="form-select" id="cam-ownership" name="ownership">
+                        <option value="">— Select —</option>
+                        {% for o in ['government', 'private'] %}
+                        <option value="{{ o }}"
+                            {% if camera and camera.ownership == o %}selected{% endif %}>
+                            {{ o }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="cam-storage">Storage Type</label>
+                    <select class="form-select" id="cam-storage" name="storage_type">
+                        <option value="">— Select —</option>
+                        {% for s in ['cloud', 'local'] %}
+                        <option value="{{ s }}"
+                            {% if camera and camera.storage_type == s %}selected{% endif %}>
+                            {{ s }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="cam-retention">Retention (days)</label>
+                    <input class="form-input" type="number" id="cam-retention" name="retention_days"
+                           value="{{ camera.retention_days if camera and camera.retention_days else '' }}"
+                           placeholder="e.g. 30" min="0">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="cam-status">Connectivity Status</label>
+                <select class="form-select" id="cam-status" name="connectivity_status">
+                    {% for s in ['online', 'offline', 'maintenance'] %}
+                    <option value="{{ s }}"
+                        {% if camera and camera.connectivity_status == s %}selected{% endif %}
+                        {% if not camera and s == 'offline' %}selected{% endif %}>
+                        {{ s }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="cam-vms">VMS URL</label>
+                <input class="form-input" type="url" id="cam-vms" name="vms_url"
+                       value="{{ camera.vms_url if camera and camera.vms_url else '' }}"
+                       placeholder="https://vms.example.com/viewer/...">
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="cam-lat">Latitude</label>
+                    <input class="form-input" type="number" step="any" id="cam-lat" name="latitude"
+                           value="{{ camera_lat if camera_lat else '' }}"
+                           placeholder="e.g. 23.0225">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="cam-lon">Longitude</label>
+                    <input class="form-input" type="number" step="any" id="cam-lon" name="longitude"
+                           value="{{ camera_lon if camera_lon else '' }}"
+                           placeholder="e.g. 72.5714">
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn btn--secondary"
+                        onclick="document.querySelector('[x-data]').__x.$data.showFormModal=false; document.getElementById('form-container').innerHTML='';">
+                    Cancel
+                </button>
+                <button type="submit" class="btn btn--primary">
+                    {% if camera %}Save Changes{% else %}Create Camera{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// Handle form submission with JSON body instead of form-encoded
+document.getElementById('camera-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    const data = {};
+
+    for (const [key, value] of formData.entries()) {
+        if (value === '' || value === null) continue;
+        if (key === 'retention_days') {
+            data[key] = parseInt(value);
+        } else if (key === 'latitude' || key === 'longitude') {
+            data[key] = parseFloat(value);
+        } else {
+            data[key] = value;
+        }
+    }
+
+    // Determine method and URL from hx attributes
+    const isEdit = form.hasAttribute('hx-patch');
+    const url = isEdit ? form.getAttribute('hx-patch') : form.getAttribute('hx-post');
+    const method = isEdit ? 'PATCH' : 'POST';
+
+    try {
+        const res = await fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+
+        if (res.ok) {
+            // Close modal and refresh table
+            document.querySelector('[x-data]').__x.$data.showFormModal = false;
+            document.getElementById('form-container').innerHTML = '';
+            htmx.trigger('#cameras-tbody', 'load');
+        } else {
+            const err = await res.json();
+            alert(err.detail || JSON.stringify(err));
+        }
+    } catch (err) {
+        console.error('Form submit failed:', err);
+        alert('Failed to save camera.');
+    }
+});
+</script>

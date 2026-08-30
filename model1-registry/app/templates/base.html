@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en" x-data="{ mobileOpen: false }">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Sentinel — Gujarat CCTV camera registry, GIS mapping, and surveillance management dashboard.">
+    <title>{% block title %}Sentinel — Registry & GIS{% endblock %}</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Leaflet.markercluster CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+
+    <!-- App CSS -->
+    <link rel="stylesheet" href="/static/css/main.css">
+
+    {% block head_extra %}{% endblock %}
+</head>
+<body>
+
+    <!-- Navigation -->
+    <nav class="nav" id="main-nav">
+        <div class="nav-inner">
+            <a href="/" class="nav-brand" id="nav-brand">
+                <span class="nav-logo">🛡️</span>
+                <span class="nav-title">Sentinel</span>
+                <span class="nav-subtitle">Registry & GIS</span>
+            </a>
+
+            <button class="nav-toggle" @click="mobileOpen = !mobileOpen" id="nav-toggle">
+                <span></span><span></span><span></span>
+            </button>
+
+            <div class="nav-links" :class="{ 'open': mobileOpen }">
+                <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}" id="nav-map">
+                    <span class="nav-link-icon">🗺️</span> Map
+                </a>
+                <a href="/cameras" class="nav-link {% if '/cameras' in request.url.path %}active{% endif %}" id="nav-cameras">
+                    <span class="nav-link-icon">📷</span> Cameras
+                </a>
+                <a href="/departments" class="nav-link {% if request.url.path == '/departments' %}active{% endif %}" id="nav-departments">
+                    <span class="nav-link-icon">🏛️</span> Departments
+                </a>
+                <a href="/districts" class="nav-link {% if request.url.path == '/districts' %}active{% endif %}" id="nav-districts">
+                    <span class="nav-link-icon">📍</span> Districts
+                </a>
+
+                <div class="nav-divider"></div>
+
+                <a href="/detections" class="nav-link nav-link--secondary {% if request.url.path == '/detections' %}active{% endif %}" id="nav-detections">
+                    <span class="nav-link-icon">🔍</span> Detections
+                </a>
+                <a href="/watchlist" class="nav-link nav-link--secondary {% if request.url.path == '/watchlist' %}active{% endif %}" id="nav-watchlist">
+                    <span class="nav-link-icon">👁️</span> Watchlist
+                </a>
+                <a href="/alerts" class="nav-link nav-link--secondary {% if request.url.path == '/alerts' %}active{% endif %}" id="nav-alerts">
+                    <span class="nav-link-icon">🚨</span> Alerts
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content" id="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Leaflet.markercluster JS -->
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <!-- Alpine.js -->
+    <script defer src="https://unpkg.com/alpinejs@3.14.3/dist/cdn.min.js"></script>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

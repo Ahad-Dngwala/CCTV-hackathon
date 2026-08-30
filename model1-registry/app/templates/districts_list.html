@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}Sentinel — Districts{% endblock %}
+
+{% block content %}
+<div class="page-container" x-data="districtsPage()" x-init="load()">
+    <div class="page-header">
+        <h1 class="page-title">
+            <span class="page-title-icon">📍</span> Districts of Gujarat
+        </h1>
+        <span class="badge badge--info">33 Districts</span>
+    </div>
+
+    <div style="background: var(--warning-bg); border: 1px solid rgba(245,158,11,0.2); border-radius: var(--radius-md); padding: 0.75rem 1rem; margin-bottom: 1.5rem; font-size: 0.85rem; color: var(--warning);">
+        ⚠️ <strong>Boundary data not yet available.</strong> District polygons will be shown once a shapefile is sourced
+        (see Project_Context.md §9, open question).
+    </div>
+
+    <div class="table-wrapper">
+        <table class="data-table" id="districts-table">
+            <thead>
+                <tr>
+                    <th>District Name</th>
+                    <th>Camera Count</th>
+                    <th>Boundary</th>
+                    <th>Created</th>
+                </tr>
+            </thead>
+            <tbody id="districts-tbody">
+                <template x-if="loading">
+                    <tr>
+                        <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                            Loading districts...
+                        </td>
+                    </tr>
+                </template>
+                <template x-for="dist in districts" :key="dist.id">
+                    <tr>
+                        <td style="font-weight: 600;" x-text="dist.name"></td>
+                        <td>
+                            <span style="font-weight: 700; font-size: 1.1rem;" x-text="dist.camera_count"></span>
+                            <span style="color: var(--text-muted); font-size: 0.8rem;"> cameras</span>
+                        </td>
+                        <td>
+                            <span class="badge badge--unmapped">no boundary data yet</span>
+                        </td>
+                        <td style="font-size: 0.8rem; color: var(--text-muted);"
+                            x-text="new Date(dist.created_at).toLocaleDateString()">
+                        </td>
+                    </tr>
+                </template>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function districtsPage() {
+    return {
+        districts: [],
+        loading: true,
+        async load() {
+            try {
+                const res = await fetch('/api/v1/districts');
+                this.districts = await res.json();
+            } catch (e) {
+                console.error('Failed to load districts:', e);
+            } finally {
+                this.loading = false;
+            }
+        }
+    };
+}
+</script>
+{% endblock %}

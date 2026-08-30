@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block title %}Sentinel — Cameras{% endblock %}
+
+{% block content %}
+<div class="page-container" x-data="cameraListPage()">
+    <div class="page-header">
+        <h1 class="page-title">
+            <span class="page-title-icon">📷</span> Camera Registry
+        </h1>
+        <div style="display: flex; gap: 0.75rem;">
+            <button class="btn btn--secondary" @click="showBulkModal = true" id="btn-bulk-import">
+                📁 CSV Import
+            </button>
+            <a href="/cameras/new" class="btn btn--primary" id="btn-add-camera"
+               hx-get="/cameras/new" hx-target="#form-container" hx-swap="innerHTML"
+               @click.prevent="showFormModal = true">
+                ➕ Add Camera
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters (HTMX-driven) -->
+    <div class="filter-bar" id="camera-filters">
+        <select class="form-select" name="department_id" id="filter-department"
+                hx-get="/cameras/table" hx-target="#cameras-tbody" hx-swap="innerHTML"
+                hx-include="#camera-filters">
+            <option value="">All Departments</option>
+            {% for dept in departments %}
+            <option value="{{ dept.id }}" {% if selected_department == dept.id|string %}selected{% endif %}>
+                {{ dept.name }}
+            </option>
+            {% endfor %}
+        </select>
+
+        <select class="form-select" name="district_id" id="filter-district"
+                hx-get="/cameras/table" hx-target="#cameras-tbody" hx-swap="innerHTML"
+                hx-include="#camera-filters">
+            <option value="">All Districts</option>
+            {% for dist in districts %}
+            <option value="{{ dist.id }}" {% if selected_district == dist.id|string %}selected{% endif %}>
+                {{ dist.name }}
+            </option>
+            {% endfor %}
+        </select>
+
+        <select class="form-select" name="connectivity_status" id="filter-status"
+                hx-get="/cameras/table" hx-target="#cameras-tbody" hx-swap="innerHTML"
+                hx-include="#camera-filters">
+            <option value="">All Statuses</option>
+            <option value="online" {% if selected_status == 'online' %}selected{% endif %}>🟢 Online</option>
+            <option value="offline" {% if selected_status == 'offline' %}selected{% endif %}>🔴 Offline</option>
+            <option value="maintenance" {% if selected_status == 'maintenance' %}selected{% endif %}>🟡 Maintenance</option>
+        </select>
+
+        <span class="htmx-indicator" style="color: var(--accent-light); font-size: 0.85rem;">Loading...</span>
+    </div>
+
+    <!-- Camera table -->
+    <div class="table-wrapper">
+        <table class="data-table" id="cameras-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Department</th>
+                    <th>District</th>
+                    <th>Status</th>
+                    <th>Type</th>
+                    <th>Ownership</th>
+                    <th>Location</th>
+                    <th>Updated</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="cameras-tbody"
+                   hx-get="/cameras/table" hx-trigger="load" hx-swap="innerHTML"
+                   hx-include="#camera-filters">
+                <tr>
+                    <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                        Loading cameras...
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Form modal container -->
+    <div id="form-container" x-show="showFormModal" x-cloak>
+    </div>
+
+    <!-- Bulk import modal -->
+    <template x-if="showBulkModal">
+        <div class="modal-backdrop" @click.self="showBulkModal = false">
+            <div class="modal-content">
+                <div class="modal-title">📁 CSV Bulk Import</div>
+                <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1rem;">
+                    Upload a CSV file with columns: <code>name</code>, <code>department</code>, <code>district</code>,
+                    <code>camera_type</code>, <code>ownership</code>, <code>storage_type</code>, <code>retention_days</code>,
+                    <code>vms_url</code>, <code>connectivity_status</code>, <code>latitude</code>, <code>longitude</code>.
+                </p>
+                <form @submit.prevent="doBulkImport()" enctype="multipart/form-data">
+                    <div class="upload-area" @click="$refs.csvFile.click()">
+                        <div class="upload-area-icon">📄</div>
+                        <div class="upload-area-text" x-text="csvFileName || 'Click to select a CSV file'"></div>
+                        <input type="file" accept=".csv" x-ref="csvFile" style="display:none"
+                               @change="csvFileName = $event.target.files[0]?.name || ''">
+                    </div>
+                    <div x-show="bulkResult" style="margin-top: 1rem;">
+                        <div class="badge badge--online" style="margin-right: 0.5rem;" x-show="bulkResult?.created">
+                            ✅ <span x-text="bulkResult?.created"></span> created
+                        </div>
+                        <div class="badge badge--maintenance" style="margin-right: 0.5rem;" x-show="bulkResult?.skipped">
+                            ⏭️ <span x-text="bulkResult?.skipped"></span> skipped
+                        </div>
+                        <div class="badge badge--offline" x-show="bulkResult?.errored">
+                            ❌ <span x-text="bulkResult?.errored"></span> errored
+                        </div>
+                        <template x-if="bulkResult?.errors?.length">
+                            <ul style="margin-top: 0.5rem; font-size: 0.8rem; color: var(--danger);">
+                                <template x-for="err in bulkResult.errors" :key="err">
+                                    <li x-text="err"></li>
+                                </template>
+                            </ul>
+                        </template>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn--secondary" @click="showBulkModal = false">Cancel</button>
+                        <button type="submit" class="btn btn--primary" :disabled="!csvFileName">Upload & Import</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </template>
+</div>
+
+<style>
+    [x-cloak] { display: none !important; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function cameraListPage() {
+    return {
+        showFormModal: false,
+        showBulkModal: false,
+        csvFileName: '',
+        bulkResult: null,
+
+        async doBulkImport() {
+            const fileInput = this.$refs.csvFile;
+            if (!fileInput.files.length) return;
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            try {
+                const res = await fetch('/api/v1/cameras/bulk', {
+                    method: 'POST',
+                    body: formData,
+                });
+                this.bulkResult = await res.json();
+                // Refresh table
+                htmx.trigger('#cameras-tbody', 'load');
+            } catch (e) {
+                console.error('Bulk import failed:', e);
+            }
+        },
+
+        deactivateCamera(id) {
+            if (!confirm('Deactivate this camera? This is a soft delete.')) return;
+            fetch(`/api/v1/cameras/${id}`, { method: 'DELETE' })
+                .then(res => {
+                    if (res.ok) {
+                        htmx.trigger('#cameras-tbody', 'load');
+                    } else {
+                        res.json().then(d => alert(d.detail || 'Error'));
+                    }
+                });
+        },
+    };
+}
+</script>
+{% endblock %}

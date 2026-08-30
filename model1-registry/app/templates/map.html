@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Sentinel — Map Dashboard{% endblock %}
+
+{% block content %}
+<div class="map-container" x-data="mapDashboard()" x-init="init()">
+    <div id="map"></div>
+
+    <!-- Map Controls (right side) -->
+    <div class="map-controls">
+        <!-- District filter -->
+        <div class="map-control-card" id="district-filter-card">
+            <div class="map-control-title">Filter by District</div>
+            <select class="form-select" id="district-filter" @change="filterByDistrict($event.target.value)" style="min-width: 0; width: 100%;">
+                <option value="">All Districts</option>
+            </select>
+        </div>
+
+        <!-- Department toggles -->
+        <div class="map-control-card" id="department-toggle-card">
+            <div class="map-control-title">Departments</div>
+            <div class="checkbox-list" id="department-checkboxes">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom stats -->
+    <div class="map-stats" id="map-stats">
+        <div class="map-stat-pill">
+            <span class="badge-dot badge-dot--online"></span>
+            <span id="stat-online">0</span> Online
+        </div>
+        <div class="map-stat-pill">
+            <span class="badge-dot badge-dot--offline"></span>
+            <span id="stat-offline">0</span> Offline
+        </div>
+        <div class="map-stat-pill">
+            <span class="badge-dot badge-dot--maintenance"></span>
+            <span id="stat-maintenance">0</span> Maintenance
+        </div>
+        <div class="map-stat-pill">
+            📷 <span id="stat-total">0</span> Total
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/map.js"></script>
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}Sentinel — {{ page_title }}{% endblock %}
+
+{% block content %}
+<div class="placeholder-page">
+    <div class="card placeholder-card">
+        <div class="placeholder-icon">🚧</div>
+        <div class="placeholder-title">{{ page_title }}</div>
+        <div class="placeholder-text">{{ description }}</div>
+        <div style="margin-top: 1.5rem;">
+            <span class="badge badge--maintenance">Coming Soon</span>
+        </div>
+    </div>
+</div>
+{% endblock %}
