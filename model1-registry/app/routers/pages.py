@@ -141,7 +141,10 @@ def camera_new_form(
     db: Session = Depends(get_db),
     user: Optional[UserModel] = Depends(get_optional_current_user),
 ):
-    departments = db.query(DeptModel).order_by(DeptModel.name).all()
+    if user and user.role == "dept_admin" and user.department_id:
+        departments = db.query(DeptModel).filter(DeptModel.id == user.department_id).all()
+    else:
+        departments = db.query(DeptModel).order_by(DeptModel.name).all()
     districts = db.query(DistModel).order_by(DistModel.name).all()
     return request.app.state.templates.TemplateResponse(
         request=request,
@@ -175,7 +178,10 @@ def camera_edit_form(
     if not cam:
         return HTMLResponse(status_code=404, content="Camera not found")
 
-    departments = db.query(DeptModel).order_by(DeptModel.name).all()
+    if user and user.role == "dept_admin" and user.department_id:
+        departments = db.query(DeptModel).filter(DeptModel.id == user.department_id).all()
+    else:
+        departments = db.query(DeptModel).order_by(DeptModel.name).all()
     districts = db.query(DistModel).order_by(DistModel.name).all()
 
     # Extract lat/lon from PostGIS geography

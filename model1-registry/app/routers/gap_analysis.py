@@ -47,28 +47,28 @@ def get_gap_analysis(
     Assumes a fixed monitoring radius per active camera (default 1.0 km). Sync query execution
     is optimal for ~30 cameras / 33 districts; revisit asynchronous background jobs at statewide scale (80,000+ cameras).
     """
-    # Convert km radius to approximate lat/long degrees (1km approx 0.009 degrees at 23°N)
-    buffer_degrees = radius_km * 0.009
+    # Convert km radius to meters for PostGIS geography ST_Buffer
+    radius_meters = radius_km * 1000.0
 
     query_str = text("""
         SELECT
             d.id AS district_id,
             d.name AS district_name,
             COUNT(c.id) AS camera_count,
-            ST_Area(d.boundary::geometry) AS district_area_deg,
+            ST_Area(d.boundary::geography) AS district_area_m2,
             CASE
-                WHEN COUNT(c.id) = 0 OR d.boundary IS NULL THEN ST_Area(d.boundary::geometry)
+                WHEN COUNT(c.id) = 0 OR d.boundary IS NULL THEN ST_Area(d.boundary::geography)
                 ELSE ST_Area(ST_Difference(
                     d.boundary::geometry,
-                    COALESCE(ST_Union(ST_Buffer(c.location::geometry, :buf)), ST_GeomFromText('POLYGON EMPTY'))
-                ))
-            END AS uncovered_area_deg,
+                    COALESCE(ST_Union(ST_Buffer(c.location::geography, :radius_m)::geometry), ST_GeomFromText('POLYGON EMPTY'))
+                )::geography)
+            END AS uncovered_area_m2,
             ST_AsGeoJSON(
                 CASE
                     WHEN COUNT(c.id) = 0 OR d.boundary IS NULL THEN d.boundary::geometry
                     ELSE ST_Difference(
                         d.boundary::geometry,
-                        COALESCE(ST_Union(ST_Buffer(c.location::geometry, :buf)), ST_GeomFromText('POLYGON EMPTY'))
+                        COALESCE(ST_Union(ST_Buffer(c.location::geography, :radius_m)::geometry), ST_GeomFromText('POLYGON EMPTY'))
                     )
                 END
             ) AS uncovered_geojson
@@ -78,21 +78,19 @@ def get_gap_analysis(
         ORDER BY camera_count ASC, d.name ASC;
     """)
 
-    rows = db.execute(query_str, {"buf": buffer_degrees}).fetchall()
+    rows = db.execute(query_str, {"radius_m": radius_meters}).fetchall()
 
     results = []
-    # 1 square degree at ~23°N is approximately 111km * 102km = 11,322 sq km
-    DEG_TO_SQ_KM = 11322.0
 
     for r in rows:
-        dist_area_deg = float(r.district_area_deg or 0.0)
-        uncov_area_deg = float(r.uncovered_area_deg or 0.0)
+        dist_area_m2 = float(r.district_area_m2 or 0.0)
+        uncov_area_m2 = float(r.uncovered_area_m2 or 0.0)
 
-        dist_area_km2 = round(dist_area_deg * DEG_TO_SQ_KM, 2)
-        uncov_area_km2 = round(uncov_area_deg * DEG_TO_SQ_KM, 2)
+        dist_area_km2 = round(dist_area_m2 / 1_000_000.0, 2)
+        uncov_area_km2 = round(uncov_area_m2 / 1_000_000.0, 2)
 
-        if dist_area_deg > 0:
-            coverage_pct = round(max(0.0, min(100.0, (1.0 - (uncov_area_deg / dist_area_deg)) * 100.0)), 2)
+        if dist_area_m2 > 0:
+            coverage_pct = round(max(0.0, min(100.0, (1.0 - (uncov_area_m2 / dist_area_m2)) * 100.0)), 2)
         else:
             coverage_pct = 0.0
 

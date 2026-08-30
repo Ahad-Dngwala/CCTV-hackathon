@@ -1,4 +1,22 @@
 {# Shared create/edit form — rendered inside a modal via HTMX #}
+<style>
+.form-error {
+    color: #ef4444;
+    font-size: 0.8125rem;
+    margin-top: 0.25rem;
+    display: none;
+}
+.form-error-banner {
+    background-color: #fef2f2;
+    border: 1px solid #fca5a5;
+    color: #991b1b;
+    padding: 0.75rem 1rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    margin-bottom: 1rem;
+}
+</style>
+
 <div class="modal-backdrop" onclick="if(event.target===this){window.dispatchEvent(new CustomEvent('close-modal')); document.getElementById('form-container').innerHTML='';}">
     <div class="modal-content">
         <div class="modal-title">
@@ -9,14 +27,14 @@
             data-url="{% if camera %}/api/v1/cameras/{{ camera.id }}{% else %}/api/v1/cameras{% endif %}"
             data-method="{% if camera %}PATCH{% else %}POST{% endif %}"
         >
+            <div id="form-error-banner" class="form-error-banner" style="display: none;"></div>
+
             <div class="form-group">
                 <label class="form-label" for="cam-name">Camera Name *</label>
                 <input class="form-input" type="text" id="cam-name" name="name"
                        value="{{ camera.name if camera else '' }}" required
                        placeholder="e.g. Junction Cam A12">
-                {% if errors.get('name') %}
-                <div class="form-error">{{ errors.name }}</div>
-                {% endif %}
+                <div class="form-error" id="error-name">{% if errors.get('name') %}{{ errors.name }}{% endif %}</div>
             </div>
 
             <div class="form-row">
@@ -26,11 +44,13 @@
                         <option value="">— Select —</option>
                         {% for dept in departments %}
                         <option value="{{ dept.id }}"
-                            {% if camera and camera.department_id and camera.department_id|string == dept.id|string %}selected{% endif %}>
+                            {% if camera and camera.department_id and camera.department_id|string == dept.id|string %}selected
+                            {% elif not camera and user and user.department_id and user.department_id|string == dept.id|string %}selected{% endif %}>
                             {{ dept.name }}
                         </option>
                         {% endfor %}
                     </select>
+                    <div class="form-error" id="error-department_id"></div>
                 </div>
                 <div class="form-group">
                     <label class="form-label" for="cam-district">District</label>
@@ -43,6 +63,7 @@
                         </option>
                         {% endfor %}
                     </select>
+                    <div class="form-error" id="error-district_id"></div>
                 </div>
             </div>
 
@@ -58,6 +79,7 @@
                         </option>
                         {% endfor %}
                     </select>
+                    <div class="form-error" id="error-camera_type"></div>
                 </div>
                 <div class="form-group">
                     <label class="form-label" for="cam-ownership">Ownership</label>
@@ -70,6 +92,7 @@
                         </option>
                         {% endfor %}
                     </select>
+                    <div class="form-error" id="error-ownership"></div>
                 </div>
             </div>
 
@@ -85,12 +108,14 @@
                         </option>
                         {% endfor %}
                     </select>
+                    <div class="form-error" id="error-storage_type"></div>
                 </div>
                 <div class="form-group">
                     <label class="form-label" for="cam-retention">Retention (days)</label>
                     <input class="form-input" type="number" id="cam-retention" name="retention_days"
                            value="{{ camera.retention_days if camera and camera.retention_days else '' }}"
                            placeholder="e.g. 30" min="0">
+                    <div class="form-error" id="error-retention_days"></div>
                 </div>
             </div>
 
@@ -105,6 +130,7 @@
                     </option>
                     {% endfor %}
                 </select>
+                <div class="form-error" id="error-connectivity_status"></div>
             </div>
 
             <div class="form-group">
@@ -112,6 +138,7 @@
                 <input class="form-input" type="url" id="cam-vms" name="vms_url"
                        value="{{ camera.vms_url if camera and camera.vms_url else '' }}"
                        placeholder="https://vms.example.com/viewer/...">
+                <div class="form-error" id="error-vms_url"></div>
             </div>
 
             <div class="form-row">
@@ -120,12 +147,14 @@
                     <input class="form-input" type="number" step="any" id="cam-lat" name="latitude"
                            value="{{ camera_lat if camera_lat else '' }}"
                            placeholder="e.g. 23.0225">
+                    <div class="form-error" id="error-latitude"></div>
                 </div>
                 <div class="form-group">
                     <label class="form-label" for="cam-lon">Longitude</label>
                     <input class="form-input" type="number" step="any" id="cam-lon" name="longitude"
                            value="{{ camera_lon if camera_lon else '' }}"
                            placeholder="e.g. 72.5714">
+                    <div class="form-error" id="error-longitude"></div>
                 </div>
             </div>
 
@@ -143,9 +172,40 @@
 </div>
 
 <script>
+function clearFormErrors() {
+    const banner = document.getElementById('form-error-banner');
+    if (banner) {
+        banner.style.display = 'none';
+        banner.textContent = '';
+    }
+    document.querySelectorAll('#camera-form .form-error').forEach(el => {
+        if (el.id === 'error-name' && el.textContent.trim() !== '') return;
+        el.style.display = 'none';
+        el.textContent = '';
+    });
+}
+
+function setFieldError(fieldName, message) {
+    const el = document.getElementById('error-' + fieldName);
+    if (el) {
+        el.textContent = message;
+        el.style.display = 'block';
+    }
+}
+
+function setBannerError(message) {
+    const banner = document.getElementById('form-error-banner');
+    if (banner) {
+        banner.textContent = message;
+        banner.style.display = 'block';
+    }
+}
+
 // Handle form submission with JSON body instead of form-encoded
 document.getElementById('camera-form').addEventListener('submit', async function(e) {
     e.preventDefault();
+    clearFormErrors();
+
     const form = e.target;
     const formData = new FormData(form);
     const data = {};
@@ -178,12 +238,32 @@ document.getElementById('camera-form').addEventListener('submit', async function
             document.getElementById('form-container').innerHTML = '';
             htmx.trigger('#cameras-tbody', 'load');
         } else {
-            const err = await res.json();
-            alert(err.detail || JSON.stringify(err));
+            const err = await res.json().catch(() => ({ detail: 'Failed to parse server response.' }));
+            if (Array.isArray(err.detail)) {
+                let bannerMsgs = [];
+                err.detail.forEach(item => {
+                    const field = item.loc && item.loc.length > 0 ? item.loc[item.loc.length - 1] : null;
+                    const msg = item.msg || 'Invalid value';
+                    if (field) {
+                        setFieldError(field, msg);
+                    }
+                    bannerMsgs.push(field ? `${field}: ${msg}` : msg);
+                });
+                setBannerError(bannerMsgs.join('; '));
+            } else if (typeof err.detail === 'string') {
+                setBannerError(err.detail);
+                if (err.detail.toLowerCase().includes('department')) {
+                    setFieldError('department_id', err.detail);
+                }
+            } else if (err.detail) {
+                setBannerError(JSON.stringify(err.detail));
+            } else {
+                setBannerError('Failed to save camera.');
+            }
         }
     } catch (err) {
         console.error('Form submit failed:', err);
-        alert('Failed to save camera.');
+        setBannerError('Failed to save camera due to a network error.');
     }
 });
 </script>
