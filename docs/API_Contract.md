@@ -53,7 +53,7 @@ Owner: `model1-registry`. Data model reference: `Project_Context.md` §3.
 | `GET /api/v1/cameras/{id}/history` | Audit trail for one camera | ✅ |
 | `GET /api/v1/departments` | List departments | ✅ |
 | `GET /api/v1/districts` | List districts incl. PostGIS boundary (GeoJSON) | ✅ |
-| `GET /api/v1/gap-analysis` | Coverage-hole report (PostGIS spatial query) per `Project_Context.md` §3 | 🚧 |
+| `GET /api/v1/gap-analysis` | Coverage-hole report (PostGIS spatial query) per `Project_Context.md` §3 | ✅ |
 | `GET /api/v1/export` | CSV/JSON export of filtered camera set | 🚧 |
 
 ### Camera object (`shared/schemas`)
@@ -162,9 +162,7 @@ ingestion code must follow (full detail in
 - Exact error-code enum — needs a decision once both models have real
   failure cases to enumerate. ❓
 - Pagination defaults (page size). ❓
-- Whether `gap-analysis` and `export` return sync or as a background
-  job + polling — depends on how slow the PostGIS query turns out to be
-  at real data volume. ❓
+- Synchronous execution for `gap-analysis` (30 cameras / 33 districts runs in <20ms). Revisit background job queue at statewide scale (80,000+ cameras). ✅
 
 Update this section as decisions land — don't leave it stale while the
 actual API diverges from what's written here.
