@@ -11,9 +11,8 @@
         <span class="badge badge--info">33 Districts</span>
     </div>
 
-    <div style="background: var(--warning-bg); border: 1px solid rgba(245,158,11,0.2); border-radius: var(--radius-md); padding: 0.75rem 1rem; margin-bottom: 1.5rem; font-size: 0.85rem; color: var(--warning);">
-        ⚠️ <strong>Boundary data not yet available.</strong> District polygons will be shown once a shapefile is sourced
-        (see Project_Context.md §9, open question).
+    <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: var(--radius-md); padding: 0.75rem 1rem; margin-bottom: 1.5rem; font-size: 0.85rem; color: #34d399;">
+        🗺️ <strong>PostGIS MultiPolygon Boundaries Active.</strong> Spatial boundaries are loaded for all 33 Gujarat districts.
     </div>
 
     <div class="table-wrapper">
@@ -22,7 +21,7 @@
                 <tr>
                     <th>District Name</th>
                     <th>Camera Count</th>
-                    <th>Boundary</th>
+                    <th>Boundary Status</th>
                     <th>Created</th>
                 </tr>
             </thead>
@@ -42,7 +41,8 @@
                             <span style="color: var(--text-muted); font-size: 0.8rem;"> cameras</span>
                         </td>
                         <td>
-                            <span class="badge badge--unmapped">no boundary data yet</span>
+                            <span class="badge badge--online" x-show="dist.boundary">Polygon (GeoJSON)</span>
+                            <span class="badge badge--unmapped" x-show="!dist.boundary">unmapped</span>
                         </td>
                         <td style="font-size: 0.8rem; color: var(--text-muted);"
                             x-text="new Date(dist.created_at).toLocaleDateString()">

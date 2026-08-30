@@ -1,8 +1,4 @@
-"""
-District API router — read-only list endpoint.
-GET /api/v1/districts
-"""
-
+import json
 from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -18,11 +14,12 @@ router = APIRouter(prefix="/api/v1/districts", tags=["districts"])
 
 @router.get("", response_model=list[DistrictSchema])
 def list_districts(db: Session = Depends(get_db)):
-    """List all 33 Gujarat districts with camera count."""
+    """List all 33 Gujarat districts with camera count and PostGIS MultiPolygon boundary GeoJSON."""
     rows = (
         db.query(
             DistrictModel,
             func.count(CameraModel.id).label("camera_count"),
+            func.ST_AsGeoJSON(DistrictModel.boundary).label("boundary_geojson"),
         )
         .outerjoin(
             CameraModel,
@@ -34,11 +31,12 @@ def list_districts(db: Session = Depends(get_db)):
         .all()
     )
     result = []
-    for dist, count in rows:
+    for dist, count, boundary_json in rows:
+        boundary_dict = json.loads(boundary_json) if boundary_json else None
         result.append({
             "id": dist.id,
             "name": dist.name,
-            "boundary": None,  # null until populated in Phase 5
+            "boundary": boundary_dict,
             "created_at": dist.created_at,
             "camera_count": count,
         })
