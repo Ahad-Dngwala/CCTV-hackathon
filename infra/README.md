@@ -1,60 +1,56 @@
-# infra/
+# infra/ — Docker & Infrastructure Environment
 
-Local dev + VPS deployment config. Per `Project_Context.md` §2: Docker
-Compose locally and on the VPS for parity, Nginx/Caddy reverse proxy +
-TLS in front.
+This directory contains the Docker Compose configuration and container definitions for local development and VPS deployment.
 
-## `docker-compose.yml`
+---
 
-Skeleton — services get filled in as they become real, not written
-ahead of need:
+## 📦 Container Setup
 
-- `db`: PostgreSQL + PostGIS — needed from day one for `shared/db/`,
-  and self-seeding (see below).
-- `app`: the FastAPI app (Model 1 + Model 2 routers).
-- `mediamtx`: RTSP→WebRTC/HLS bridge — add once Model 2 starts on live
-  ingestion, not before.
-- `proxy`: Nginx/Caddy — add once there's more than one thing to route
-  to.
+| Container | Image / Dockerfile | Purpose |
+|---|---|---|
+| `db` | `Dockerfile.db` (`postgis/postgis:16-3.4` + `pgvector`) | PostgreSQL + PostGIS spatial engine + vector embeddings |
+| `app` | `Dockerfile` (`python:3.12-slim`) | Sentinel FastAPI Web App (Model 1 & Model 2) |
 
-### Getting a working database — the whole point of this section
+---
+
+## 🚀 Commands
+
+### Starting the Environment
+
+From the `infra/` directory (or root):
 
 ```bash
 cd infra
-docker compose up -d db
+docker compose up -d
 ```
 
-That's it. On first run, Postgres's own bootstrap mechanism mounts and
-runs `shared/db/schema.sql` → `shared/db/triggers.sql` →
-`shared/db/seed.sql`, in that order (see the numbered volume mounts in
-`docker-compose.yml` — `docker-entrypoint-initdb.d` scripts run in
-sorted-name order, once, only when the data volume is empty), so a
-fresh `up` gives you the full schema, the audit triggers, 5
-departments, all 33 districts, and the 30 seed cameras — no manual
-`psql -f` step needed. This is the exact same sequence that was run
-and verified by hand against a real Postgres 16 + PostGIS 3.4 instance
-while building those files.
+Compose automatically builds `infra/Dockerfile.db` for the database and `infra/Dockerfile` for the app.
 
-Check it worked:
+### Database Initialization & Seed Data
+
+On initial boot, PostgreSQL runs scripts mounted from `shared/db/`:
+1. `20-schema.sql` — Creates extensions (`postgis`, `pgcrypto`, `vector`), tables, constraints, and indexes.
+2. `30-triggers.sql` — Sets `updated_at` timestamps and logs audit entries in `status_history`.
+3. `40-seed.sql` — Populates 5 departments, 33 Gujarat districts, 30 seed cameras with rich metadata, and sample vehicle watchlists/alerts.
+
+### Resetting Data (Clean Re-seed)
+
+Postgres init scripts fire only when the data volume is empty. To reset and re-seed from scratch:
+
+```bash
+docker compose down -v
+docker compose up -d
+```
+
+### Checking Database Status
 
 ```bash
 docker compose exec db psql -U sentinel -d sentinel -c "SELECT count(*) FROM cameras;"
-# -> 30
 ```
 
-**If you change `schema.sql`/`triggers.sql`/`seed.sql` and want them to
-re-run**, the init scripts only fire on an empty volume — you need to
-actually drop the data:
+---
 
-```bash
-docker compose down -v --rmi local
-docker compose up -d db
-```
+## 🔒 Configuration
 
-`down` without `-v` just stops the container and keeps your data —
-that's the normal day-to-day command once you're past first setup.
-
-Explicitly not building for the demo: API gateway/rate limiting
-(mentioned in `Project_Context.md` §7 as the statewide-scale answer,
-not needed at 50-camera demo scale), network segmentation (documented
-in the HLD only, not implemented — one VPS for the demo).
+Environment settings are configured via `DATABASE_URL` in `docker-compose.yml`:
+`postgresql://sentinel:sentinel_dev@db:5432/sentinel`

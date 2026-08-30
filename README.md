@@ -1,69 +1,94 @@
-# Sentinel — Gujarat CCTV Integration Platform
+# Sentinel — Gujarat CCTV Integration & GIS Platform
 
-Hackathon build for the Gujarat CCTV unification challenge. Model 1
-(Registry & GIS Foundation) first, Model 2 (Unified Viewing & Analytics —
-ANPR + watchlist correlation) on top of it.
+Sentinel is a unified CCTV management, registry, GIS mapping, and video analytics platform built for Gujarat's statewide surveillance network.
 
-**Read `Project_Context.md` before touching anything.** It's the real
-working spec — architecture decisions, tech stack rationale, data model,
-timeline, and the "don't re-litigate this" list. `HackathonPortal.md` is
-the official brief it's derived from. This README is just the map to the
-repo itself.
+---
 
-## Repo structure
+## 🚀 Quick Start (Running with Docker Compose)
+
+The entire platform (PostgreSQL + PostGIS database and the FastAPI application) can be brought up in a single command using Docker Compose.
+
+### Prerequisites
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (with Docker Compose v2+)
+
+### Launch Instructions
+
+1. **Clone & navigate to `infra/`**:
+   ```bash
+   cd infra
+   ```
+
+2. **Start the containers**:
+   ```bash
+   docker compose up -d
+   ```
+   *This automatically builds the FastAPI app container (`infra/Dockerfile`) and PostgreSQL + PostGIS + pgvector database container (`infra/Dockerfile.db`).*
+
+3. **Access the Web Dashboard**:
+   Open your browser and navigate to:
+   👉 **`http://localhost:8000`**
+
+   - **Interactive Map Dashboard**: `http://localhost:8000/`
+   - **Camera Registry & CRUD**: `http://localhost:8000/cameras`
+   - **Department Management**: `http://localhost:8000/departments`
+   - **District Overview**: `http://localhost:8000/districts`
+   - **Swagger OpenAPI Docs**: `http://localhost:8000/docs`
+
+4. **Resetting Database & Seed Data** (if needed):
+   ```bash
+   docker compose down -v
+   docker compose up -d
+   ```
+
+---
+
+## 🛠️ Technology Stack
+
+- **Backend Framework**: FastAPI (Python 3.12)
+- **Database**: PostgreSQL 16 + PostGIS 3.4 + `pgvector` extension
+- **ORM & Migrations**: SQLAlchemy 2.0 + GeoAlchemy2
+- **Frontend Architecture**: Server-rendered Jinja2 templates + HTMX + Alpine.js (via CDN, no Node build step)
+- **Mapping & GIS**: Leaflet.js + `Leaflet.markercluster` + OpenStreetMap tiles
+- **Containerization**: Docker Compose (`infra/docker-compose.yml`)
+
+---
+
+## 📁 Repository Structure
 
 ```
-├── Project_Context.md      Our working spec — read this first
-├── HackathonPortal.md      Official hackathon brief
+├── Project_Context.md       Our working technical specification & architectural decisions
+├── HackathonPortal.md       Official hackathon challenge brief
+├── Model1ImplementationPlan.md Implementation plan for Model 1 (Registry & GIS)
 ├── docs/
-│   ├── API_Contract.md     REST + WebSocket contract between Model 1 and Model 2
-│   └── DATASET.md          Dataset sourcing/synthesis notes (owner: TBD)
-├── shared/                 Code both models depend on — DB models, Pydantic
-│                           schemas, VMS adapter interface. Single source of
-│                           truth for anything Model 2 reads that Model 1 writes.
-├── model1-registry/        Camera registry + map (Leaflet, PostGIS gap analysis,
-│                           department/district filters, audit trail)
-├── model2-analytics/       ANPR pipeline + watchlist + alerts + cross-camera
-│                           vehicle tracking
-└── infra/                  docker-compose, reverse proxy config
+│   ├── API_Contract.md      REST & WebSocket API specification
+│   └── DATASET.md           Dataset notes & video stream catalogue
+├── shared/                  Shared codebase across models
+│   ├── db/                  SQLAlchemy models, schema.sql, triggers.sql, seed.sql
+│   ├── schemas/             Pydantic request & response models
+│   └── adapters/            VMS adapter interface definitions
+├── model1-registry/         Model 1 — Registry & GIS Foundation
+│   └── app/                 FastAPI application (routers, templates, static CSS/JS)
+├── model2-analytics/        Model 2 — Analytics & Vehicle Tracking (ANPR, Watchlists, Alerts)
+└── infra/                   Docker environment (`docker-compose.yml`, `Dockerfile`, `Dockerfile.db`)
 ```
 
-## Why `shared/` exists
+---
 
-Model 1 and Model 2 are **one FastAPI codebase**, not two services talking
-over a network (see `Project_Context.md` §2 — this was a deliberate stack
-choice specifically so Model 2 doesn't need a separate service just to
-read Model 1's camera data). `shared/` is where that shared ground lives:
+## 🔌 API Endpoints Summary
 
-- `shared/db/` — SQLAlchemy models + Alembic migrations. If you're adding
-  a column to `cameras` or a new table like `detections`, it goes here,
-  not duplicated inside a model dir.
-- `shared/schemas/` — Pydantic request/response models. These are what
-  `docs/API_Contract.md` describes in prose; the schemas are the
-  enforceable version.
-- `shared/adapters/` — the VMS adapter interface
-  (`connect()` / `get_stream()` / `get_metadata()`) every vendor
-  integration implements. One adapter class per vendor.
+### Model 1 — Registry & GIS
+- `GET /api/v1/cameras` — List, filter by department, district, and status
+- `POST /api/v1/cameras` — Create new camera (manual entry)
+- `POST /api/v1/cameras/bulk` — CSV bulk camera import
+- `GET /api/v1/cameras/{id}` — Get camera detail & VMS stream URL
+- `PATCH /api/v1/cameras/{id}` — Update camera (automatically writes `status_history` audit log)
+- `DELETE /api/v1/cameras/{id}` — Soft delete camera (`is_active = false`)
+- `GET /api/v1/cameras/{id}/history` — Camera audit history
+- `GET /api/v1/departments` — List departments with active camera counts
+- `GET /api/v1/districts` — List all 33 Gujarat districts with camera counts
 
-If your change only touches `model1-registry/` or `model2-analytics/`,
-stay there. If it touches the DB schema or a type both models pass
-around, it belongs in `shared/` — and update `docs/API_Contract.md` in
-the same PR so the contract doesn't go stale.
+---
 
-## Getting started
+## 📄 License & Project Context
 
-1. Read `Project_Context.md` in full.
-2. Read the README in whichever of `model1-registry/` or
-   `model2-analytics/` you're picking up — each has its own scope,
-   endpoint list, and open TODOs.
-3. Check `docs/API_Contract.md` before adding or changing an endpoint —
-   if it's not documented there, document it as you build it.
-4. `infra/docker-compose.yml` is the local dev environment (Postgres +
-   PostGIS, and eventually MediaMTX). See `infra/README.md`.
-
-## Status
-
-Early scaffold — see `Project_Context.md` §8 for the actual week-by-week
-plan and §9 for what's still undecided. This structure will keep
-changing as Week 1 progresses; if you rename or move something, update
-this README and the affected model's README in the same commit.
+See [Project_Context.md](file:///c:/Hackathons/Sentinel-CCTV-Hackathon/Project_Context.md) for full architectural background, rationale, and design principles.
