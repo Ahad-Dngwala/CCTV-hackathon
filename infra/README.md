@@ -38,7 +38,7 @@ On initial boot, PostgreSQL runs scripts mounted from `shared/db/`:
 Postgres init scripts fire only when the data volume is empty. To reset and re-seed from scratch:
 
 ```bash
-docker compose down -v
+docker compose down -v --rmi local
 docker compose up -d
 ```
 

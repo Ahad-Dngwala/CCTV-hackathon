@@ -36,7 +36,7 @@ The entire platform (PostgreSQL + PostGIS database and the FastAPI application) 
 
 4. **Resetting Database & Seed Data** (if needed):
    ```bash
-   docker compose down -v
+   docker compose down -v --rmi local
    docker compose up -d
    ```
 
