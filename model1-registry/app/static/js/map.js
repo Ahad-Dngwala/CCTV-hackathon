@@ -19,6 +19,8 @@ function mapDashboard() {
         activeDepartments: new Set(),
         gapOverlayLayer: null,
         showGapOverlay: false,
+        districtBoundaryLayer: null,
+        showDistrictBoundaries: true,
 
         async init() {
             // Initialise Leaflet map centered on Gujarat
@@ -46,6 +48,9 @@ function mapDashboard() {
                 this.loadDepartments(),
                 this.loadDistricts(),
             ]);
+
+            // Draw real district boundary polygons (on by default)
+            this.renderDistrictBoundaries();
 
             // Load cameras and render
             await this.loadAndRender();
@@ -153,6 +158,60 @@ function mapDashboard() {
         filterByDistrict(districtId) {
             this.selectedDistrict = districtId;
             this.loadAndRender();
+            document.getElementById('district-filter').value = districtId;
+        },
+
+        // Draws each district's real PostGIS polygon (shared/db/seed.sql —
+        // actual Gujarat district shapes, not bounding boxes) as a Leaflet
+        // GeoJSON layer, click-to-filter + hover highlight.
+        renderDistrictBoundaries() {
+            if (this.districtBoundaryLayer) {
+                this.map.removeLayer(this.districtBoundaryLayer);
+                this.districtBoundaryLayer = null;
+            }
+
+            const featureCollection = {
+                type: 'FeatureCollection',
+                features: this.districts
+                    .filter(d => d.boundary)
+                    .map(d => ({
+                        type: 'Feature',
+                        properties: { id: d.id, name: d.name, camera_count: d.camera_count },
+                        geometry: d.boundary,
+                    })),
+            };
+
+            if (featureCollection.features.length === 0) return;
+
+            const baseStyle = { color: '#3b82f6', weight: 1.25, opacity: 0.55, fillOpacity: 0.03, fillColor: '#3b82f6' };
+            const hoverStyle = { weight: 2.5, opacity: 0.9, fillOpacity: 0.12 };
+
+            this.districtBoundaryLayer = L.geoJSON(featureCollection, {
+                style: () => ({ ...baseStyle }),
+                onEachFeature: (feature, layer) => {
+                    layer.bindTooltip(feature.properties.name, { sticky: true, className: 'district-tooltip' });
+                    layer.on('mouseover', () => layer.setStyle(hoverStyle));
+                    layer.on('mouseout', () => layer.setStyle(baseStyle));
+                    layer.on('click', () => this.filterByDistrict(feature.properties.id));
+                },
+            });
+
+            if (this.showDistrictBoundaries) {
+                this.districtBoundaryLayer.addTo(this.map);
+                // Keep boundaries under markers/gap overlay so popups/clusters stay clickable on top.
+                this.districtBoundaryLayer.bringToBack();
+            }
+        },
+
+        toggleDistrictBoundaries(enable) {
+            this.showDistrictBoundaries = enable;
+            if (!this.districtBoundaryLayer) return;
+            if (enable) {
+                this.districtBoundaryLayer.addTo(this.map);
+                this.districtBoundaryLayer.bringToBack();
+            } else {
+                this.map.removeLayer(this.districtBoundaryLayer);
+            }
         },
 
         renderMarkers() {
