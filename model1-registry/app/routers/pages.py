@@ -347,14 +347,25 @@ def detections_placeholder(request: Request):
     )
 
 
+# ── Watchlist page (Model 2) ───────────────────────────────────
+
+
 @router.get("/watchlist", response_class=HTMLResponse)
-def watchlist_placeholder(request: Request):
+def watchlist_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: Optional[UserModel] = Depends(get_optional_current_user),
+):
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+
+    departments = db.query(DeptModel).order_by(DeptModel.name).all()
     return request.app.state.templates.TemplateResponse(
         request=request,
-        name="placeholder.html",
+        name="watchlist.html",
         context={
-            "page_title": "Watchlist",
-            "description": "Model 2 — not built yet, see docs/API_Contract.md §2",
+            "user": user,
+            "departments": departments,
         },
     )
 

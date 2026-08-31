@@ -12,7 +12,9 @@ from geoalchemy2 import Geography
 from sqlalchemy import (
     Boolean,
     Column,
+    Date,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -172,3 +174,155 @@ class StatusHistory(Base):
     __table_args__ = (
         Index("idx_status_history_camera", "camera_id", text("changed_at DESC")),
     )
+
+
+# ── Model 2 — Unified Viewer & Analytics ───────────────────────
+
+
+class VehicleWatchlist(Base):
+    __tablename__ = "vehicles_watchlist"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    plate_number = Column(Text, nullable=False)
+    category = Column(
+        Text,
+        nullable=False,
+        info={"check": "category IN ('stolen', 'wanted', 'blacklisted')"},
+    )
+    reported_date = Column(Date)
+    department_id = Column(
+        UUID(as_uuid=True), ForeignKey("departments.id", ondelete="SET NULL")
+    )
+    description = Column(Text)
+    status = Column(
+        Text,
+        nullable=False,
+        default="active",
+        info={"check": "status IN ('active', 'resolved')"},
+    )
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default="now()")
+
+    department = relationship("Department")
+
+    __table_args__ = (
+        CheckConstraint(
+            "category IN ('stolen', 'wanted', 'blacklisted')",
+            name="vehicles_watchlist_category_check",
+        ),
+        CheckConstraint(
+            "status IN ('active', 'resolved')",
+            name="vehicles_watchlist_status_check",
+        ),
+        Index("idx_vehicles_watchlist_plate", "plate_number"),
+    )
+
+
+class PersonWatchlist(Base):
+    __tablename__ = "persons_watchlist"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(Text, nullable=False)
+    category = Column(
+        Text,
+        nullable=False,
+        info={"check": "category IN ('wanted', 'missing', 'suspect')"},
+    )
+    status = Column(
+        Text,
+        nullable=False,
+        default="active",
+        info={"check": "status IN ('active', 'resolved')"},
+    )
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default="now()")
+
+    __table_args__ = (
+        CheckConstraint(
+            "category IN ('wanted', 'missing', 'suspect')",
+            name="persons_watchlist_category_check",
+        ),
+        CheckConstraint(
+            "status IN ('active', 'resolved')",
+            name="persons_watchlist_status_check",
+        ),
+    )
+
+
+class VehicleTrack(Base):
+    __tablename__ = "vehicle_tracks"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    plate_number = Column(Text)
+    vehicle_color = Column(Text)
+    vehicle_type = Column(Text)
+    first_seen = Column(DateTime(timezone=True), nullable=False)
+    last_seen = Column(DateTime(timezone=True), nullable=False)
+    is_watchlisted = Column(Boolean, nullable=False, default=False)
+
+    detections = relationship("Detection", back_populates="vehicle_track")
+
+    __table_args__ = (
+        Index("idx_vehicle_tracks_plate", "plate_number"),
+    )
+
+
+class Detection(Base):
+    __tablename__ = "detections"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    camera_id = Column(
+        UUID(as_uuid=True), ForeignKey("cameras.id", ondelete="RESTRICT"), nullable=False
+    )
+    timestamp = Column(DateTime(timezone=True), nullable=False)
+    detected_plate = Column(Text)
+    confidence = Column(REAL)
+    cropped_image_path = Column(Text)
+    vehicle_track_id = Column(
+        UUID(as_uuid=True), ForeignKey("vehicle_tracks.id", ondelete="SET NULL")
+    )
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default="now()")
+
+    camera = relationship("Camera")
+    vehicle_track = relationship("VehicleTrack", back_populates="detections")
+    alerts = relationship("Alert", back_populates="detection")
+
+    __table_args__ = (
+        Index("idx_detections_camera_time", "camera_id", text('"timestamp" DESC')),
+        Index("idx_detections_track_time", "vehicle_track_id", "timestamp"),
+        Index("idx_detections_plate", "detected_plate"),
+    )
+
+
+class Alert(Base):
+    __tablename__ = "alerts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    detection_id = Column(
+        UUID(as_uuid=True), ForeignKey("detections.id", ondelete="CASCADE"), nullable=False
+    )
+    watchlist_id = Column(
+        UUID(as_uuid=True), ForeignKey("vehicles_watchlist.id", ondelete="RESTRICT"), nullable=False
+    )
+    alert_type = Column(Text, nullable=False, default="vehicle_match")
+    severity = Column(
+        Text,
+        info={"check": "severity IN ('low', 'medium', 'high', 'critical')"},
+    )
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default="now()")
+    acknowledged_by = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    acknowledged_at = Column(DateTime(timezone=True))
+
+    detection = relationship("Detection", back_populates="alerts")
+    watchlist = relationship("VehicleWatchlist")
+    acknowledged_by_user = relationship("User")
+
+    __table_args__ = (
+        CheckConstraint(
+            "severity IN ('low', 'medium', 'high', 'critical')",
+            name="alerts_severity_check",
+        ),
+        Index("idx_alerts_watchlist", "watchlist_id"),
+        Index("idx_alerts_created", text("created_at DESC")),
+    )
+

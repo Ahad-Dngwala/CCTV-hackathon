@@ -80,19 +80,38 @@ fields get added, don't let this drift from `shared/db/`.
 
 ---
 
-## 2. Model 2 — Analytics endpoints
+## 2. Model 2 — Analytics & Watchlist endpoints
 
 Owner: `model2-analytics`. Data model reference: `Project_Context.md` §4.
 
 | Method & path | Purpose | Status |
 |---|---|---|
+| `GET /api/v1/watchlist/vehicles` | List & search vehicle watchlist entries (filters: `status`, `category`, `plate_number`, `department_id`) | ✅ |
+| `POST /api/v1/watchlist/vehicles` | Add new vehicle target (strict Indian plate format validation & duplicate checks) | ✅ |
+| `GET /api/v1/watchlist/vehicles/{id}` | Get specific watchlist record details | ✅ |
+| `PATCH /api/v1/watchlist/vehicles/{id}` | Update watchlist entry status (`active`/`resolved`) or incident description | ✅ |
+| `DELETE /api/v1/watchlist/vehicles/{id}` | Delete watchlist entry and cascade associated alert references | ✅ |
 | `GET /api/v1/detections` | List detections, filterable by camera/plate/time range | 🚧 |
-| `GET /api/v1/vehicle-tracks/{plate_number}` | Full route reconstruction for a plate — **this is the Step 4 scored test** | ✅ |
-| `GET /api/v1/watchlist` | List watchlist entries | ✅ |
-| `POST /api/v1/watchlist` | Add watchlist entry | ✅ |
-| `GET /api/v1/alerts` | List alerts, filter by acknowledged/severity | ✅ |
-| `POST /api/v1/alerts/{id}/acknowledge` | Ack an alert — writes `acknowledged_by`/`acknowledged_at` | ✅ |
-| `WS /api/v1/ws/alerts` | Real-time alert push to dashboard on watchlist match | ✅ |
+| `GET /api/v1/vehicle-tracks/{plate_number}` | Full route reconstruction for a plate — **this is the Step 4 scored test** | 🚧 |
+| `GET /api/v1/alerts` | List alerts, filter by acknowledged/severity | 🚧 |
+| `POST /api/v1/alerts/{id}/acknowledge` | Ack an alert — writes `acknowledged_by`/`acknowledged_at` | 🚧 |
+| `WS /api/v1/ws/alerts` | Real-time alert push to dashboard on watchlist match | 🚧 |
+
+### Vehicle Watchlist object (`shared/schemas/watchlist.py`)
+
+```json
+{
+  "id": "uuid",
+  "plate_number": "GJ01AB1234",
+  "category": "stolen | wanted | blacklisted",
+  "reported_date": "2026-08-30",
+  "department_id": "uuid | null",
+  "department_name": "Home Department (Police) | null",
+  "description": "White Hyundai Creta, missing since Sunday FIR #402/2026",
+  "status": "active | resolved",
+  "created_at": "datetime"
+}
+```
 
 ### Detection object
 
@@ -116,7 +135,7 @@ Owner: `model2-analytics`. Data model reference: `Project_Context.md` §4.
   "detection_id": "uuid",
   "watchlist_id": "uuid",
   "alert_type": "string",
-  "severity": "string",
+  "severity": "low | medium | high | critical",
   "created_at": "datetime",
   "acknowledged_by": "uuid | null",
   "acknowledged_at": "datetime | null"
