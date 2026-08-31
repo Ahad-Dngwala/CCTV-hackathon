@@ -32,3 +32,20 @@ model1-registry/
 ## Status
 
 ✅ **Completed — Phase 1 & Foundation Built**. Full CRUD, GIS map dashboard, dark theme glassmorphism UI, seed data, and docker setup are operational.
+
+## Testing
+
+The test suite runs against a real Postgres + PostGIS database (`sentinel_test`), not sqlite or mocks — the app relies on PostGIS geography functions and Postgres triggers with no sqlite equivalent, so testing against anything else wouldn't exercise the code paths that actually matter (RBAC scoping, geodesic gap-analysis math, audit-log triggers).
+
+```bash
+pip install -r requirements-dev.txt
+
+# one-time: create the test role/db if it doesn't exist yet
+psql -h 127.0.0.1 -U postgres -c "CREATE DATABASE sentinel_test OWNER sentinel;"
+
+pytest
+```
+
+Each test runs inside its own transaction + `SAVEPOINT` that's rolled back afterward, so tests can freely create/update/delete rows (including through the real API, which calls `db.commit()`) without leaking state between tests or needing a reseed per test. `tests/conftest.py` applies `shared/db/schema.sql` → `triggers.sql` → `seed.sql` once per test session — exactly what `docker-compose` does in production — so the fixtures exercise the real seeded departments/districts/cameras.
+
+Coverage: auth (login/logout/role checks), camera CRUD + department-scoped RBAC (create/update/delete cross-department 403s, bulk import), districts (including a regression guard for the empty-`districts`-table seed bug), and gap-analysis geodesic math (coverage bounds, radius scaling, real-world area sanity checks per district).
