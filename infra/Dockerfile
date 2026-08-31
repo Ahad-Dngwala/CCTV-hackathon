@@ -14,6 +14,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy source
 COPY shared/ /app/shared/
 COPY model1-registry/app/ /app/app/
+COPY model2-analytics/app/ /model2-analytics/app/
 
 ENV PYTHONPATH=/app
 EXPOSE 8000
