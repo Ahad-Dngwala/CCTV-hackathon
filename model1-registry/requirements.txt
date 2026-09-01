@@ -9,3 +9,6 @@ python-multipart
 shapely
 passlib[bcrypt]
 python-jose[cryptography]
+opencv-python-headless
+requests
+

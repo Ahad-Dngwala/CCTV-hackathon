@@ -1,0 +1,201 @@
+"""
+Model 2 — Multi-Camera Live Grid Router & Ingestion Catalogue API
+
+Endpoints:
+  - GET  /grid                  (HTML View: Multi-camera control-room grid UI)
+  - GET  /api/v1/grid/streams   (JSON API: List all camera streams with RTSP/WHEP/HLS URLs)
+  - POST /api/v1/grid/sync      (JSON API: Sync/Ingest catalogue updates)
+  - GET  /api/ingest            (JSON API: Ingestion catalogue contract endpoint)
+"""
+
+import uuid
+from typing import List, Optional
+from fastapi import APIRouter, Depends, Query, Request, HTTPException, status
+from fastapi.responses import HTMLResponse
+from sqlalchemy.orm import Session, joinedload
+
+from shared.db.models import Camera as CameraModel
+from shared.db.models import Department as DeptModel
+from shared.db.models import District as DistModel
+from shared.db.session import get_db
+from shared.schemas.grid import (
+    CameraStreamResponse,
+    CatalogueSyncRequest,
+    CatalogueSyncResponse,
+    StreamProperties,
+)
+
+router = APIRouter(tags=["live-grid"])
+
+
+def _build_stream_urls(cam: CameraModel) -> tuple[str, str, str]:
+    """Helper to generate RTSP, WHEP, and HLS URLs for a camera if not explicitly set."""
+    source_id = cam.source_grid_id or str(cam.id)[:8]
+    rtsp = cam.rtsp_url or f"rtsp://127.0.0.1:8554/stream/{source_id}"
+    whep = cam.whep_url or f"http://127.0.0.1:8889/stream/{source_id}/whep"
+    hls = cam.hls_url or f"http://127.0.0.1/live/stream/{source_id}/index.m3u8"
+    return rtsp, whep, hls
+
+
+# ── HTML View: Live Multi-Camera Grid ────────────────────────────
+
+
+@router.get("/grid", response_class=HTMLResponse)
+def live_grid_page(
+    request: Request,
+    department_id: Optional[str] = Query(None),
+    district_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """
+    Renders the Model 2 Control Room Live Video Grid UI.
+    """
+    user = getattr(request.state, "user", None)
+    departments = db.query(DeptModel).order_by(DeptModel.name).all()
+    districts = db.query(DistModel).order_by(DistModel.name).all()
+
+    return request.app.state.templates.TemplateResponse(
+        request=request,
+        name="grid.html",
+        context={
+            "user": user,
+            "departments": departments,
+            "districts": districts,
+            "selected_department": department_id or "",
+            "selected_district": district_id or "",
+        },
+    )
+
+
+# ── REST API: Streams List ───────────────────────────────────────
+
+
+@router.get("/api/v1/grid/streams", response_model=List[CameraStreamResponse])
+def get_grid_streams(
+    department_id: Optional[uuid.UUID] = Query(None, description="Filter streams by department"),
+    district_id: Optional[uuid.UUID] = Query(None, description="Filter streams by district"),
+    connectivity_status: Optional[str] = Query(None, description="Filter by status (online/offline)"),
+    is_live_only: bool = Query(False, description="Filter active live streams only"),
+    db: Session = Depends(get_db),
+):
+    """
+    Retrieve all camera feeds and their stream endpoints (RTSP, WHEP WebRTC, HLS) for video grid rendering.
+    """
+    query = (
+        db.query(CameraModel)
+        .options(joinedload(CameraModel.department), joinedload(CameraModel.district))
+        .filter(CameraModel.is_active.is_(True))
+    )
+
+    if department_id:
+        query = query.filter(CameraModel.department_id == department_id)
+    if district_id:
+        query = query.filter(CameraModel.district_id == district_id)
+    if connectivity_status:
+        query = query.filter(CameraModel.connectivity_status == connectivity_status)
+    if is_live_only:
+        query = query.filter(CameraModel.is_live.is_(True))
+
+    cameras = query.all()
+    results = []
+
+    for cam in cameras:
+        rtsp, whep, hls = _build_stream_urls(cam)
+        results.append(
+            CameraStreamResponse(
+                id=cam.id,
+                name=cam.name,
+                department_name=cam.department.name if cam.department else None,
+                district_name=cam.district.name if cam.district else None,
+                connectivity_status=cam.connectivity_status,
+                is_active=cam.is_active,
+                is_live=cam.is_live or (cam.connectivity_status == "online"),
+                source_grid_id=cam.source_grid_id or str(cam.id)[:8],
+                location_label=cam.location_label or (cam.district.name if cam.district else "Gujarat"),
+                vms_url=cam.vms_url,
+                rtsp_url=rtsp,
+                whep_url=whep,
+                hls_url=hls,
+                properties=StreamProperties(
+                    codec=cam.codec or "H.264",
+                    stream_width=cam.stream_width or 1920,
+                    stream_height=cam.stream_height or 1080,
+                    stream_fps=cam.stream_fps or 25.0,
+                    bitrate_kbps=cam.bitrate_kbps or 2048,
+                ),
+            )
+        )
+
+    return results
+
+
+# ── REST API: Catalogue Ingestion Contract (/api/ingest) ─────────
+
+
+@router.get("/api/ingest")
+def get_ingest_catalogue(db: Session = Depends(get_db)):
+    """
+    Hackathon Portal Ingestion Contract Endpoint.
+    Returns every camera with its id, location, codec, live status, stream properties, and all 3 URLs.
+    """
+    cameras = db.query(CameraModel).filter(CameraModel.is_active.is_(True)).all()
+    catalogue = []
+
+    for cam in cameras:
+        source_id = cam.source_grid_id or str(cam.id)[:8]
+        rtsp, whep, hls = _build_stream_urls(cam)
+        catalogue.append(
+            {
+                "id": source_id,
+                "camera_uuid": str(cam.id),
+                "name": cam.name,
+                "location_label": cam.location_label or "Gujarat Site",
+                "is_live": cam.is_live or (cam.connectivity_status == "online"),
+                "codec": cam.codec or "H.264",
+                "stream_width": cam.stream_width or 1920,
+                "stream_height": cam.stream_height or 1080,
+                "stream_fps": cam.stream_fps or 25.0,
+                "bitrate_kbps": cam.bitrate_kbps or 2048,
+                "rtsp_url": rtsp,
+                "whep_url": whep,
+                "hls_url": hls,
+            }
+        )
+
+    return {"count": len(catalogue), "cameras": catalogue}
+
+
+# ── REST API: Catalogue Sync ─────────────────────────────────────
+
+
+@router.post("/api/v1/grid/sync", response_model=CatalogueSyncResponse)
+def sync_ingest_catalogue(payload: CatalogueSyncRequest, db: Session = Depends(get_db)):
+    """
+    Sync camera streams from the ingestion catalogue into the database.
+    """
+    items = payload.items or []
+    synced_count = 0
+    updated_count = 0
+
+    for item in items:
+        cam = db.query(CameraModel).filter(CameraModel.source_grid_id == item.id).first()
+        if cam:
+            cam.location_label = item.location_label or cam.location_label
+            cam.is_live = item.is_live
+            cam.codec = item.codec or cam.codec
+            cam.stream_width = item.width or cam.stream_width
+            cam.stream_height = item.height or cam.stream_height
+            cam.stream_fps = item.fps or cam.stream_fps
+            cam.bitrate_kbps = item.bitrate_kbps or cam.bitrate_kbps
+            cam.rtsp_url = item.rtsp_url or cam.rtsp_url
+            cam.whep_url = item.whep_url or cam.whep_url
+            cam.hls_url = item.hls_url or cam.hls_url
+            updated_count += 1
+        synced_count += 1
+
+    db.commit()
+    return CatalogueSyncResponse(
+        synced_count=synced_count,
+        updated_count=updated_count,
+        status="success",
+    )

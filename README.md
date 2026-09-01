@@ -103,7 +103,11 @@ The entire platform (PostgreSQL + PostGIS database and the FastAPI application) 
 - `GET /api/v1/districts` — List all 33 Gujarat districts with camera counts and GeoJSON boundaries
 - `GET /api/v1/gap-analysis` — PostGIS spatial camera coverage calculation (1km buffer)
 
-### Model 2 — Vehicle Watchlist & Surveillance Analytics
+### Model 2 — Live Grid & Vehicle Watchlist
+- `GET /grid` — Control-Room Multi-Camera Live Grid UI (2×2, 3×3, 4×4 matrix views)
+- `GET /api/ingest` — Hackathon ingestion contract — returns all cameras with RTSP/WHEP/HLS URLs
+- `GET /api/v1/grid/streams` — JSON API: all active camera stream URLs (with dept/district filters)
+- `POST /api/v1/grid/sync` — Sync camera catalogue from external source into DB
 - `GET /api/v1/watchlist/vehicles` — List & search vehicle targets (filter by `category`, `status`, `plate_number`, `department_id`)
 - `POST /api/v1/watchlist/vehicles` — Add new vehicle target (with Indian plate format validation & duplicate checks)
 - `GET /api/v1/watchlist/vehicles/{id}` — Get single watchlist target detail
