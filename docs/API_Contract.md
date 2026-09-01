@@ -86,6 +86,10 @@ Owner: `model2-analytics`. Data model reference: `Project_Context.md` §4.
 
 | Method & path | Purpose | Status |
 |---|---|---|
+| `GET /grid` | Control-Room Multi-Camera Live Grid UI (2×2, 3×3, 4×4 views) | ✅ |
+| `GET /api/ingest` | Hackathon ingestion contract — all 30 cameras with RTSP/WHEP/HLS URLs, codec, FPS, resolution | ✅ |
+| `GET /api/v1/grid/streams` | List active camera streams with URLs, filterable by dept/district/status | ✅ |
+| `POST /api/v1/grid/sync` | Sync camera catalogue from external source into DB | ✅ |
 | `GET /api/v1/watchlist/vehicles` | List & search vehicle watchlist entries (filters: `status`, `category`, `plate_number`, `department_id`) | ✅ |
 | `POST /api/v1/watchlist/vehicles` | Add new vehicle target (strict Indian plate format validation & duplicate checks) | ✅ |
 | `GET /api/v1/watchlist/vehicles/{id}` | Get specific watchlist record details | ✅ |

@@ -44,10 +44,10 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: "postgresql://sentinel:sentinel_dev@db:5432/sentinel"
-
-  # mediamtx:
-  #   image: bluenviron/mediamtx:latest
-  #   ports: ["8554:8554", "8889:8889"]
+    volumes:
+      - ../model1-registry/app:/app/app
+      - ../model2-analytics:/model2-analytics
+      - ../shared:/app/shared
 
 volumes:
   sentinel_pgdata:

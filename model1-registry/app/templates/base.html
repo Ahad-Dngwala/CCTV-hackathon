@@ -59,6 +59,9 @@
 
                 <div class="nav-divider"></div>
 
+                <a href="/grid" class="nav-link nav-link--secondary {% if request.url.path == '/grid' %}active{% endif %}" id="nav-grid">
+                    <span class="nav-link-icon">📺</span> Live Grid
+                </a>
                 <a href="/detections" class="nav-link nav-link--secondary {% if request.url.path == '/detections' %}active{% endif %}" id="nav-detections">
                     <span class="nav-link-icon">🔍</span> Detections
                 </a>
@@ -68,6 +71,7 @@
                 <a href="/alerts" class="nav-link nav-link--secondary {% if request.url.path == '/alerts' %}active{% endif %}" id="nav-alerts">
                     <span class="nav-link-icon">🚨</span> Alerts
                 </a>
+
             </div>
 
             {% if user %}
