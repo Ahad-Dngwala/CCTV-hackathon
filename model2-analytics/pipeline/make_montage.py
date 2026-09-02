@@ -1,11 +1,11 @@
 """Create visual montages of eval + live screenshots for easy viewing."""
 import sys
-sys.path.insert(0, 'c:/Users/katha/Hackathons/CCTV Hackathon/HEHE/model2-analytics')
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import cv2
-from pathlib import Path
 
-BASE = Path(r"C:\Users\katha\Hackathons\CCTV Hackathon\HEHE\demo_results")
+BASE = Path(__file__).resolve().parent.parent.parent / "demo_results"
 
 
 def make_montage(src_dir: Path, out_name: str, cols: int = 4, max_imgs: int = 16):
@@ -27,6 +27,9 @@ def make_montage(src_dir: Path, out_name: str, cols: int = 4, max_imgs: int = 16
         loaded.append(img)
 
     rows = (len(loaded) + cols - 1) // cols
+    if not loaded:
+        print(f"No readable images in {src_dir}")
+        return
     tile_h = loaded[0].shape[0]
     tile_w = loaded[0].shape[1]
     canvas = np.zeros((rows * tile_h, cols * tile_w, 3), dtype=np.uint8)
@@ -41,6 +44,8 @@ def make_montage(src_dir: Path, out_name: str, cols: int = 4, max_imgs: int = 16
 
 
 import numpy as np
-make_montage(BASE / "eval_screenshots", "montage_eval_results.jpg")
-make_montage(BASE / "live_screenshots", "montage_live_results.jpg")
-print("Done!")
+
+if __name__ == "__main__":
+    make_montage(BASE / "eval_screenshots", "montage_eval_results.jpg")
+    make_montage(BASE / "live_screenshots", "montage_live_results.jpg")
+    print("Done!")

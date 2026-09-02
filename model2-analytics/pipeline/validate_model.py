@@ -1,6 +1,7 @@
 """Validate the fine-tuned model loads and runs inference."""
 import sys
-sys.path.insert(0, 'c:/Users/katha/Hackathons/CCTV Hackathon/HEHE/model2-analytics')
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
 from datasets import load_dataset

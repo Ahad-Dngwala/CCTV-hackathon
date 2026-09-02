@@ -131,8 +131,8 @@ def train_model():
     results = model.train(
         data=str(DATASET_YAML),
         epochs=EPOCHS,
-        batch=4,
-        imgsz=480,
+        batch=BATCH_SIZE,
+        imgsz=IMG_SIZE,
         lr0=LEARNING_RATE,
         patience=PATIENCE,
         device="cpu",
