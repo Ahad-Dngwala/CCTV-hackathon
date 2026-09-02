@@ -1,11 +1,11 @@
 # Model 2 — YOLO26m Fine-Tuning on vehicles-q0x2v
-# Google Colab Notebook — Free GPU (T4)
-# Copy this into a Google Colab notebook and run all cells
+# Google Colab script — Free GPU (T4)
+# Run in Google Colab: upload this file and execute, or paste cells individually.
 
 # ============================================================
 # CELL 1: Setup
 # ============================================================
-!pip install ultralytics opencv-python-headless datasets huggingface-hub scikit-learn
+# !pip install ultralytics opencv-python-headless datasets huggingface-hub scikit-learn
 
 import os, sys, numpy as np, cv2, torch, json, shutil
 from pathlib import Path
