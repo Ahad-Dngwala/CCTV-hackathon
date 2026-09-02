@@ -7,12 +7,18 @@ Run with:  uvicorn app.main:app --reload
 """
 
 import asyncio
+import logging
 import os
 import queue
 import sys
 import importlib.util as _ilu
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -40,12 +46,12 @@ async def _sync_cameras(supervisor: IngestionSupervisor, cameras, mediamtx_api: 
     Upsert cameras to DB (real UUIDs), sync workers, then register new
     streams in MediaMTX.
     """
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     rows = await loop.run_in_executor(None, upsert_cameras_to_db, cameras)
     running_before = set(supervisor._workers.keys())
     supervisor.sync(rows)
     for row in rows:
-        grid_id = row["source_grid_id"]
+        grid_id = row.get("source_grid_id") or str(row.get("id"))
         rtsp_url = row.get("rtsp_url")
         if grid_id not in running_before and row.get("is_live") and rtsp_url:
             asyncio.create_task(
@@ -62,13 +68,21 @@ async def lifespan(app: FastAPI):
     engine = init_engine(settings.DATABASE_URL)
     app.state.engine = engine
 
-    disable_ingestion = os.environ.get("DISABLE_INGESTION", "true").lower() == "true"
-    supervisor = IngestionSupervisor(output_queue=queue.Queue(maxsize=1000))
+    # Wire VMS ingestion layer (Task 7)
+    frame_queue = queue.Queue(maxsize=500)
+    app.state.frame_queue = frame_queue  # exact attribute name, analytics pipeline reads this
+
+    supervisor = IngestionSupervisor(output_queue=frame_queue, mediamtx_api=settings.MEDIAMTX_API)
+    app.state.supervisor = supervisor
+
     poller = CataloguePoller(grid_host=settings.GRID_HOST)
+    app.state.poller = poller
+
+    disable_ingestion = os.environ.get("DISABLE_INGESTION", "false").lower() == "true"
 
     if disable_ingestion:
         async def _db_only_sync(cams):
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, upsert_cameras_to_db, cams)
 
         poll_task = asyncio.create_task(
@@ -82,7 +96,12 @@ async def lifespan(app: FastAPI):
         )
 
     yield
+
     poll_task.cancel()
+    try:
+        await poll_task
+    except asyncio.CancelledError:
+        pass
     supervisor.stop_all()
 
 

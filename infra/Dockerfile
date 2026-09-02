@@ -21,7 +21,7 @@ COPY model2_analytics/ /app/model2_analytics/
 
 ENV PYTHONPATH=/app:/model2-analytics:/app/model2_analytics_src
 # Runtime config defaults — override via docker-compose environment or .env
-ENV GRID_HOST=live.corp8.cloud
+ENV GRID_HOST=cctv.corp8.cloud
 ENV MEDIAMTX_API=mediamtx:9997
 EXPOSE 8000
 

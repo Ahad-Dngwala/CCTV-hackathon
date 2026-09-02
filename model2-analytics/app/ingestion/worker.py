@@ -5,20 +5,27 @@ Connects via its adapter, reads frames in a loop, extracts PTS from
 CAP_PROP_POS_MSEC (NEVER from time.time() or datetime.now()), and
 puts FramePacket objects on a shared output queue non-blocking.
 
-On any failure: disconnects, waits with exponential backoff, reconnects.
+On any failure: disconnects, waits with exponential backoff + jitter, reconnects.
 The supervisor creates and manages workers — one instance per camera.
 
-CRITICAL PTS RULE:
-    pts_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
-    This is the ONLY valid source of frame timestamps in this codebase.
-    Wall-clock time during the first 1-2 seconds of a reconnect produces
-    impossible velocities and permanently breaks cross-camera tracking.
+CRITICAL NON-NEGOTIABLE RULES:
+1. RTSP MUST use TCP (enforced by adapter).
+2. PTS ONLY for timestamps:
+   pts_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
+   NEVER use time.time() or datetime.now() on frames.
+3. CAP_PROP_FPS is unreliable — do not use it for timing.
+4. Reconnect with exponential backoff: 2s base, 30s cap, ±20% jitter.
+5. Decoder warnings on join are NOT errors: normal until first IDR.
+6. Feeds loop — scene cuts abruptly at loop point.
+   VMS does not signal this. Analytics pipeline handles it. VMS does nothing.
+7. Queue full → drop frame, never block (put_nowait).
 """
 
 from __future__ import annotations
 
 import logging
 import queue
+import random
 import threading
 import time
 
@@ -34,10 +41,8 @@ RECONNECT_MAX_SECONDS = 30.0
 
 class CameraWorker:
     """
-    Runs in its own thread. Connects to one camera via its adapter,
-    reads frames, extracts PTS, and puts FramePackets onto the shared output queue.
-
-    One instance per camera. The supervisor creates and manages these.
+    Runs in its own thread (daemon=True).
+    One instance per camera. Supervisor creates and manages these.
     """
 
     def __init__(
@@ -72,22 +77,25 @@ class CameraWorker:
         while not self._stop_event.is_set():
             try:
                 self._connect_and_read()
-                backoff = RECONNECT_BASE_SECONDS   # reset only on clean exit
+                backoff = RECONNECT_BASE_SECONDS  # reset on clean return/exit
             except Exception as e:
                 logger.warning(
-                    f"[{self._source_grid_id}] Worker error: {e}. "
-                    f"Reconnecting in {backoff:.1f}s"
+                    f"[{self._source_grid_id}] Worker error: {e}"
                 )
+
             if not self._stop_event.is_set():
-                time.sleep(backoff)
-                backoff = min(backoff * 2, RECONNECT_MAX_SECONDS)
+                # Reconnect exponential backoff with ±20% jitter
+                jitter = random.uniform(0.8, 1.2)
+                sleep_seconds = min(backoff * jitter, RECONNECT_MAX_SECONDS)
+                logger.info(
+                    f"[{self._source_grid_id}] Reconnecting in {sleep_seconds:.1f}s (backoff={backoff:.1f}s)"
+                )
+                time.sleep(sleep_seconds)
+                backoff = min(backoff * 2.0, RECONNECT_MAX_SECONDS)
 
     def _connect_and_read(self) -> None:
         """
-        Connect and read frames until the stream fails or stop is requested.
-        PTS comes from CAP_PROP_POS_MSEC — never from time.time().
-        Decoder warnings on join are logged, never fatal.
-        cap.read() returning ok=False is the only reconnect trigger.
+        Connect and read frames until stream fails or stop requested.
         """
         if not self._adapter.connect():
             raise ConnectionError(
@@ -98,9 +106,6 @@ class CameraWorker:
         cap: cv2.VideoCapture = stream.capture
         logger.info(f"[{self._source_grid_id}] Connected")
 
-        pts_offset_ms = 0.0
-        prev_raw_pts_ms = -1.0
-
         try:
             while not self._stop_event.is_set():
                 ok, frame = cap.read()
@@ -110,35 +115,22 @@ class CameraWorker:
                     )
                     break
 
-                # PTS in milliseconds — THIS IS THE ONLY VALID TIMESTAMP SOURCE
-                raw_pts_ms: float = cap.get(cv2.CAP_PROP_POS_MSEC)
-
-                # Scene discontinuity / loop point handling (guide §3):
-                # When video loops, raw PTS drops back to ~0ms.
-                # Accumulate pts_offset_ms so downstream tracker receives continuous monotonic PTS.
-                if prev_raw_pts_ms > 0 and raw_pts_ms < (prev_raw_pts_ms - 1000.0):
-                    logger.info(
-                        f"[{self._source_grid_id}] Scene discontinuity / loop point detected "
-                        f"(raw_pts {raw_pts_ms:.1f}ms < prev {prev_raw_pts_ms:.1f}ms). Accumulating offset."
-                    )
-                    pts_offset_ms += prev_raw_pts_ms
-
-                prev_raw_pts_ms = raw_pts_ms
-                monotonic_pts_ms = raw_pts_ms + pts_offset_ms
+                # PTS in milliseconds — ONLY valid timestamp source
+                pts_ms: float = float(cap.get(cv2.CAP_PROP_POS_MSEC))
 
                 packet = FramePacket(
                     frame=frame,
-                    pts_ms=monotonic_pts_ms,
+                    pts_ms=pts_ms,
                     camera_id=self._camera_id,
                     source_grid_id=self._source_grid_id,
-                    width=frame.shape[1],
-                    height=frame.shape[0],
+                    width=int(frame.shape[1]),
+                    height=int(frame.shape[0]),
                 )
 
                 try:
                     self._output_queue.put_nowait(packet)
                 except queue.Full:
-                    # Drop frame rather than block — slow consumer is analytics pipeline's problem
+                    # Queue full -> drop frame, never block
                     logger.debug(f"[{self._source_grid_id}] Queue full — frame dropped")
 
         finally:

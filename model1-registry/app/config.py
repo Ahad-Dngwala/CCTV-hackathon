@@ -16,9 +16,9 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 hours
 
-    # VMS ingestion settings — added for Task 7 (VMS wiring)
-    GRID_HOST: str = "live.corp8.cloud"      # government camera grid host for /api/ingest
-    MEDIAMTX_API: str = "mediamtx:9997"      # MediaMTX HTTP API for dynamic stream registration
+    # VMS ingestion settings
+    GRID_HOST: str = "cctv.corp8.cloud"
+    MEDIAMTX_API: str = "localhost:9997"
 
     # Operational Sentinel Camera Grid gateway settings (configurable via env vars)
     GRID_RTSP_HOST: str = "103.250.160.189"  # Public static IP for direct RTSP & WebRTC

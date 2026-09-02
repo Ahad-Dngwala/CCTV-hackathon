@@ -45,9 +45,9 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: "postgresql://sentinel:sentinel_dev@db:5432/sentinel"
-      GRID_HOST: "${GRID_HOST:-live.corp8.cloud}"
+      GRID_HOST: "${GRID_HOST:-cctv.corp8.cloud}"
       MEDIAMTX_API: "${MEDIAMTX_API:-mediamtx:9997}"
-      DISABLE_INGESTION: "${DISABLE_INGESTION:-true}"
+      DISABLE_INGESTION: "${DISABLE_INGESTION:-false}"
     volumes:
       - ../model1-registry/app:/app/app
       - ../model2-analytics:/model2-analytics

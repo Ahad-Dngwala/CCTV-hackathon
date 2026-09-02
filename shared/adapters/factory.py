@@ -55,12 +55,11 @@ class AdapterFactory:
             get = lambda k, default=None: getattr(row, k, default)  # noqa: E731
 
         rtsp_url = get("rtsp_url")
-        hls_url = get("hls_url")
         source_grid_id = get("source_grid_id")
 
-        if not rtsp_url and not hls_url:
+        if not rtsp_url:
             raise ValueError(
-                f"Camera {source_grid_id!r} has neither rtsp_url nor hls_url — cannot create adapter"
+                f"Camera {source_grid_id!r} has no rtsp_url — cannot create RTSPAdapter"
             )
 
         # TODO: inject credentials from env if needed (e.g. embed user:pass into rtsp_url)
@@ -78,18 +77,9 @@ class AdapterFactory:
             location_label=get("location_label", ""),
         )
 
-        if rtsp_url:
-            return RTSPAdapter(
-                rtsp_url=rtsp_url,
-                source_grid_id=source_grid_id,
-                camera_id=str(get("id")),
-                catalogue_metadata=meta,
-            )
-        else:
-            from shared.adapters.hls import HLSAdapter
-            return HLSAdapter(
-                hls_url=hls_url,
-                source_grid_id=source_grid_id,
-                camera_id=str(get("id")),
-                catalogue_metadata=meta,
-            )
+        return RTSPAdapter(
+            rtsp_url=rtsp_url,
+            source_grid_id=source_grid_id,
+            camera_id=str(get("id")),
+            catalogue_metadata=meta,
+        )

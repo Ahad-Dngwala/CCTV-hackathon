@@ -18,9 +18,18 @@ hlsAddress: :8888
 hlsAlwaysRemux: yes
 hlsSegmentDuration: 2s
 
-pathDefaults:
-  readUser: ""
-  readPass: ""
+authMethod: internal
+authInternalUsers:
+  - user: any
+    pass:
+    ips: []
+    permissions:
+      - action: publish
+      - action: read
+      - action: playback
+      - action: api
+      - action: metrics
+      - action: pprof
 
 paths:
   cam01:

@@ -1,11 +1,9 @@
 """
-CataloguePoller — polls GET /api/ingest on the government camera grid.
+CataloguePoller — polls GET https://cctv.corp8.cloud/cameras.json on the grid.
 
 Fetches the live camera list every CATALOGUE_POLL_INTERVAL_SECONDS.
 Calls a callback with the parsed list on each successful fetch.
-Uses exponential backoff on failure.
-
-Camera IDs and available cameras can change — never cache indefinitely.
+Uses exponential backoff on failure (2s -> 30s).
 """
 
 from __future__ import annotations
@@ -19,24 +17,20 @@ from shared.schemas.vms import GridCameraEntry, GridCatalogueResponse
 
 logger = logging.getLogger(__name__)
 
-CATALOGUE_POLL_INTERVAL_SECONDS = 60   # re-poll every minute; camera ids can change
+CATALOGUE_POLL_INTERVAL_SECONDS = 60  # re-poll every minute
 
 
 class CataloguePoller:
     """
-    Polls GET /api/ingest on the government grid and returns the camera list.
+    Polls the grid catalogue and returns the camera list.
     Camera IDs and available cameras can change — never cache indefinitely.
     """
 
-    def __init__(self, grid_host: str) -> None:
-        # Default to https:// — government grid requires HTTPS
-        if not grid_host.startswith("http://") and not grid_host.startswith("https://"):
-            self._catalogue_url = f"https://{grid_host}/api/ingest"
-        else:
-            self._catalogue_url = f"{grid_host}/api/ingest"
+    def __init__(self, grid_host: str = "cctv.corp8.cloud") -> None:
+        self._catalogue_url = "https://cctv.corp8.cloud/cameras.json"
 
     async def fetch(self) -> list[GridCameraEntry]:
-        """Fetch current catalogue. Raises httpx.HTTPError or falls back to grid IP on non-JSON."""
+        """Fetch current catalogue using GridCatalogueResponse.model_validate()."""
         try:
             async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
                 response = await client.get(self._catalogue_url)
@@ -53,8 +47,8 @@ class CataloguePoller:
                 return catalogue.cameras
         except Exception as e:
             logger.warning(
-                f"Grid catalogue endpoint '{self._catalogue_url}' returned non-JSON / auth wall: {e}. "
-                "Using public direct IP grid streams (103.250.160.189:8554, cam01..cam30)."
+                f"Grid catalogue endpoint '{self._catalogue_url}' fetch failed: {e}. "
+                "Using confirmed live grid streams (103.250.160.189:8554, cam01..cam30)."
             )
             fallback_cams = [
                 GridCameraEntry(
@@ -77,52 +71,65 @@ class CataloguePoller:
     async def poll_forever(self, callback) -> None:
         """
         Continuously polls the catalogue and calls callback(cameras: list[GridCameraEntry]).
-        Runs until cancelled. Exponential backoff on fetch failure.
-        Backoff resets to 2.0 on success, doubles on failure, caps at 30.0.
+        Exponential backoff 2s -> 30s on failure, resets to 2.0s on success.
         """
         backoff = 2.0
         while True:
             try:
                 cameras = await self.fetch()
-                await callback(cameras)
+                res = callback(cameras)
+                if asyncio.iscoroutine(res):
+                    await res
                 backoff = 2.0
                 await asyncio.sleep(CATALOGUE_POLL_INTERVAL_SECONDS)
+            except asyncio.CancelledError:
+                break
             except Exception as e:
-                logger.warning(
-                    f"Catalogue poll failed: {e}. Retrying in {backoff:.0f}s"
-                )
+                logger.warning(f"Catalogue poll failed: {e}. Retrying in {backoff:.0f}s")
                 await asyncio.sleep(backoff)
-                backoff = min(backoff * 2, 30.0)
+                backoff = min(backoff * 2.0, 30.0)
+
+
+async def register_stream_in_mediamtx(
+    mediamtx_api: str,
+    stream_name: str,
+    rtsp_source_url: str,
+) -> None:
+    """
+    Registers one RTSP source stream in MediaMTX so it's available as WHEP/HLS.
+    POST http://{mediamtx_api}/v3/config/paths/add/{stream_name}
+    body: {"source": rtsp_source_url, "sourceOnDemand": false}
+    """
+    payload = {"source": rtsp_source_url, "sourceOnDemand": False}
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(
+                f"http://{mediamtx_api}/v3/config/paths/add/{stream_name}",
+                json=payload,
+            )
+            if resp.status_code == 400 and "already exists" in resp.text:
+                logger.info(f"Stream '{stream_name}' already registered in MediaMTX")
+                return
+            resp.raise_for_status()
+        logger.info(f"Registered stream '{stream_name}' in MediaMTX ({rtsp_source_url})")
+    except Exception as e:
+        logger.warning(
+            f"MediaMTX stream registration failed for '{stream_name}': {e} "
+            f"(MediaMTX may not be running — browser viewer will be unavailable)"
+        )
 
 
 def upsert_cameras_to_db(cameras: list[GridCameraEntry]) -> list[dict]:
     """
     Upsert a list of GridCameraEntry rows into the cameras table using
     PostgreSQL INSERT ... ON CONFLICT (source_grid_id) DO UPDATE.
-
-    Uses the session pattern from shared/db/session.py: _SessionLocal() directly
-    (not the get_db() FastAPI dependency, which is a generator for router use only).
-
-    Column names verified against shared/db/models.py:
-        source_grid_id, is_live, grid_synced_at, location_label,
-        codec, stream_width, stream_height, stream_fps, bitrate_kbps,
-        rtsp_url, whep_url, hls_url, name, connectivity_status, is_active.
-
-    Returns:
-        List of row dicts with real DB UUIDs in the 'id' field — ready
-        for supervisor.sync(). Returns an empty list if DB is not initialised
-        (e.g. during unit tests without a DB).
     """
     from datetime import timezone, datetime
-
     from sqlalchemy import text
     from shared.db import session as _session_module
 
     if _session_module._SessionLocal is None:
-        logger.warning(
-            "DB not initialised — skipping DB upsert, using grid IDs as placeholders"
-        )
-        # Fallback: return rows without real UUIDs (for test/dev without DB)
+        logger.warning("DB not initialised — skipping DB upsert, using grid IDs as placeholders")
         return [
             {
                 "id": f"grid-{c.id}",
@@ -147,10 +154,6 @@ def upsert_cameras_to_db(cameras: list[GridCameraEntry]) -> list[dict]:
     db = _session_module._SessionLocal()
     try:
         for c in cameras:
-            # PostgreSQL upsert: match on source_grid_id (UNIQUE column).
-            # On conflict: update all grid-sourced columns and timestamps.
-            # 'name' defaults to location_label on INSERT — never overwritten on UPDATE
-            # to preserve any manual name set via Model 1 UI.
             stmt = text(
                 """
                 INSERT INTO cameras (
@@ -204,7 +207,7 @@ def upsert_cameras_to_db(cameras: list[GridCameraEntry]) -> list[dict]:
             result = db.execute(
                 stmt,
                 {
-                    "name": c.location,                # human-readable default name
+                    "name": c.location,
                     "source_grid_id": c.id,
                     "is_live": c.live,
                     "grid_synced_at": now,
@@ -223,7 +226,7 @@ def upsert_cameras_to_db(cameras: list[GridCameraEntry]) -> list[dict]:
             row = result.mappings().one()
             rows.append(
                 {
-                    "id": str(row["id"]),               # real DB UUID as str
+                    "id": str(row["id"]),
                     "source_grid_id": row["source_grid_id"],
                     "rtsp_url": row["rtsp_url"],
                     "codec": row["codec"],
@@ -247,34 +250,3 @@ def upsert_cameras_to_db(cameras: list[GridCameraEntry]) -> list[dict]:
         db.close()
 
     return rows
-
-
-async def register_stream_in_mediamtx(
-    mediamtx_api: str,
-    stream_name: str,
-    rtsp_source_url: str,
-) -> None:
-    """
-    Registers one RTSP source stream in MediaMTX so it's available as WHEP/HLS.
-
-    stream_name: typically source_grid_id e.g. "1", "6"
-    rtsp_source_url: the government grid URL e.g. rtsp://live.corp8.cloud:8554/stream/1
-
-    MediaMTX must be running and its API must be reachable at mediamtx_api.
-    Logs a warning (does not raise) if MediaMTX is unreachable — ingestion
-    continues even if the browser viewer is unavailable.
-    """
-    payload = {"source": rtsp_source_url, "sourceOnDemand": False}
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.post(
-                f"http://{mediamtx_api}/v3/config/paths/add/{stream_name}",
-                json=payload,
-            )
-            resp.raise_for_status()
-        logger.info(f"Registered stream '{stream_name}' in MediaMTX ({rtsp_source_url})")
-    except Exception as e:
-        logger.warning(
-            f"MediaMTX stream registration failed for '{stream_name}': {e} "
-            f"(MediaMTX may not be running — browser viewer will be unavailable)"
-        )
