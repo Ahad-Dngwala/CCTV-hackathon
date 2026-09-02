@@ -1,12 +1,14 @@
 """
-Sentinel — Model 1 Registry & GIS
+Sentinel - Model 1 Registry & GIS
 FastAPI application entry point.
 
 Boots the app, mounts routers, configures templates and static files.
 Run with:  uvicorn app.main:app --reload
 """
 
+import asyncio
 import os
+import queue
 import sys
 import importlib.util as _ilu
 from contextlib import asynccontextmanager
@@ -16,26 +18,76 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-# ── Make `shared` importable when running locally ─────────────────
+# Make `shared` importable when running locally
 current_dir = Path(__file__).resolve().parent
 local_repo_root = current_dir.parent.parent
 if (local_repo_root / "shared").exists() and str(local_repo_root) not in sys.path:
     sys.path.insert(0, str(local_repo_root))
 
 from app.config import settings  # noqa: E402
-from app.routers import audit, auth, cameras, departments, districts, gap_analysis, pages  # noqa: E402
+from app.routers import audit, auth, cameras, departments, districts, gap_analysis, pages, streams  # noqa: E402
+from model2_analytics.app.ingestion.supervisor import IngestionSupervisor  # noqa: E402
+from model2_analytics.app.ingestion.catalogue import (  # noqa: E402
+    CataloguePoller,
+    upsert_cameras_to_db,
+    register_stream_in_mediamtx,
+)
 from shared.db.session import init_engine  # noqa: E402
+
+
+async def _sync_cameras(supervisor: IngestionSupervisor, cameras, mediamtx_api: str) -> None:
+    """
+    Upsert cameras to DB (real UUIDs), sync workers, then register new
+    streams in MediaMTX.
+    """
+    loop = asyncio.get_event_loop()
+    rows = await loop.run_in_executor(None, upsert_cameras_to_db, cameras)
+    running_before = set(supervisor._workers.keys())
+    supervisor.sync(rows)
+    for row in rows:
+        grid_id = row["source_grid_id"]
+        rtsp_url = row.get("rtsp_url")
+        if grid_id not in running_before and row.get("is_live") and rtsp_url:
+            asyncio.create_task(
+                register_stream_in_mediamtx(
+                    mediamtx_api=mediamtx_api,
+                    stream_name=grid_id,
+                    rtsp_source_url=rtsp_url,
+                )
+            )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialise the DB engine once at startup."""
-    init_engine(settings.DATABASE_URL)
+    engine = init_engine(settings.DATABASE_URL)
+    app.state.engine = engine
+
+    disable_ingestion = os.environ.get("DISABLE_INGESTION", "true").lower() == "true"
+    supervisor = IngestionSupervisor(output_queue=queue.Queue(maxsize=1000))
+    poller = CataloguePoller(grid_host=settings.GRID_HOST)
+
+    if disable_ingestion:
+        async def _db_only_sync(cams):
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, upsert_cameras_to_db, cams)
+
+        poll_task = asyncio.create_task(
+            poller.poll_forever(callback=_db_only_sync)
+        )
+    else:
+        poll_task = asyncio.create_task(
+            poller.poll_forever(
+                callback=lambda cams: _sync_cameras(supervisor, cams, settings.MEDIAMTX_API)
+            )
+        )
+
     yield
+    poll_task.cancel()
+    supervisor.stop_all()
 
 
 app = FastAPI(
-    title="Sentinel — Registry & GIS",
+    title="Sentinel - Registry & GIS",
     description="Model 1: Camera registry, GIS mapping, and department/district management for Gujarat's CCTV network.",
     version="0.1.0",
     lifespan=lifespan,
@@ -52,23 +104,14 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 app.include_router(auth.router)
 app.include_router(audit.router)
 app.include_router(cameras.router)
+app.include_router(streams.router)
+app.include_router(streams.streams_router)
 app.include_router(departments.router)
 app.include_router(districts.router)
 app.include_router(gap_analysis.router)
 app.include_router(pages.router)
 
 # ── Model 2 Routers (auto-discovery) ─────────────────────────────
-# Every *.py file in model2-analytics/app/routers/ that exposes a
-# `router` attribute is automatically loaded and mounted here.
-#
-# Adding a new Model 2 feature:
-#   1. Create  model2-analytics/app/routers/<feature>.py
-#   2. Define  router = APIRouter(...)  inside it
-#   Done — no changes to this file needed.
-#
-# Works both in Docker (/model2-analytics/app/routers/)
-# and locally (<repo_root>/model2-analytics/app/routers/).
-
 _M2_ROUTERS_DIR_CANDIDATES = [
     Path("/model2-analytics/app/routers"),                              # Docker
     local_repo_root / "model2-analytics" / "app" / "routers",          # Local dev
@@ -77,7 +120,7 @@ _m2_routers_dir = next((p for p in _M2_ROUTERS_DIR_CANDIDATES if p.is_dir()), No
 
 if _m2_routers_dir:
     for _router_file in sorted(_m2_routers_dir.glob("*.py")):
-        if _router_file.name.startswith("_"):       # skip __init__.py, etc.
+        if _router_file.name.startswith("_"):
             continue
         try:
             _spec = _ilu.spec_from_file_location(
@@ -91,6 +134,6 @@ if _m2_routers_dir:
             else:
                 print(f"[model2] skipped  : {_router_file.name}  (no `router` attribute)")
         except Exception as _exc:
-            print(f"[model2] ERROR    : {_router_file.name}  → {_exc}")
+            print(f"[model2] ERROR    : {_router_file.name}  -> {_exc}")
 else:
-    print("[model2] routers directory not found — Model 2 endpoints unavailable.")
+    print("[model2] routers directory not found - Model 2 endpoints unavailable.")

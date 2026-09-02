@@ -178,6 +178,40 @@ ingestion code must follow (full detail in
 - Tolerate decode warnings on join and scene-cut discontinuities at
   loop points — not fatal, not a disconnect.
 
+### FramePacket — VMS → Analytics Queue Contract ✅
+
+The VMS layer passes frames to the analytics pipeline via a shared in-memory queue.
+The queue is created at app startup and accessible as `app.state.frame_queue`.
+
+```python
+# Created once at app startup (in main.py lifespan) and stored on app.state:
+frame_queue: queue.Queue[FramePacket] = queue.Queue(maxsize=500)
+app.state.frame_queue = frame_queue
+```
+
+**FramePacket fields** (`shared/adapters/base.py`):
+
+| Field | Type | Description |
+|---|---|---|
+| `frame` | `np.ndarray` | BGR image, shape `(height, width, 3)` — OpenCV default |
+| `pts_ms` | `float` | Milliseconds since stream epoch — **use this for all DB timestamps** |
+| `camera_id` | `str` | UUID string — write to `detections.camera_id` |
+| `source_grid_id` | `str` | Grid's camera ID — for logging only, not for DB writes |
+| `width` | `int` | Frame width in pixels |
+| `height` | `int` | Frame height in pixels |
+
+**Critical rules for analytics pipeline consumers:**
+- Use `pts_ms` for every timestamp written to `detections` — never use `time.time()` or `datetime.now()`
+- On queue full, VMS drops frames (non-blocking `put_nowait`) — the consumer is the bottleneck, not VMS
+- Queue is thread-safe (`queue.Queue`) — analytics workers can call `get()` from any thread
+
+**Importing FramePacket:**
+```python
+from shared.adapters.base import FramePacket
+# or
+from shared.adapters import FramePacket
+```
+
 ---
 
 ## 4. Open items

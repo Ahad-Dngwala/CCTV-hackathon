@@ -41,6 +41,9 @@
                 <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}" id="nav-map">
                     <span class="nav-link-icon">🗺️</span> Map
                 </a>
+                <a href="/live" class="nav-link {% if request.url.path == '/live' %}active{% endif %}" id="nav-live">
+                    <span class="nav-link-icon">📺</span> Live Feeds
+                </a>
                 <a href="/cameras" class="nav-link {% if '/cameras' in request.url.path %}active{% endif %}" id="nav-cameras">
                     <span class="nav-link-icon">📷</span> Cameras
                 </a>

@@ -1,0 +1,12 @@
+# model2-analytics ingestion dependencies
+# These are installed in the Docker image alongside model1-registry/requirements.txt
+
+# RTSP frame capture
+opencv-python-headless>=4.9.0.80   # headless — no GUI; uses CAP_PROP_POS_MSEC for PTS
+numpy>=1.26.4                       # ndarray frame buffer
+
+# Grid API polling
+httpx>=0.27.0                       # async HTTP — CataloguePoller fetches /api/ingest
+
+# sqlalchemy is already installed via model1-registry/requirements.txt
+# pydantic-settings is already installed via model1-registry/requirements.txt

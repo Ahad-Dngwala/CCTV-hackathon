@@ -54,3 +54,57 @@ docker compose exec db psql -U sentinel -d sentinel -c "SELECT count(*) FROM cam
 
 Environment settings are configured via `DATABASE_URL` in `docker-compose.yml`:
 `postgresql://sentinel:sentinel_dev@db:5432/sentinel`
+
+---
+
+## 📡 MediaMTX — RTSP → WebRTC/HLS Bridge
+
+MediaMTX re-serves the government grid's RTSP streams as WebRTC (WHEP) and HLS for the browser-based multi-camera viewer. It runs as a Docker service alongside `db` and `app`.
+
+| Container | Image | Ports | Purpose |
+|---|---|---|---|
+| `mediamtx` | `bluenviron/mediamtx:latest` | 8554/8889/8888/9997 | RTSP→WebRTC/HLS bridge |
+
+### Starting MediaMTX
+
+MediaMTX starts automatically with `docker compose up -d`. To start it alone:
+
+```bash
+cd infra
+docker compose up -d mediamtx
+```
+
+### Stream URLs (after registration)
+
+Once the ingestion supervisor registers a camera stream (via the MediaMTX API):
+
+- **HLS**: `http://<host>:8888/<source_grid_id>/index.m3u8`
+- **WHEP** (WebRTC): `http://<host>:8889/<source_grid_id>/whep`
+
+Where `source_grid_id` is the government grid's camera ID (e.g., `1`, `6`).
+
+### Dynamic Stream Registration
+
+Streams are registered at runtime by the `IngestionSupervisor` — NOT statically in `mediamtx.yml`. To manually register a stream for testing:
+
+```bash
+curl -X POST http://localhost:9997/v3/config/paths/add/stream1 \
+  -H "Content-Type: application/json" \
+  -d '{"source": "rtsp://live.corp8.cloud:8554/stream/1", "sourceOnDemand": false}'
+# Expected: 200 OK
+
+# Verify HLS is serving
+ffprobe http://localhost:8888/stream1/index.m3u8
+# Expected: shows video stream info, no errors
+
+# Verify WHEP endpoint exists
+curl -I http://localhost:8889/stream1/whep
+# Expected: 405 Method Not Allowed (correct — WHEP needs POST with SDP offer, not GET)
+```
+
+### Configuration
+
+MediaMTX config is at `infra/mediamtx.yml`. Key settings:
+- `protocols: [tcp]` — TCP-only RTSP (no UDP, matches our ingestion workers)
+- `api: yes` on port 9997 — used by supervisor to register streams dynamically
+- `hlsAlwaysRemux: yes` — HLS available even when no viewer is watching
