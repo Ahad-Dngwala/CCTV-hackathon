@@ -457,25 +457,61 @@ function renderGrid(streams) {
 
         grid.appendChild(card);
 
-        // Bind HLS / WebRTC Player to the video element
-        attachStreamPlayer(`video-feed-${cam.id}`, cam.hls_url);
+        // Bind WebRTC WHEP / HLS Player to the video element
+        attachStreamPlayer(`video-feed-${cam.id}`, cam.whep_url, cam.hls_url);
     });
 }
 
-// Attach HLS stream to video element
-function attachStreamPlayer(videoId, streamUrl) {
+// Attach WebRTC WHEP (Primary) or HLS (Fallback) stream to video element
+async function attachStreamPlayer(videoId, whepUrl, hlsUrl) {
     const video = document.getElementById(videoId);
-    if (!video || !streamUrl) return;
+    if (!video) return;
 
-    if (typeof Hls !== 'undefined' && Hls.isSupported() && streamUrl.includes('.m3u8')) {
+    // 1. Direct WebRTC WHEP connection (Instant sub-second live preview from public IP)
+    if (whepUrl && window.RTCPeerConnection) {
+        try {
+            const pc = new RTCPeerConnection({
+                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+            });
+
+            pc.addTransceiver('video', { direction: 'recvonly' });
+
+            pc.ontrack = (event) => {
+                if (event.streams && event.streams[0]) {
+                    video.srcObject = event.streams[0];
+                    video.play().catch(e => console.log('WHEP autoplay notice:', e));
+                }
+            };
+
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+
+            const resp = await fetch(whepUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/sdp' },
+                body: offer.sdp
+            });
+
+            if (resp.ok) {
+                const answerSdp = await resp.text();
+                await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+                return; // WebRTC connected successfully
+            }
+        } catch (err) {
+            console.warn('WHEP negotiation fallback to HLS for', videoId, err);
+        }
+    }
+
+    // 2. HLS stream fallback
+    if (hlsUrl && typeof Hls !== 'undefined' && Hls.isSupported() && hlsUrl.includes('.m3u8')) {
         const hls = new Hls();
-        hls.loadSource(streamUrl);
+        hls.loadSource(hlsUrl);
         hls.attachMedia(video);
         hls.on(Hls.Events.MANIFEST_PARSED, function() {
             video.play().catch(e => console.log('Autoplay deferred:', e));
         });
-    } else {
-        video.src = streamUrl;
+    } else if (hlsUrl) {
+        video.src = hlsUrl;
     }
 }
 
@@ -494,10 +530,11 @@ function openSpotlight(cam) {
     document.getElementById('url-hls').innerText = cam.hls_url || '-';
 
     const spotVideo = document.getElementById('spotlight-video');
-    attachStreamPlayer('spotlight-video', cam.hls_url);
+    attachStreamPlayer('spotlight-video', cam.whep_url, cam.hls_url);
 
     modal.classList.add('active');
 }
+
 
 function closeSpotlight() {
     document.getElementById('spotlight-modal').classList.remove('active');

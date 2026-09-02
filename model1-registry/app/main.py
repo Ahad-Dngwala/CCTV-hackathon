@@ -2,8 +2,9 @@
 Sentinel — Model 1 Registry & GIS
 FastAPI application entry point.
 
-Boots the app, mounts routers, configures templates and static files.
-Run with:  uvicorn app.main:app --reload
+# Boots the app, mounts routers, configures templates and static files.
+# Run with:  uvicorn app.main:app --reload
+
 """
 
 import os
