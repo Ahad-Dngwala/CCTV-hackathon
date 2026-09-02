@@ -58,11 +58,10 @@ Browser connects DIRECTLY to hackathon gateway:
 | WebRTC WHEP | `http://live.corp8.cloud:8889/stream/<id>/whep` | Browser live preview |
 | HLS | `http://live.corp8.cloud/live/stream/<id>/index.m3u8` | Grid video player (HLS.js) |
 
-> **Note**: `live.corp8.cloud` is the hackathon evaluation gateway. Video streams are only accessible from the jury's evaluation network. Local Docker dev only serves the UI shell and API — stream bytes flow directly from gateway to browser.
-
+> **Note**: `live.corp8.cloud` is the hackathon evaluation gateway. One problem that it is not accessible right now using the home wifi network maybe it can be accessible by the jury network at the event jus a guess please check this first 
 ---
 
-## 🔧 RTSP Ingestion Client (`pipeline/ingest.py`)
+## RTSP Ingestion Client (`pipeline/ingest.py`)
 
 Used by the **AI inference pipeline** (not browser). Connects to RTSP feeds, reads frames, yields `(frame, pts_ms)` for YOLO detection.
 

@@ -28,12 +28,27 @@ from shared.schemas.grid import (
 router = APIRouter(tags=["live-grid"])
 
 
+def _format_cam_tag(source_id: str) -> str:
+    """Normalize camera source id to standard cam01...cam30 format."""
+    if not source_id:
+        return "cam01"
+    clean = str(source_id).strip().lower()
+    if clean.startswith("cam") and clean[3:].isdigit():
+        return f"cam{int(clean[3:]):02d}"
+    if clean.isdigit():
+        return f"cam{int(clean):02d}"
+    return clean
+
+
 def _build_stream_urls(cam: CameraModel) -> tuple[str, str, str]:
-    """Helper to generate RTSP, WHEP, and HLS URLs for a camera if not explicitly set."""
+    """Helper to generate RTSP, WHEP, and HLS URLs for a camera pointing to the Sentinel Grid gateway."""
     source_id = cam.source_grid_id or str(cam.id)[:8]
-    rtsp = cam.rtsp_url or f"rtsp://127.0.0.1:8554/stream/{source_id}"
-    whep = cam.whep_url or f"http://127.0.0.1:8889/stream/{source_id}/whep"
-    hls = cam.hls_url or f"http://127.0.0.1/live/stream/{source_id}/index.m3u8"
+    cam_tag = _format_cam_tag(source_id)
+
+    rtsp = f"rtsp://103.250.160.189:8554/stream/{cam_tag}"
+    whep = f"http://103.250.160.189:8889/stream/{cam_tag}/whep"
+    hls = f"https://cctv.corp8.cloud/{cam_tag}/index.m3u8"
+
     return rtsp, whep, hls
 
 
