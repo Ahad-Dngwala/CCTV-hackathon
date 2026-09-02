@@ -23,6 +23,12 @@ function mapDashboard() {
         showDistrictBoundaries: true,
 
         async init() {
+            // Check if map container is already initialized (fixes hot-reloading / double-init Alpine errors)
+            const mapContainer = document.getElementById('map');
+            if (mapContainer && mapContainer._leaflet_id) {
+                mapContainer._leaflet_id = null;
+            }
+
             // Initialise Leaflet map centered on Gujarat
             this.map = L.map('map', {
                 zoomControl: true,
