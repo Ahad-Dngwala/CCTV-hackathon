@@ -51,6 +51,21 @@ def map_page(
     )
 
 
+# ── Live Feeds Video Matrix ─────────────────────────────────────
+
+
+@router.get("/live", response_class=HTMLResponse)
+def live_feeds_page(
+    request: Request,
+    user: Optional[UserModel] = Depends(get_optional_current_user),
+):
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+    return request.app.state.templates.TemplateResponse(
+        request=request, name="live.html", context={"user": user}
+    )
+
+
 # ── Camera list ─────────────────────────────────────────────────
 
 
