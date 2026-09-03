@@ -9,3 +9,11 @@ ENV/
 .idea/
 .vscode/
 *.sqlite3
+
+# ── Model 2 — AI pipeline heavy/generated artifacts (03-Sep-2026) ──
+weights/
+model2-analytics/pipeline/dataset/
+model2-analytics/pipeline/*.pt
+model2-analytics/pipeline/*.cache
+model2-analytics/pipeline/dataset.yaml
+demo_results/
