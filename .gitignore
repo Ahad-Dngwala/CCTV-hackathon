@@ -9,3 +9,12 @@ ENV/
 .idea/
 .vscode/
 *.sqlite3
+
+# Model Weights
+*.pt
+*.pth
+*.onnx
+
+# Crops and runtime media (stored in model2-analytics)
+model2-analytics/detection-image/*
+!model2-analytics/detection-image/.gitkeep

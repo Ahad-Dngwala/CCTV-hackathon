@@ -36,7 +36,7 @@ services:
       context: ..
       dockerfile: infra/Dockerfile
     image: sentinel-model1-app:latest
-    pull_policy: build
+    pull_policy: never
     depends_on:
       db:
         condition: service_healthy
