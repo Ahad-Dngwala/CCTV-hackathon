@@ -43,8 +43,10 @@ CAMERAS = [
     },
 ]
 
-# Run YOLO on every fresh live frame (zero-latency tracking)
-INFER_EVERY_N_FRAMES = 1
+# Run YOLO every 3rd live frame — the InFrameTracker interpolates between
+# inferences, so detection quality stays high while the pipeline keeps up
+# with the live stream instead of drifting seconds behind on CPU.
+INFER_EVERY_N_FRAMES = 3
 
 
 class CameraWorker:

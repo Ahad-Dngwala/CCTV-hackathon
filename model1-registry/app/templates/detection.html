@@ -333,9 +333,15 @@ async function attachStreamPlayer(videoId, whepUrl, hlsUrl) {
         }
     }
 
-    // 2. HLS stream fallback
+    // 2. HLS stream fallback (low-latency config)
     if (hlsUrl && typeof Hls !== 'undefined' && Hls.isSupported() && hlsUrl.includes('.m3u8')) {
-        const hls = new Hls();
+        const hls = new Hls({
+            liveSyncDurationCount:     1,   // stay 1 segment behind live edge
+            liveMaxLatencyDurationCount: 2, // max 2 segments behind before seeking
+            maxBufferLength:           4,   // buffer at most 4s ahead
+            maxMaxBufferLength:        8,
+            backBufferLength:          0,   // flush back-buffer immediately
+        });
         hls.loadSource(hlsUrl);
         hls.attachMedia(video);
         hls.on(Hls.Events.MANIFEST_PARSED, function() {
@@ -407,6 +413,9 @@ async function loadFeeds() {
                 </div>
             `;
             col.appendChild(card);
+            // Seed ResizeObserver cache for this camera's canvas (Bug 2 fix)
+            const cvs = document.getElementById(`canvas-feed-${tag}`);
+            if (cvs) _observeCanvas(cvs);
             attachStreamPlayer(`video-feed-${cam.id}`, cam.whep_url, cam.hls_url);
         });
     } catch (err) {
@@ -513,6 +522,27 @@ function clearFeed() {
     eCam22.textContent = '0';
 }
 
+// ══ Canvas dimension cache (avoids per-frame reflow) ════════════
+// getBoundingClientRect() forces browser layout; cache dims via ResizeObserver.
+const _canvasDims = {};
+function _observeCanvas(canvas) {
+    const id = canvas.id;
+    const ro = new ResizeObserver(entries => {
+        for (const entry of entries) {
+            const { width, height } = entry.contentRect;
+            canvas.width  = Math.round(width);
+            canvas.height = Math.round(height);
+            _canvasDims[id] = { w: canvas.width, h: canvas.height };
+        }
+    });
+    ro.observe(canvas);
+    // Seed initial dimensions synchronously once
+    const r = canvas.getBoundingClientRect();
+    canvas.width  = Math.round(r.width);
+    canvas.height = Math.round(r.height);
+    _canvasDims[id] = { w: canvas.width, h: canvas.height };
+}
+
 // ══ Live Bounding Box Drawing on Video Canvas ═════════════════════
 function drawBoxes(camTag, boxes) {
     const canvas = document.getElementById(`canvas-feed-${camTag}`);
@@ -520,21 +550,21 @@ function drawBoxes(camTag, boxes) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const rect = canvas.getBoundingClientRect();
-    if (canvas.width !== rect.width || canvas.height !== rect.height) {
-        canvas.width = rect.width;
-        canvas.height = rect.height;
-    }
+    // Use cached dimensions — no reflow
+    const dims = _canvasDims[canvas.id];
+    if (!dims) return;
+    const cw = dims.w;
+    const ch = dims.h;
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, cw, ch);
     if (!boxes || !boxes.length) return;
 
     boxes.forEach(b => {
         const [nx1, ny1, nx2, ny2] = b.bbox;
-        const x = nx1 * canvas.width;
-        const y = ny1 * canvas.height;
-        const w = (nx2 - nx1) * canvas.width;
-        const h = (ny2 - ny1) * canvas.height;
+        const x = nx1 * cw;
+        const y = ny1 * ch;
+        const w = (nx2 - nx1) * cw;
+        const h = (ny2 - ny1) * ch;
 
         const cls = (b.class_name || 'Vehicle').toLowerCase();
         let color = '#38bdf8';
@@ -569,8 +599,8 @@ function drawBoxes(camTag, boxes) {
 
     clearTimeout(canvas._clearTimer);
     canvas._clearTimer = setTimeout(() => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-    }, 250);
+        ctx.clearRect(0, 0, cw, ch);
+    }, 600);
 }
 
 // ══ Database Vehicle Detection Report ════════════════════════════
@@ -680,6 +710,7 @@ function openCropModal(url, title) {
 
 // ══ WebSocket ═════════════════════════════════════════════════════
 let ws = null;
+let _wsPingInterval = null;
 const wsDot = document.getElementById('wsDot');
 const wsLbl = document.getElementById('wsLbl');
 
@@ -691,6 +722,8 @@ function connectWS() {
     ws.onopen = () => {
         wsDot.className = 'ws-dot ws-dot--on';
         wsLbl.textContent = 'Live Active';
+        clearInterval(_wsPingInterval);
+        _wsPingInterval = setInterval(() => ws && ws.readyState === 1 && ws.send('ping'), 25000);
     };
     ws.onmessage = ({ data }) => {
         try {
@@ -713,10 +746,11 @@ function connectWS() {
     ws.onclose = () => {
         wsDot.className = 'ws-dot';
         wsLbl.textContent = 'Reconnecting…';
+        clearInterval(_wsPingInterval);
+        _wsPingInterval = null;
         ws = null;
         setTimeout(connectWS, 2500);
     };
-    setInterval(() => ws && ws.readyState === 1 && ws.send('ping'), 25000);
 }
 
 // ══ Boot ══════════════════════════════════════════════════════════

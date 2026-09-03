@@ -112,18 +112,19 @@ class StreamIngestClient:
         self._thread.start()
 
         while self.is_running:
-            if self._event.wait(timeout=1.0):
+            # 50 ms timeout: wake up quickly on every new frame signal.
+            # We do NOT null out _latest_frame — the reader thread continuously
+            # overwrites it with the newest frame (drop-frame, not buffer).
+            # This prevents the old 1-second stall that occurred when YOLO
+            # inference was slower than one frame interval.
+            if self._event.wait(timeout=0.05):
                 self._event.clear()
                 with self._lock:
                     frame = self._latest_frame
                     pts = self._latest_pts
-                    self._latest_frame = None
 
                 if frame is not None:
                     yield frame, pts
-            else:
-                # Idle heartbeat wait
-                time.sleep(0.01)
 
         self.is_running = False
 

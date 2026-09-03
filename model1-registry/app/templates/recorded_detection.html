@@ -1,0 +1,881 @@
+{% extends "base.html" %}
+{% block title %}Sentinel — Pre-Recorded Video AI Detection{% endblock %}
+
+{% block head_extra %}
+<style>
+/* ══ Pre-Recorded Detection Dashboard ══════════════════════════════ */
+.rec-wrap { padding: 1.5rem; max-width: 1600px; margin: 0 auto; }
+
+/* Header */
+.rec-hdr {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;
+}
+.rec-hdr h1 {
+    font-size: 1.75rem; font-weight: 800; color: #f8fafc;
+    margin: 0; display: flex; align-items: center; gap: .55rem;
+}
+.rec-hdr p { color: #94a3b8; font-size: .875rem; margin: .2rem 0 0; }
+
+.hdr-pills { display: flex; gap: .65rem; flex-wrap: wrap; align-items: center; }
+.pill {
+    background: rgba(15,23,42,.75); border: 1px solid rgba(255,255,255,.1);
+    border-radius: 9999px; padding: .3rem .85rem;
+    font-size: .8rem; font-weight: 600; color: #cbd5e1;
+    display: flex; align-items: center; gap: .4rem;
+}
+.pill .v { color: #38bdf8; font-weight: 800; }
+.pill-state { text-transform: uppercase; font-size: .75rem; letter-spacing: .04em; }
+
+/* Glass Cards */
+.rec-card {
+    background: #0f172a; border: 1px solid rgba(255,255,255,.08);
+    border-radius: 14px; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,.35);
+    margin-bottom: 1.5rem;
+}
+.rec-card-hdr {
+    padding: .9rem 1.25rem; background: rgba(15,23,42,.95);
+    border-bottom: 1px solid rgba(255,255,255,.07);
+    display: flex; justify-content: space-between; align-items: center;
+}
+.rec-card-title {
+    font-size: 1.05rem; font-weight: 700; color: #f8fafc;
+    display: flex; align-items: center; gap: .5rem; margin: 0;
+}
+.rec-card-body { padding: 1.25rem; }
+
+/* Upload Zone */
+.upload-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;
+}
+@media(max-width: 900px) { .upload-grid { grid-template-columns: 1fr; } }
+
+.dropzone {
+    border: 2px dashed rgba(56,189,248,.35); border-radius: 12px;
+    padding: 2.25rem 1.5rem; text-align: center; cursor: pointer;
+    background: rgba(15,23,42,.6); transition: border-color .2s, background .2s;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 180px;
+}
+.dropzone:hover, .dropzone.dragover {
+    border-color: #38bdf8; background: rgba(56,189,248,.07);
+}
+.drop-icon { font-size: 2.5rem; margin-bottom: .6rem; }
+.drop-text { font-size: .95rem; font-weight: 600; color: #f1f5f9; margin-bottom: .25rem; }
+.drop-sub { font-size: .78rem; color: #64748b; }
+
+/* Camera Selector Card */
+.cam-selector-box {
+    display: flex; flex-direction: column; gap: .75rem;
+}
+.cam-select-input {
+    background: #1e293b; border: 1px solid rgba(255,255,255,.15);
+    color: #f8fafc; border-radius: 8px; padding: .65rem .85rem; font-size: .88rem; width: 100%;
+}
+.cam-quick-list {
+    display: flex; flex-wrap: wrap; gap: .4rem; max-height: 130px; overflow-y: auto; padding-right: .3rem;
+}
+.cam-pill-opt {
+    background: rgba(30,41,59,.7); border: 1px solid rgba(255,255,255,.1);
+    border-radius: 6px; padding: .3rem .65rem; font-size: .75rem; color: #cbd5e1;
+    cursor: pointer; transition: all .15s;
+}
+.cam-pill-opt:hover { border-color: #38bdf8; color: #38bdf8; }
+.cam-pill-opt.selected {
+    background: rgba(56,189,248,.2); border-color: #38bdf8; color: #38bdf8; font-weight: 700;
+}
+
+/* File Info Box */
+.file-meta-box {
+    display: none; margin-top: 1rem; padding: .85rem 1rem;
+    background: rgba(30,41,59,.6); border: 1px solid rgba(255,255,255,.1);
+    border-radius: 8px; font-size: .82rem; color: #cbd5e1;
+}
+.file-meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: .75rem; }
+.meta-item { display: flex; flex-direction: column; }
+.meta-lbl { font-size: .7rem; color: #64748b; text-transform: uppercase; }
+.meta-val { font-size: .92rem; font-weight: 700; color: #f8fafc; font-family: monospace; }
+
+/* Main Stage: Player + Live Sidebar */
+.stage-grid {
+    display: grid; grid-template-columns: 1fr 360px; gap: 1.5rem; align-items: start;
+}
+@media(max-width: 1100px) { .stage-grid { grid-template-columns: 1fr; } }
+
+/* Player Container */
+.player-wrap {
+    position: relative; width: 100%; aspect-ratio: 16/9; background: #000;
+    border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,.1);
+    box-shadow: 0 12px 40px rgba(0,0,0,.5);
+}
+#videoCanvas {
+    width: 100%; height: 100%; object-fit: contain; display: block; background: #000;
+}
+.player-empty-placeholder {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; color: #475569; pointer-events: none;
+}
+.player-top-overlay {
+    position: absolute; top: 0; left: 0; right: 0; padding: .6rem .85rem;
+    background: linear-gradient(to bottom, rgba(7,15,35,.85), transparent);
+    display: flex; justify-content: space-between; align-items: center; pointer-events: none;
+}
+
+/* Control Bar */
+.ctrl-bar {
+    padding: .85rem 1rem; background: rgba(7,15,35,.95);
+    border-top: 1px solid rgba(255,255,255,.07); display: flex; flex-direction: column; gap: .75rem;
+}
+.ctrl-row {
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .75rem;
+}
+.ctrl-btns { display: flex; align-items: center; gap: .5rem; }
+.btn-act {
+    padding: .45rem 1rem; border-radius: 8px; font-size: .82rem; font-weight: 700;
+    cursor: pointer; border: none; display: flex; align-items: center; gap: .4rem; transition: all .15s;
+}
+.btn-start  { background: #10b981; color: #064e3b; }
+.btn-start:hover { background: #34d399; box-shadow: 0 0 14px rgba(16,185,129,.4); }
+.btn-start:disabled { background: #334155; color: #64748b; cursor: not-allowed; box-shadow: none; }
+.btn-pause  { background: #f59e0b; color: #451a03; }
+.btn-pause:hover { background: #fbbf24; }
+.btn-pause:disabled { background: #334155; color: #64748b; cursor: not-allowed; }
+.btn-stop   { background: #ef4444; color: #450a0a; }
+.btn-stop:hover  { background: #f87171; }
+.btn-stop:disabled  { background: #334155; color: #64748b; cursor: not-allowed; }
+
+.speed-grp { display: flex; align-items: center; gap: .3rem; background: rgba(15,23,42,.8); padding: .2rem; border-radius: 8px; border: 1px solid rgba(255,255,255,.1); }
+.btn-spd {
+    padding: .3rem .6rem; border-radius: 6px; font-size: .75rem; font-weight: 700;
+    color: #94a3b8; background: transparent; border: none; cursor: pointer;
+}
+.btn-spd.active { background: #38bdf8; color: #082f49; }
+
+/* Progress Bar */
+.progress-container { width: 100%; }
+.progress-labels { display: flex; justify-content: space-between; font-size: .75rem; color: #94a3b8; margin-bottom: .25rem; font-family: monospace; }
+.progress-bar-track {
+    width: 100%; height: 8px; background: rgba(255,255,255,.1); border-radius: 4px; overflow: hidden;
+}
+.progress-bar-fill {
+    width: 0%; height: 100%; background: linear-gradient(to right, #38bdf8, #10b981);
+    transition: width .2s linear;
+}
+
+/* Sidebar: Counters & Live Feed */
+.rec-sidebar {
+    background: rgba(15,22,36,.85); backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,.07); border-radius: 14px;
+    display: flex; flex-direction: column; height: 560px; overflow: hidden;
+}
+.cat-breakdown {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: .45rem; padding: .85rem;
+    border-bottom: 1px solid rgba(255,255,255,.07); background: rgba(15,23,42,.6);
+}
+.cat-card {
+    background: rgba(30,41,59,.5); border: 1px solid rgba(255,255,255,.07);
+    border-radius: 8px; padding: .4rem .3rem; text-align: center;
+}
+.cat-num { font-size: 1.05rem; font-weight: 800; color: #38bdf8; line-height: 1; }
+.cat-lbl { font-size: .63rem; color: #94a3b8; margin-top: .2rem; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.feed-list {
+    flex: 1; overflow-y: auto; padding: .85rem; display: flex; flex-direction: column; gap: .55rem;
+}
+.feed-list::-webkit-scrollbar { width: 4px; }
+.feed-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 4px; }
+
+/* Event Cards */
+.rec-ec {
+    background: rgba(15,23,42,.9); border: 1px solid rgba(255,255,255,.07);
+    border-radius: 9px; padding: .65rem .75rem; animation: ec-in .25s ease-out;
+}
+@keyframes ec-in { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: none; } }
+
+.badge-v {
+    font-size: .7rem; font-weight: 700; text-transform: uppercase;
+    padding: .15rem .42rem; border-radius: 5px; display: inline-flex; align-items: center; gap: .25rem;
+}
+.b-car           { background: rgba(34,197,94,.15); color: #4ade80; border: 1px solid rgba(34,197,94,.35); }
+.b-truck         { background: rgba(249,115,22,.15); color: #fb923c; border: 1px solid rgba(249,115,22,.35); }
+.b-mini-truck    { background: rgba(245,158,11,.15); color: #fbbf24; border: 1px solid rgba(245,158,11,.35); }
+.b-bus           { background: rgba(168,85,247,.15); color: #c084fc; border: 1px solid rgba(168,85,247,.35); }
+.b-motorcycle    { background: rgba(14,165,233,.15); color: #38bdf8; border: 1px solid rgba(14,165,233,.35); }
+.b-auto-rickshaw { background: rgba(234,179,8,.15); color: #facc15; border: 1px solid rgba(234,179,8,.35); }
+.b-bicycle       { background: rgba(16,185,129,.15); color: #34d399; border: 1px solid rgba(16,185,129,.35); }
+.b-vehicle       { background: rgba(100,116,139,.15); color: #94a3b8; border: 1px solid rgba(100,116,139,.35); }
+
+/* Audit Table */
+.rec-table { width: 100%; border-collapse: collapse; text-align: left; font-size: .84rem; color: #e2e8f0; }
+.rec-table th {
+    padding: .85rem 1rem; background: rgba(15,23,42,.95); border-bottom: 1px solid rgba(255,255,255,.1);
+    text-transform: uppercase; font-size: .72rem; letter-spacing: .05em; color: #94a3b8;
+}
+.rec-table td { padding: .75rem 1rem; border-bottom: 1px solid rgba(255,255,255,.05); }
+
+/* Zoom Modal */
+#cropModal {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.85);
+    backdrop-filter: blur(8px); z-index: 9999; align-items: center; justify-content: center; cursor: pointer;
+}
+.modal-box {
+    max-width: 90vw; max-height: 85vh; background: #0f172a; padding: 1.25rem;
+    border-radius: 14px; border: 1px solid rgba(255,255,255,.15); text-align: center;
+}
+.ws-dot { width: 8px; height: 8px; border-radius: 50%; background: #475569; display: inline-block; }
+.ws-dot--on { background: #34d399; box-shadow: 0 0 8px #34d399; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="rec-wrap">
+
+    <!-- Header -->
+    <div class="rec-hdr">
+        <div>
+            <h1>📼 Pre-Recorded Video AI Detection</h1>
+            <p>Upload surveillance footage, associate location, and process vehicle tracking with high-performance YOLOv8 &amp; OCR</p>
+        </div>
+        <div class="hdr-pills">
+            <span class="pill"><span class="ws-dot" id="wsDot"></span><span id="wsLbl">Standby</span></span>
+            <span class="pill">Speed: <span class="v" id="lblSpeed">1x</span></span>
+            <span class="pill">Rate: <span class="v" id="lblFps">0.0 FPS</span></span>
+            <span class="pill">Sightings: <span class="v" id="lblSightings">0</span></span>
+        </div>
+    </div>
+
+    <!-- Step 1: Upload & Camera Association Card -->
+    <div class="rec-card">
+        <div class="rec-card-hdr">
+            <h3 class="rec-card-title">📁 Step 1: Upload Footage &amp; Select Camera Source</h3>
+            <span id="uploadStatusBadge" class="pill pill-state" style="background:rgba(59,130,246,.2); color:#60a5fa;">Ready For Upload</span>
+        </div>
+        <div class="rec-card-body">
+            <div class="upload-grid">
+                <!-- Dropzone -->
+                <div class="dropzone" id="dropzone" onclick="document.getElementById('videoFileInput').click()">
+                    <div class="drop-icon">📤</div>
+                    <div class="drop-text" id="dropzoneText">Drag &amp; drop video footage here</div>
+                    <div class="drop-sub">Supported formats: MP4, AVI, MOV, MKV, WEBM (Max: 2 GB)</div>
+                    <input type="file" id="videoFileInput" accept=".mp4,.avi,.mov,.mkv,.webm" style="display:none;" onchange="handleFileSelected(this.files[0])">
+                </div>
+
+                <!-- Camera Association Selector -->
+                <div class="cam-selector-box">
+                    <label style="font-size:.82rem; font-weight:700; color:#cbd5e1;">Target Camera / Location Association</label>
+                    <select id="cameraDropdown" class="cam-select-input" onchange="handleCameraDropdownChange(this.value)">
+                        <option value="">-- Choose Camera Location --</option>
+                    </select>
+                    <div style="font-size:.74rem; color:#64748b;">Quick pick from active grid cameras:</div>
+                    <div class="cam-quick-list" id="quickCamList">
+                        <!-- Populated via API -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Uploaded File Metadata Preview -->
+            <div class="file-meta-box" id="fileMetaBox">
+                <div class="file-meta-grid">
+                    <div class="meta-item"><span class="meta-lbl">File Name</span><span class="meta-val" id="metaName">—</span></div>
+                    <div class="meta-item"><span class="meta-lbl">File Size</span><span class="meta-val" id="metaSize">—</span></div>
+                    <div class="meta-item"><span class="meta-lbl">Resolution</span><span class="meta-val" id="metaRes">—</span></div>
+                    <div class="meta-item"><span class="meta-lbl">Native FPS</span><span class="meta-val" id="metaFps">—</span></div>
+                    <div class="meta-item"><span class="meta-lbl">Total Frames</span><span class="meta-val" id="metaFrames">—</span></div>
+                    <div class="meta-item"><span class="meta-lbl">Duration</span><span class="meta-val" id="metaDuration">—</span></div>
+                    <div class="meta-item"><span class="meta-lbl">Camera ID</span><span class="meta-val" id="metaCam">—</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 2: Live Processing Stage & Real-time Sightings -->
+    <div class="stage-grid">
+        <!-- Player Column -->
+        <div class="rec-card" style="margin-bottom:0;">
+            <div class="rec-card-hdr">
+                <h3 class="rec-card-title">🖥️ Step 2: AI Detection &amp; Tracking Stream</h3>
+                <span id="playerStateBadge" class="pill pill-state" style="background:rgba(100,116,139,.2); color:#94a3b8;">Awaiting Video</span>
+            </div>
+            <div style="padding:1rem;">
+                <div class="player-wrap">
+                    <canvas id="videoCanvas" width="960" height="540"></canvas>
+                    <div class="player-empty-placeholder" id="playerEmpty">
+                        <div style="font-size:3rem; margin-bottom:.5rem;">🎥</div>
+                        <div style="font-size:.95rem; font-weight:600; color:#94a3b8;">Upload video and click "Start Detection"</div>
+                        <div style="font-size:.78rem; color:#475569;">Frames and YOLO tracking will render live here</div>
+                    </div>
+                    <div class="player-top-overlay" id="playerOverlay" style="display:none;">
+                        <span style="font-size:.75rem; font-weight:700; color:#34d399; background:rgba(0,0,0,.7); padding:.2rem .5rem; border-radius:4px;" id="ovlFrameInfo">Frame 0 / 0</span>
+                        <span style="font-size:.75rem; font-weight:700; color:#38bdf8; background:rgba(0,0,0,.7); padding:.2rem .5rem; border-radius:4px;" id="ovlTrackInfo">0 Active Tracks</span>
+                    </div>
+                </div>
+            </div>
+            <!-- Controls & Progress -->
+            <div class="ctrl-bar">
+                <div class="progress-container">
+                    <div class="progress-labels">
+                        <span id="progTime">00:00 / 00:00</span>
+                        <span id="progPct">0.0%</span>
+                    </div>
+                    <div class="progress-bar-track">
+                        <div class="progress-bar-fill" id="progFill"></div>
+                    </div>
+                </div>
+                <div class="ctrl-row">
+                    <div class="ctrl-btns">
+                        <button id="btnStart" class="btn-act btn-start" onclick="startProcessing()" disabled>▶ Start Detection</button>
+                        <button id="btnPause" class="btn-act btn-pause" onclick="togglePause()" disabled>⏸ Pause</button>
+                        <button id="btnStop" class="btn-act btn-stop" onclick="stopProcessing()" disabled>⏹ Stop</button>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:.75rem;">
+                        <span style="font-size:.78rem; color:#94a3b8; font-weight:600;">Processing Rate:</span>
+                        <div class="speed-grp">
+                            <button class="btn-spd active" id="spd-1x" onclick="setSpeed('1x')">1x</button>
+                            <button class="btn-spd" id="spd-2x" onclick="setSpeed('2x')">2x</button>
+                            <button class="btn-spd" id="spd-max" onclick="setSpeed('max')">Max ⚡</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar: Counters & Real-time Feed -->
+        <div class="rec-sidebar">
+            <div class="cat-breakdown">
+                <div class="cat-card"><div class="cat-num" id="cntCars">0</div><div class="cat-lbl">🚗 Cars</div></div>
+                <div class="cat-card"><div class="cat-num" id="cntRick">0</div><div class="cat-lbl">🛺 Autos</div></div>
+                <div class="cat-card"><div class="cat-num" id="cntTruck">0</div><div class="cat-lbl">🚛 Trucks</div></div>
+                <div class="cat-card"><div class="cat-num" id="cntMini">0</div><div class="cat-lbl">🛻 Mini-Trk</div></div>
+                <div class="cat-card"><div class="cat-num" id="cntBus">0</div><div class="cat-lbl">🚌 Buses</div></div>
+                <div class="cat-card"><div class="cat-num" id="cntBike">0</div><div class="cat-lbl">🛵 Bikes</div></div>
+            </div>
+            <div class="feed-list" id="feedList">
+                <div style="text-align:center; padding:3rem 1rem; color:#475569;" id="feedEmpty">
+                    <div style="font-size:2rem; margin-bottom:.3rem;">🔍</div>
+                    <div style="font-size:.85rem;">Sightings stream will appear live as vehicles are confirmed</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 3: Sighting Audit Table -->
+    <div class="rec-card" style="margin-top:1.5rem;">
+        <div class="rec-card-hdr">
+            <h3 class="rec-card-title">📊 Step 3: Sighting Audit Report (Saved to PostgreSQL)</h3>
+            <span id="auditCountBadge" class="pill">0 sightings recorded</span>
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="rec-table">
+                <thead>
+                    <tr>
+                        <th>Crop</th>
+                        <th>Timestamp</th>
+                        <th>Camera Source</th>
+                        <th>Vehicle Class</th>
+                        <th>License Plate</th>
+                        <th>Global Track ID</th>
+                        <th>Confidence</th>
+                    </tr>
+                </thead>
+                <tbody id="auditTableBody">
+                    <tr>
+                        <td colspan="7" style="text-align:center; padding:2.5rem; color:#64748b;">
+                            No sightings logged yet. Processing footage will save vehicle entries to database in real-time.
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Modal for Zooming Crop Image -->
+    <div id="cropModal" onclick="this.style.display='none'">
+        <div class="modal-box" onclick="event.stopPropagation()">
+            <img id="cropModalImg" src="" style="max-width:100%; max-height:70vh; border-radius:8px; object-fit:contain; display:block; margin:0 auto .75rem; box-shadow:0 8px 30px rgba(0,0,0,.6);">
+            <div id="cropModalCaption" style="font-size:.95rem; font-weight:700; color:#f8fafc;"></div>
+            <button onclick="document.getElementById('cropModal').style.display='none'" style="margin-top:.85rem; background:#334155; border:none; color:#f8fafc; border-radius:6px; padding:.4rem 1.25rem; cursor:pointer; font-weight:600;">Close</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ══ State Variables ══════════════════════════════════════════════
+let currentJobId = null;
+let currentCameraId = null;
+let selectedSpeed = '1x';
+let ws = null;
+let isPaused = false;
+let totalSightings = 0;
+const counts = { car: 0, rick: 0, truck: 0, mini: 0, bus: 0, bike: 0 };
+
+const canvas = document.getElementById('videoCanvas');
+const ctx = canvas.getContext('2d');
+let currentBoxes = [];
+
+const BADGE_MAP = {
+    car: 'b-car',
+    truck: 'b-truck',
+    'mini-truck': 'b-mini-truck',
+    minitruck: 'b-mini-truck',
+    bus: 'b-bus',
+    motorcycle: 'b-motorcycle',
+    bike: 'b-motorcycle',
+    'auto rickshaw': 'b-auto-rickshaw',
+    rickshaw: 'b-auto-rickshaw',
+    cng: 'b-auto-rickshaw',
+    bicycle: 'b-bicycle',
+    cycle: 'b-bicycle',
+};
+const EMOJI_MAP = {
+    car: '🚗',
+    truck: '🚛',
+    'mini-truck': '🛻',
+    minitruck: '🛻',
+    bus: '🚌',
+    motorcycle: '🛵',
+    bike: '🛵',
+    'auto rickshaw': '🛺',
+    rickshaw: '🛺',
+    cng: '🛺',
+    bicycle: '🚲',
+    cycle: '🚲',
+};
+
+// ══ 1. Load Camera Options for Association ═══════════════════════
+async function loadCameras() {
+    try {
+        const resp = await fetch('/api/v1/recorded/cameras');
+        if (!resp.ok) return;
+        const cameras = await resp.json();
+
+        const dd = document.getElementById('cameraDropdown');
+        const ql = document.getElementById('quickCamList');
+        dd.innerHTML = '<option value="">-- Choose Camera Location --</option>';
+        ql.innerHTML = '';
+
+        cameras.forEach((cam, i) => {
+            // Dropdown option
+            const opt = document.createElement('option');
+            opt.value = cam.id;
+            opt.textContent = `${cam.name} (${cam.location_label})`;
+            dd.appendChild(opt);
+
+            // Quick pill (first 10)
+            if (i < 10) {
+                const pill = document.createElement('button');
+                pill.className = 'cam-pill-opt';
+                pill.id = `cam-pill-${cam.id}`;
+                pill.textContent = cam.name.replace(' - Gujarat Grid', '');
+                pill.onclick = () => selectCamera(cam.id);
+                ql.appendChild(pill);
+            }
+        });
+
+        // Default to Camera 04 or first if available
+        const cam04 = cameras.find(c => c.source_grid_id === '4' || c.name.includes('04'));
+        if (cam04) {
+            selectCamera(cam04.id);
+        } else if (cameras.length) {
+            selectCamera(cameras[0].id);
+        }
+    } catch (e) {
+        console.error('loadCameras error:', e);
+    }
+}
+
+function selectCamera(camId) {
+    currentCameraId = camId;
+    const dd = document.getElementById('cameraDropdown');
+    if (dd) dd.value = camId;
+
+    document.querySelectorAll('.cam-pill-opt').forEach(p => p.classList.remove('selected'));
+    const activePill = document.getElementById(`cam-pill-${camId}`);
+    if (activePill) activePill.classList.add('selected');
+
+    const metaCam = document.getElementById('metaCam');
+    if (metaCam && dd.selectedOptions[0]) {
+        metaCam.textContent = dd.selectedOptions[0].textContent;
+    }
+    checkReadyToStart();
+}
+
+function handleCameraDropdownChange(val) {
+    if (val) selectCamera(val);
+}
+
+// ══ 2. Drag & Drop + File Upload ═════════════════════════════════
+const dropzone = document.getElementById('dropzone');
+
+['dragenter', 'dragover'].forEach(name => {
+    dropzone.addEventListener(name, (e) => {
+        e.preventDefault();
+        dropzone.classList.add('dragover');
+    });
+});
+['dragleave', 'drop'].forEach(name => {
+    dropzone.addEventListener(name, (e) => {
+        e.preventDefault();
+        dropzone.classList.remove('dragover');
+    });
+});
+
+dropzone.addEventListener('drop', (e) => {
+    const files = e.dataTransfer.files;
+    if (files && files.length) {
+        handleFileSelected(files[0]);
+    }
+});
+
+async function handleFileSelected(file) {
+    if (!file) return;
+    if (!currentCameraId) {
+        alert('Please select a target camera location first.');
+        return;
+    }
+
+    const badge = document.getElementById('uploadStatusBadge');
+    badge.textContent = 'Uploading & Probing…';
+    badge.style.background = 'rgba(234,179,8,.2)';
+    badge.style.color = '#facc15';
+
+    document.getElementById('dropzoneText').textContent = `Uploading ${file.name}…`;
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('camera_id', currentCameraId);
+
+    try {
+        const resp = await fetch('/api/v1/recorded/upload', {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!resp.ok) {
+            const err = await resp.json();
+            throw new Error(err.detail || 'Upload failed');
+        }
+
+        const res = await resp.json();
+        currentJobId = res.job_id;
+        const meta = res.metadata;
+
+        // Display metadata
+        document.getElementById('metaName').textContent = meta.filename;
+        document.getElementById('metaSize').textContent = `${meta.file_size_mb} MB`;
+        document.getElementById('metaRes').textContent = `${meta.width} × ${meta.height}`;
+        document.getElementById('metaFps').textContent = `${meta.fps} FPS`;
+        document.getElementById('metaFrames').textContent = meta.total_frames;
+        document.getElementById('metaDuration').textContent = `${meta.duration_s}s`;
+        document.getElementById('metaCam').textContent = meta.camera_name;
+        document.getElementById('fileMetaBox').style.display = 'block';
+
+        badge.textContent = 'Uploaded & Ready';
+        badge.style.background = 'rgba(16,185,129,.2)';
+        badge.style.color = '#34d399';
+        document.getElementById('dropzoneText').textContent = `✅ ${file.name} ready`;
+
+        document.getElementById('playerStateBadge').textContent = 'Ready to Start';
+        document.getElementById('playerStateBadge').style.color = '#38bdf8';
+
+        connectJobWebSocket(currentJobId);
+        checkReadyToStart();
+    } catch (e) {
+        alert('Upload Error: ' + e.message);
+        badge.textContent = 'Upload Failed';
+        badge.style.background = 'rgba(239,68,68,.2)';
+        badge.style.color = '#f87171';
+        document.getElementById('dropzoneText').textContent = 'Drop footage or click to try again';
+    }
+}
+
+function checkReadyToStart() {
+    const btn = document.getElementById('btnStart');
+    btn.disabled = !(currentJobId && currentCameraId);
+}
+
+// ══ 3. Playback Controls ═════════════════════════════════════════
+function setSpeed(spd) {
+    selectedSpeed = spd;
+    document.querySelectorAll('.btn-spd').forEach(b => b.classList.remove('active'));
+    document.getElementById(`spd-${spd}`).classList.add('active');
+    document.getElementById('lblSpeed').textContent = spd;
+}
+
+async function startProcessing() {
+    if (!currentJobId) return;
+
+    try {
+        const resp = await fetch('/api/v1/recorded/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ job_id: currentJobId, speed: selectedSpeed }),
+        });
+        if (!resp.ok) throw new Error('Start failed');
+
+        document.getElementById('btnStart').disabled = true;
+        document.getElementById('btnPause').disabled = false;
+        document.getElementById('btnStop').disabled = false;
+        document.getElementById('playerEmpty').style.display = 'none';
+        document.getElementById('playerOverlay').style.display = 'flex';
+        document.getElementById('playerStateBadge').textContent = 'AI Processing';
+        document.getElementById('playerStateBadge').style.color = '#34d399';
+    } catch (e) {
+        alert(e.message);
+    }
+}
+
+async function togglePause() {
+    if (!currentJobId) return;
+    const url = isPaused ? '/api/v1/recorded/resume' : '/api/v1/recorded/pause';
+
+    try {
+        const resp = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ job_id: currentJobId }),
+        });
+        if (!resp.ok) return;
+
+        isPaused = !isPaused;
+        const btn = document.getElementById('btnPause');
+        btn.textContent = isPaused ? '▶ Resume' : '⏸ Pause';
+        document.getElementById('playerStateBadge').textContent = isPaused ? 'Paused' : 'AI Processing';
+        document.getElementById('playerStateBadge').style.color = isPaused ? '#f59e0b' : '#34d399';
+    } catch (e) {
+        console.error('Pause toggle failed:', e);
+    }
+}
+
+async function stopProcessing() {
+    if (!currentJobId) return;
+
+    try {
+        await fetch('/api/v1/recorded/stop', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ job_id: currentJobId }),
+        });
+        document.getElementById('btnStart').disabled = false;
+        document.getElementById('btnPause').disabled = true;
+        document.getElementById('btnStop').disabled = true;
+        document.getElementById('playerStateBadge').textContent = 'Stopped';
+        document.getElementById('playerStateBadge').style.color = '#ef4444';
+    } catch (e) {
+        console.error('Stop failed:', e);
+    }
+}
+
+// ══ 4. WebSocket Streaming ═══════════════════════════════════════
+function connectJobWebSocket(jobId) {
+    if (ws) ws.close();
+
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${proto}//${location.host}/ws/recorded/${jobId}`);
+
+    const wsDot = document.getElementById('wsDot');
+    const wsLbl = document.getElementById('wsLbl');
+
+    ws.onopen = () => {
+        wsDot.className = 'ws-dot ws-dot--on';
+        wsLbl.textContent = 'Stream Active';
+    };
+
+    ws.onmessage = ({ data }) => {
+        try {
+            const msg = JSON.parse(data);
+            handleWsMessage(msg);
+        } catch (_) {}
+    };
+
+    ws.onclose = () => {
+        wsDot.className = 'ws-dot';
+        wsLbl.textContent = 'Standby';
+    };
+}
+
+function handleWsMessage(msg) {
+    switch (msg.type) {
+        case 'VIDEO_FRAME':
+            renderVideoFrame(msg.data.jpeg_b64);
+            break;
+        case 'FRAME_BOXES':
+            currentBoxes = msg.data.boxes || [];
+            document.getElementById('ovlTrackInfo').textContent = `${msg.data.active_tracks || 0} Active Tracks`;
+            break;
+        case 'NEW_DETECTION':
+            handleNewDetection(msg.data);
+            break;
+        case 'JOB_PROGRESS':
+            handleJobProgress(msg.data);
+            break;
+        case 'JOB_DONE':
+            handleJobDone(msg.data);
+            break;
+    }
+}
+
+// ══ 5. Canvas Video & Bounding Boxes Rendering ═══════════════════
+const frameImg = new Image();
+
+function renderVideoFrame(jpegB64) {
+    frameImg.onload = () => {
+        if (canvas.width !== frameImg.width || canvas.height !== frameImg.height) {
+            canvas.width = frameImg.width;
+            canvas.height = frameImg.height;
+        }
+        ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
+
+        // Draw bounding boxes on top of fresh frame
+        if (currentBoxes && currentBoxes.length) {
+            currentBoxes.forEach(b => {
+                const [nx1, ny1, nx2, ny2] = b.bbox;
+                const x = nx1 * canvas.width;
+                const y = ny1 * canvas.height;
+                const w = (nx2 - nx1) * canvas.width;
+                const h = (ny2 - ny1) * canvas.height;
+
+                const cls = (b.class_name || 'Vehicle').toLowerCase();
+                let color = '#38bdf8';
+                if (cls.includes('rickshaw') || cls.includes('cng')) color = '#f59e0b';
+                else if (cls.includes('bike') || cls.includes('motorcycle') || cls.includes('cycle')) color = '#10b981';
+                else if (cls.includes('bus')) color = '#a855f7';
+                else if (cls.includes('truck')) color = '#ec4899';
+                else if (cls.includes('car')) color = '#3b82f6';
+
+                // Bounding box with glow
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2.5;
+                ctx.shadowColor = color;
+                ctx.shadowBlur = 6;
+                ctx.strokeRect(x, y, w, h);
+                ctx.shadowBlur = 0;
+
+                // Label pill
+                const trk = b.track_id ? `#${b.track_id} ` : '';
+                const conf = b.confidence ? ` ${Math.round(b.confidence)}%` : '';
+                const label = `${trk}${b.class_name}${conf}`;
+
+                ctx.font = 'bold 11px system-ui, sans-serif';
+                const tw = ctx.measureText(label).width;
+                ctx.fillStyle = 'rgba(7, 15, 35, 0.92)';
+                ctx.fillRect(x, Math.max(0, y - 18), tw + 12, 18);
+
+                ctx.fillStyle = color;
+                ctx.fillText(label, x + 6, Math.max(13, y - 5));
+            });
+        }
+    };
+    frameImg.src = 'data:image/jpeg;base64,' + jpegB64;
+}
+
+// ══ 6. Sighting Entry & Category Counters ════════════════════════
+function handleNewDetection(d) {
+    totalSightings++;
+    document.getElementById('lblSightings').textContent = totalSightings;
+    document.getElementById('auditCountBadge').textContent = `${totalSightings} sightings recorded`;
+
+    // Category breakdown
+    const cname = (d.class_name || '').toLowerCase();
+    if (cname.includes('car')) { counts.car++; document.getElementById('cntCars').textContent = counts.car; }
+    else if (cname.includes('rickshaw') || cname.includes('cng')) { counts.rick++; document.getElementById('cntRick').textContent = counts.rick; }
+    else if (cname.includes('mini')) { counts.mini++; document.getElementById('cntMini').textContent = counts.mini; }
+    else if (cname.includes('truck')) { counts.truck++; document.getElementById('cntTruck').textContent = counts.truck; }
+    else if (cname.includes('bus')) { counts.bus++; document.getElementById('cntBus').textContent = counts.bus; }
+    else if (cname.includes('bike') || cname.includes('cycle') || cname.includes('motorcycle')) { counts.bike++; document.getElementById('cntBike').textContent = counts.bike; }
+
+    // Add card to real-time feed
+    const feed = document.getElementById('feedList');
+    const empty = document.getElementById('feedEmpty');
+    if (empty) empty.style.display = 'none';
+
+    const card = document.createElement('div');
+    card.className = 'rec-ec';
+    const badgeCls = BADGE_MAP[cname] || 'b-vehicle';
+    const emoji = EMOJI_MAP[cname] || '🚘';
+
+    card.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span class="badge-v ${badgeCls}">${emoji} ${d.class_name} #${d.track_id}</span>
+            <span style="font-family:monospace; font-size:.72rem; color:#64748b;">${d.timestamp}</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:.35rem; font-size:.76rem; color:#94a3b8;">
+            <span>Plate: <strong style="color:#38bdf8;">${d.detected_plate || '—'}</strong></span>
+            <span>Conf: <strong style="color:#34d399;">${d.confidence}%</strong></span>
+        </div>
+    `;
+    feed.insertBefore(card, feed.firstChild);
+    while (feed.children.length > 40) feed.removeChild(feed.lastChild);
+
+    // Prepend to audit table
+    prependAuditRow(d);
+}
+
+function prependAuditRow(d) {
+    const tbody = document.getElementById('auditTableBody');
+    if (tbody.children.length === 1 && tbody.children[0].children.length === 1) {
+        tbody.innerHTML = '';
+    }
+
+    const cname = (d.class_name || '').toLowerCase();
+    const badgeCls = BADGE_MAP[cname] || 'b-vehicle';
+    const emoji = EMOJI_MAP[cname] || '🚘';
+
+    const tr = document.createElement('tr');
+    tr.style.background = 'rgba(56,189,248,.08)';
+    setTimeout(() => tr.style.background = 'transparent', 2000);
+
+    const cropImg = d.crop_path
+        ? `<img src="${d.crop_path}" onclick="openCropModal('${d.crop_path}', '${d.class_name} — ${d.detected_plate}')" style="width:48px;height:48px;border-radius:6px;object-fit:cover;cursor:pointer;border:1px solid rgba(255,255,255,.15);display:block;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+           <div style="display:none;width:48px;height:48px;border-radius:6px;background:#1e293b;align-items:center;justify-content:center;font-size:1.2rem;">🚘</div>`
+        : `<div style="width:48px;height:48px;border-radius:6px;background:#1e293b;display:flex;align-items:center;justify-content:center;font-size:1.2rem;">🚘</div>`;
+
+    tr.innerHTML = `
+        <td>${cropImg}</td>
+        <td style="font-family:monospace; color:#94a3b8; font-size:.8rem;">${d.timestamp}</td>
+        <td><span style="font-weight:600; color:#f1f5f9;">${d.camera_name || 'Recorded Video'}</span></td>
+        <td><span class="badge-v ${badgeCls}">${emoji} ${d.class_name}</span></td>
+        <td><span style="display:inline-block; padding:.2rem .55rem; background:#1e293b; border:1px solid rgba(255,255,255,.18); border-radius:4px; font-family:monospace; font-weight:700; letter-spacing:1px; color:#38bdf8;">${d.detected_plate || '—'}</span></td>
+        <td style="font-family:monospace; font-size:.75rem; color:#94a3b8;">${d.vehicle_track_id ? d.vehicle_track_id.substring(0,8) + '…' : '—'}</td>
+        <td><span style="color:#34d399; font-weight:700;">${d.confidence}%</span></td>
+    `;
+    tbody.insertBefore(tr, tbody.firstChild);
+    while (tbody.children.length > 50) tbody.removeChild(tbody.lastChild);
+}
+
+function handleJobProgress(p) {
+    const pct = p.pct || 0;
+    document.getElementById('progFill').style.width = `${pct}%`;
+    document.getElementById('progPct').textContent = `${pct}%`;
+    document.getElementById('ovlFrameInfo').textContent = `Frame ${p.frame_n} / ${p.total_frames}`;
+
+    const fpsVal = p.processing_fps || 0;
+    document.getElementById('lblFps').textContent = `${fpsVal} FPS`;
+    document.getElementById('progTime').textContent = `Frame ${p.frame_n} / ${p.total_frames}`;
+}
+
+function handleJobDone(d) {
+    document.getElementById('playerStateBadge').textContent = 'Completed ✅';
+    document.getElementById('playerStateBadge').style.color = '#34d399';
+    document.getElementById('progFill').style.width = '100%';
+    document.getElementById('progPct').textContent = '100%';
+    document.getElementById('btnStart').disabled = false;
+    document.getElementById('btnPause').disabled = true;
+    document.getElementById('btnStop').disabled = true;
+    alert(`🎉 Video Analysis Complete!\n\nProcessed: ${d.total_frames} frames\nConfirmed Sightings: ${d.total_detections}`);
+}
+
+function openCropModal(url, title) {
+    const modal = document.getElementById('cropModal');
+    const img = document.getElementById('cropModalImg');
+    const cap = document.getElementById('cropModalCaption');
+    if (!modal || !img) return;
+    img.src = url;
+    cap.textContent = title;
+    modal.style.display = 'flex';
+}
+
+// ══ Boot ══════════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+    loadCameras();
+});
+</script>
+{% endblock %}

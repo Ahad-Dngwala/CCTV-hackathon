@@ -361,6 +361,24 @@ def detections_page(
     )
 
 
+@router.get("/recorded-detection", response_class=HTMLResponse)
+def recorded_detection_page(
+    request: Request,
+    user: Optional[UserModel] = Depends(get_optional_current_user),
+):
+    """Phase 9 — Pre-Recorded Video AI Detection Dashboard."""
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+
+    return request.app.state.templates.TemplateResponse(
+        request=request,
+        name="recorded_detection.html",
+        context={
+            "user": user,
+        },
+    )
+
+
 
 # ── Watchlist page (Model 2) ───────────────────────────────────
 

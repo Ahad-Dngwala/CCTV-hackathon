@@ -32,6 +32,45 @@ Full specification: `Project_Context.md` §4 and `HackathonPortal.md`.
   - `PATCH /api/v1/watchlist/vehicles/{id}` — Update status or notes
   - `DELETE /api/v1/watchlist/vehicles/{id}` — Remove target and cascade alerts
 
+### 3. Live AI Vehicle Detection Dashboard & Stream Engine
+- **Web Dashboard**: Real-time surveillance at `http://localhost:8000/detection`
+- **Indian Traffic YOLOv8**: Specialized model detecting Cars, Auto Rickshaws, Motorcycles, Buses, Trucks, and Mini-Trucks.
+- **In-Frame Tracking**: IoU + spatial proximity tracking (`pipeline/tracking/frame_tracker.py`) with smooth EMA bounding boxes.
+- **Database Sighting Persistence**: `DetectionWriter` persists confirmed vehicle events into PostgreSQL `detections` & `vehicle_tracks`, saving cropped images to `detection-image/`.
+- **Feed Performance & Smoothness Optimizations**:
+  - **Zero-Stall Frame Pipeline**: Reduced frame-wait timeout in `StreamIngestClient` (`ingest.py`) from 1.0s to 0.05s, avoiding stalls during slower inferences.
+  - **Reflow Elimination**: Replaced per-frame `getBoundingClientRect()` with a `ResizeObserver` dimension cache, eliminating ~50 forced layout reflows/second.
+  - **Flicker-Free Boxes**: Optimized bounding box clear timer to 600ms to maintain seamless visuals between inferences.
+  - **Low-Latency HLS**: Low-latency HLS configuration (1-segment live sync, 4s max buffer, instant backBuffer purge).
+  - **Frame Pacing**: `INFER_EVERY_N_FRAMES = 3` with tracker interpolation, maintaining real-time video sync without drifting on CPU.
+  - **WebSocket Ping Leak Fix**: Ensured single active keepalive interval per client connection.
+- **REST & WebSocket Endpoints** (`app/routers/detections.py`):
+  - `GET /api/v1/detections` — Paginated database sightings log
+  - `GET /api/v1/detections/stats` — Real-time detection counters and active track count
+  - `WS /ws/detections` — Real-time stream for bounding boxes (`FRAME_BOXES`) and new sightings (`NEW_DETECTION`)
+
+### 4. Pre-Recorded Video AI Detection Pipeline (`/recorded-detection`)
+- **Web UI**: Dedicated on-demand portal at `http://localhost:8000/recorded-detection`
+- **High-Capacity Ingestion**: Drag-and-drop video upload supporting formats (`.mp4`, `.avi`, `.mov`, `.mkv`, `.webm`) up to **2 GB**.
+- **Metadata Probing**: Automatically probes video resolution, native FPS, total frame count, and duration using OpenCV.
+- **Target Camera Association**: Allows users to select any camera in the Gujarat CCTV registry to attribute footage to real locations.
+- **Isolated Execution**: Runs on a dedicated daemon thread (`PreRecordedVideoWorker`) with zero interference to live camera streams (`cam04`, `cam22`).
+- **Interactive Controls**:
+  - `▶ Start Detection`, `⏸ Pause` / `▶ Resume`, and `⏹ Stop` controls.
+  - Processing speed selector: `1x Realtime`, `2x Fast`, and `Max ⚡`.
+- **Real-Time Display**:
+  - Synchronized `<canvas>` player rendering video frames with glowing bounding boxes, track IDs, vehicle classes, and confidence scores.
+  - Live timeline progress bar with current frame / total frames and processing FPS counter.
+  - Category breakdown counters (🚗 Cars, 🛺 Auto Rickshaws, 🚛 Trucks, 🛻 Mini-Trucks, 🚌 Buses, 🛵 Bikes).
+  - Live Sighting Audit Report Table with crop image zoom modal and direct database synchronization.
+- **REST & WebSocket Endpoints** (`app/routers/recorded.py`):
+  - `GET /api/v1/recorded/cameras` — List active cameras for association
+  - `POST /api/v1/recorded/upload` — Upload video with 2 GB limit & OpenCV probe
+  - `POST /api/v1/recorded/start` — Start isolated video worker
+  - `POST /api/v1/recorded/pause`, `/resume`, `/stop` — Worker playback controls
+  - `GET /api/v1/recorded/status/{job_id}` — Query current job state & frame progress
+  - `WS /ws/recorded/{job_id}` — Real-time WebSocket channel streaming `VIDEO_FRAME`, `FRAME_BOXES`, `NEW_DETECTION`, and `JOB_PROGRESS`
+
 ---
 
 ## 📡 Live Stream Architecture
@@ -112,22 +151,27 @@ model2-analytics/
 ├── app/
 │   └── routers/
 │       ├── grid.py             # Live Grid API: /grid, /api/ingest, /api/v1/grid/streams
-│       └── watchlist.py        # Vehicle Watchlist REST API
+│       ├── watchlist.py        # Vehicle Watchlist REST API: /api/v1/watchlist/vehicles
+│       ├── detections.py       # Live AI Detections REST & WebSocket API: /ws/detections
+│       └── recorded.py         # Pre-Recorded Video Upload & Controls: /ws/recorded/{id}
+├── uploads/                    # Storage directory for user-uploaded video footage (.mp4, .avi, etc.)
+├── detection-image/            # Persisted cropped vehicle thumbnails for audit & ANPR
 └── pipeline/
-    ├── ingest.py               # RTSP StreamIngestClient — frame reader for AI pipeline
-    ├── detection/              # YOLOv8 vehicle detector (WIP)
-    ├── plate/                  # Plate localizer (WIP)
-    ├── ocr/                    # PaddleOCR / EasyOCR engine (WIP)
-    └── tracking/               # ByteTrack & cross-camera trajectory (WIP)
+    ├── ingest.py               # RTSP StreamIngestClient — optimized zero-latency frame reader
+    ├── runner.py               # MultiStreamPipelineRunner & CameraWorker (RTSP threads)
+    ├── video_worker.py         # PreRecordedVideoWorker — isolated on-demand video processor
+    ├── detection/              # Indian traffic YOLOv8 model & DetectionWriter (DB persistence)
+    ├── plate/                  # Plate recognizer interface & Indian plate format regex
+    ├── ocr/                    # OCR engine & text extraction
+    └── tracking/               # InFrameTracker (IoU + proximity) & cross-camera associator
 ```
 
 ---
 
-## 🔜 Next Steps (AI Pipeline)
+## 🎯 Completed Architecture Highlights
 
-1. **YOLOv8 Vehicle Detector** (`pipeline/detection/yolo_detector.py`): Detect cars, trucks, bikes from RTSP frames
-2. **Plate Localizer** (`pipeline/plate/`): Crop plate regions from vehicle bounding boxes
-3. **OCR Engine** (`pipeline/ocr/`): Extract plate text using PaddleOCR or EasyOCR
-4. **Real-Time Watchlist Correlator**: Match OCR output → push alert via WebSocket (`/ws/alerts`)
-5. **Vehicle Movement Trajectory** (`/tracking`): Reconstruct cross-camera travel paths
+1. **Indian Traffic YOLOv8**: Specialized weights detecting cars, auto-rickshaws, motorcycles, buses, trucks, mini-trucks.
+2. **Smooth Live Tracking**: Real-time IoU + centroid tracking with EMA bounding box smoothing and zero browser reflows.
+3. **Database Integration**: Automatic row insertion to PostgreSQL `detections` and `vehicle_tracks` with crop images stored on disk.
+4. **Isolated Pre-Recorded Pipeline**: On-demand video analysis running in separate threads with pause, resume, stop, and speed rate controls without affecting live camera streams.
 
