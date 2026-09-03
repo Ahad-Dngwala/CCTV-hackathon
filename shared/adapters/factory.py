@@ -55,7 +55,13 @@ class AdapterFactory:
             get = lambda k, default=None: getattr(row, k, default)  # noqa: E731
 
         rtsp_url = get("rtsp_url")
-        source_grid_id = get("source_grid_id")
+        source_grid_id = get("source_grid_id") or str(get("id") or "")
+        if not source_grid_id:
+            raise ValueError("Camera row missing both source_grid_id and id")
+
+        camera_id = str(get("id") or "")
+        if not camera_id:
+            raise ValueError("Camera row missing id")
 
         if not rtsp_url:
             raise ValueError(
@@ -80,6 +86,6 @@ class AdapterFactory:
         return RTSPAdapter(
             rtsp_url=rtsp_url,
             source_grid_id=source_grid_id,
-            camera_id=str(get("id")),
+            camera_id=camera_id,
             catalogue_metadata=meta,
         )

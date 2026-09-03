@@ -10,9 +10,12 @@ so both import paths work:
     from ingestion.worker import CameraWorker  (when model2-analytics/app is on sys.path)
 """
 import importlib
+import logging
 import sys
 import os
 import types
+
+logger = logging.getLogger(__name__)
 
 # Ensure model2-analytics/app is on sys.path for direct ingestion imports
 _real_app = os.path.normpath(
@@ -20,3 +23,4 @@ _real_app = os.path.normpath(
 )
 if _real_app not in sys.path:
     sys.path.insert(0, _real_app)
+logger.debug(f"[model2_analytics.app.ingestion] Resolved _real_app path: {_real_app}")

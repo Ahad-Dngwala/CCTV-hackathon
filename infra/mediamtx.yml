@@ -18,19 +18,6 @@ hlsAddress: :8888
 hlsAlwaysRemux: yes
 hlsSegmentDuration: 2s
 
-authMethod: internal
-authInternalUsers:
-  - user: any
-    pass:
-    ips: []
-    permissions:
-      - action: publish
-      - action: read
-      - action: playback
-      - action: api
-      - action: metrics
-      - action: pprof
-
 paths:
   cam01:
     source: rtsp://103.250.160.189:8554/stream/cam01

@@ -65,8 +65,7 @@ async def _sync_cameras(supervisor: IngestionSupervisor, cameras, mediamtx_api: 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    engine = init_engine(settings.DATABASE_URL)
-    app.state.engine = engine
+    init_engine(settings.DATABASE_URL)
 
     # Wire VMS ingestion layer (Task 7)
     frame_queue = queue.Queue(maxsize=500)

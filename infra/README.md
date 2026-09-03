@@ -81,24 +81,24 @@ Once the ingestion supervisor registers a camera stream (via the MediaMTX API):
 - **HLS**: `http://<host>:8888/<source_grid_id>/index.m3u8`
 - **WHEP** (WebRTC): `http://<host>:8889/<source_grid_id>/whep`
 
-Where `source_grid_id` is the government grid's camera ID (e.g., `1`, `6`).
+Where `source_grid_id` is the government grid's camera ID (e.g., `cam01`, `cam06`).
 
 ### Dynamic Stream Registration
 
 Streams are registered at runtime by the `IngestionSupervisor` — NOT statically in `mediamtx.yml`. To manually register a stream for testing:
 
 ```bash
-curl -X POST http://localhost:9997/v3/config/paths/add/stream1 \
+curl -X POST http://localhost:9997/v3/config/paths/add/cam01 \
   -H "Content-Type: application/json" \
-  -d '{"source": "rtsp://live.corp8.cloud:8554/stream/1", "sourceOnDemand": false}'
+  -d '{"source": "rtsp://103.250.160.189:8554/stream/cam01", "sourceOnDemand": false}'
 # Expected: 200 OK
 
 # Verify HLS is serving
-ffprobe http://localhost:8888/stream1/index.m3u8
+ffprobe http://localhost:8888/cam01/index.m3u8
 # Expected: shows video stream info, no errors
 
 # Verify WHEP endpoint exists
-curl -I http://localhost:8889/stream1/whep
+curl -I http://localhost:8889/cam01/whep
 # Expected: 405 Method Not Allowed (correct — WHEP needs POST with SDP offer, not GET)
 ```
 

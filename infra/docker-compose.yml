@@ -61,7 +61,7 @@ services:
       - "8888:8888"          # HLS
       - "8189:8189/udp"      # WebRTC UDP media data
       - "8189:8189/tcp"      # WebRTC TCP media data
-      - "9997:9997"          # HTTP API
+      - "127.0.0.1:9997:9997"  # HTTP API
     volumes:
       - ./mediamtx.yml:/mediamtx.yml:ro
     restart: unless-stopped

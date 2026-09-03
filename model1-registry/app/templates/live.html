@@ -364,9 +364,10 @@ function loadPage(pageNum) {
 
 // ── Render Card ────────────────────────────────────────────────────
 function renderCard(cam, container) {
+  const safeId = cam.id.replace(/[^A-Za-z0-9_-]/g, '_');
   var card = document.createElement('div');
   card.className = 'camera-card';
-  card.id = 'card-' + cam.id;
+  card.id = 'card-' + safeId;
 
   var codec = (cam.codec || 'H.264').toUpperCase();
   var loc = cam.location || cam.department || 'Gujarat Grid';
@@ -379,25 +380,25 @@ function renderCard(cam, container) {
       '<div class="cam-meta" title="' + esc(loc) + '">' + esc(loc) + '</div>' +
     '</div>' +
     '<div class="cam-actions">' +
-      '<span class="badge badge-connecting" id="badge-' + cam.id + '">Connecting</span>' +
-      '<button class="btn-icon" id="btn-max-' + cam.id + '" title="Maximize">&#x26F6; Max</button>' +
+      '<span class="badge badge-connecting" id="badge-' + safeId + '">Connecting</span>' +
+      '<button class="btn-icon" id="btn-max-' + safeId + '" title="Maximize">&#x26F6; Max</button>' +
     '</div>';
 
   var body = document.createElement('div');
   body.className = 'cam-body';
   body.innerHTML =
-    '<video id="vid-' + cam.id + '" class="cam-video hidden" autoplay muted playsinline preload="none"></video>' +
-    '<img id="img-' + cam.id + '" class="cam-video hidden" alt="' + esc(cam.name) + '">' +
-    '<div class="cam-overlay" id="ov-' + cam.id + '">' +
+    '<video id="vid-' + safeId + '" class="cam-video hidden" autoplay muted playsinline preload="none"></video>' +
+    '<img id="img-' + safeId + '" class="cam-video hidden" alt="' + esc(cam.name) + '">' +
+    '<div class="cam-overlay" id="ov-' + safeId + '">' +
       '<div class="overlay-spinner"></div>' +
-      '<div class="overlay-text" id="ovt-' + cam.id + '">Connecting stream...</div>' +
+      '<div class="overlay-text" id="ovt-' + safeId + '">Connecting stream...</div>' +
     '</div>';
 
   var footer = document.createElement('div');
   footer.className = 'cam-footer';
   footer.innerHTML =
-    '<span class="cam-footer-info">' + codec + ' &middot; <span id="pl-' + cam.id + '">' + (currentProtocol === 'direct' ? 'RTSP/TCP' : 'HLS') + '</span></span>' +
-    '<span class="rtsp-chip" id="chip-' + cam.id + '" title="Click to copy RTSP URI">' + esc(cam.id) + ' RTSP</span>';
+    '<span class="cam-footer-info">' + codec + ' &middot; <span id="pl-' + safeId + '">' + (currentProtocol === 'direct' ? 'RTSP/TCP' : 'HLS') + '</span></span>' +
+    '<span class="rtsp-chip" id="chip-' + safeId + '" title="Click to copy RTSP URI">' + esc(cam.id) + ' RTSP</span>';
 
   card.appendChild(header);
   card.appendChild(body);
@@ -405,12 +406,12 @@ function renderCard(cam, container) {
   container.appendChild(card);
 
   // Wire maximize button safely without eval/string concatenation
-  card.querySelector('#btn-max-' + cam.id).onclick = function() {
+  card.querySelector('#btn-max-' + safeId).onclick = function() {
     openModal(cam.id);
   };
 
   // Wire RTSP copy chip
-  card.querySelector('#chip-' + cam.id).onclick = function() {
+  card.querySelector('#chip-' + safeId).onclick = function() {
     copyToClipboard(cam.rtsp_url || ('rtsp://103.250.160.189:8554/stream/' + cam.id));
     notify('Copied RTSP URL for ' + cam.id);
   };
@@ -429,14 +430,15 @@ function attachStream(cam) {
 
 // ── Direct RTSP-decoded stream ─────────────────────────────────────
 function attachDirect(cam) {
-  var video = document.getElementById('vid-' + cam.id);
-  var img = document.getElementById('img-' + cam.id);
+  const safeId = cam.id.replace(/[^A-Za-z0-9_-]/g, '_');
+  var video = document.getElementById('vid-' + safeId);
+  var img = document.getElementById('img-' + safeId);
   if (!img) return;
 
   if (video) video.classList.add('hidden');
   img.classList.remove('hidden');
 
-  var pl = document.getElementById('pl-' + cam.id);
+  var pl = document.getElementById('pl-' + safeId);
   if (pl) pl.textContent = 'RTSP/TCP';
 
   var mjpegUrl = cam.mjpeg_url || ('/api/v1/cameras/grid/' + cam.id + '/live');
@@ -449,7 +451,8 @@ function attachDirect(cam) {
   img.onerror = function() {
     showErr(cam.id, 'Retrying...');
     schedRetry(cam, function(c) {
-      var i = document.getElementById('img-' + c.id);
+      const sId = c.id.replace(/[^A-Za-z0-9_-]/g, '_');
+      var i = document.getElementById('img-' + sId);
       if (i) { i.src = (c.mjpeg_url || ('/api/v1/cameras/grid/' + c.id + '/live')) + '?t=' + Date.now(); }
     }, 2000, 30000);
   };
@@ -457,14 +460,15 @@ function attachDirect(cam) {
 
 // ── HLS Stream Attachment ──────────────────────────────────────────
 function attachHls(cam) {
-  var video = document.getElementById('vid-' + cam.id);
-  var img = document.getElementById('img-' + cam.id);
+  const safeId = cam.id.replace(/[^A-Za-z0-9_-]/g, '_');
+  var video = document.getElementById('vid-' + safeId);
+  var img = document.getElementById('img-' + safeId);
   if (!video) return;
 
   if (img) img.classList.add('hidden');
   video.classList.remove('hidden');
 
-  var pl = document.getElementById('pl-' + cam.id);
+  var pl = document.getElementById('pl-' + safeId);
   if (pl) pl.textContent = 'HLS';
 
   if (!cam.hls_url) {
@@ -537,26 +541,29 @@ function resetBk(camId) {
 
 // ── Status Helpers ─────────────────────────────────────────────────
 function showLive(camId) {
-  var b = document.getElementById('badge-' + camId);
-  var ov = document.getElementById('ov-' + camId);
+  const safeId = String(camId).replace(/[^A-Za-z0-9_-]/g, '_');
+  var b = document.getElementById('badge-' + safeId);
+  var ov = document.getElementById('ov-' + safeId);
   if (b) { b.className = 'badge badge-live'; b.innerHTML = '&#9679;&nbsp;LIVE'; }
   if (ov) ov.classList.add('gone');
   resetBk(camId);
 }
 
 function showBuf(camId, msg) {
-  var b = document.getElementById('badge-' + camId);
-  var ov = document.getElementById('ov-' + camId);
-  var ovt = document.getElementById('ovt-' + camId);
+  const safeId = String(camId).replace(/[^A-Za-z0-9_-]/g, '_');
+  var b = document.getElementById('badge-' + safeId);
+  var ov = document.getElementById('ov-' + safeId);
+  var ovt = document.getElementById('ovt-' + safeId);
   if (b) { b.className = 'badge badge-buffering'; b.textContent = msg || 'Wait'; }
   if (ov) ov.classList.remove('gone');
   if (ovt) ovt.textContent = msg || 'Connecting...';
 }
 
 function showErr(camId, msg) {
-  var b = document.getElementById('badge-' + camId);
-  var ov = document.getElementById('ov-' + camId);
-  var ovt = document.getElementById('ovt-' + camId);
+  const safeId = String(camId).replace(/[^A-Za-z0-9_-]/g, '_');
+  var b = document.getElementById('badge-' + safeId);
+  var ov = document.getElementById('ov-' + safeId);
+  var ovt = document.getElementById('ovt-' + safeId);
   if (b) { b.className = 'badge badge-error'; b.textContent = 'Error'; }
   if (ov) { ov.classList.remove('gone'); }
   if (ovt) ovt.textContent = msg || 'Stream error';
@@ -564,14 +571,15 @@ function showErr(camId, msg) {
 
 // ── Cleanup ────────────────────────────────────────────────────────
 function destroyCam(camId) {
+  const safeId = String(camId).replace(/[^A-Za-z0-9_-]/g, '_');
   if (retryTimers[camId]) { clearTimeout(retryTimers[camId]); delete retryTimers[camId]; }
   if (hlsInstances[camId]) {
     try { hlsInstances[camId].stopLoad(); hlsInstances[camId].detachMedia(); hlsInstances[camId].destroy(); } catch(e) {}
     delete hlsInstances[camId];
   }
   resetBk(camId);
-  var v = document.getElementById('vid-' + camId);
-  var im = document.getElementById('img-' + camId);
+  var v = document.getElementById('vid-' + safeId);
+  var im = document.getElementById('img-' + safeId);
   if (v) { v.pause(); v.src = ''; v.load(); }
   if (im) { im.src = ''; }
 }

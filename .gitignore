@@ -9,6 +9,3 @@ ENV/
 .idea/
 .vscode/
 *.sqlite3
-PR_Guide.md
-VMS_Master_Architecture.md
-VMS_Task_Breakdowns.md

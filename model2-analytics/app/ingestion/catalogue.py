@@ -27,7 +27,7 @@ class CataloguePoller:
     """
 
     def __init__(self, grid_host: str = "cctv.corp8.cloud") -> None:
-        self._catalogue_url = "https://cctv.corp8.cloud/cameras.json"
+        self._catalogue_url = f"https://{grid_host}/cameras.json"
 
     async def fetch(self) -> list[GridCameraEntry]:
         """Fetch current catalogue using GridCatalogueResponse.model_validate()."""

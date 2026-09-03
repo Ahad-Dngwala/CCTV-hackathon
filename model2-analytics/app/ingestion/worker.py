@@ -97,16 +97,16 @@ class CameraWorker:
         """
         Connect and read frames until stream fails or stop requested.
         """
-        if not self._adapter.connect():
-            raise ConnectionError(
-                f"[{self._source_grid_id}] connect() returned False"
-            )
-
-        stream = self._adapter.get_stream()
-        cap: cv2.VideoCapture = stream.capture
-        logger.info(f"[{self._source_grid_id}] Connected")
-
         try:
+            connected = self._adapter.connect()
+            if not connected:
+                self._adapter.disconnect()
+                raise ConnectionError(f"[{self._source_grid_id}] connect() returned False")
+
+            stream = self._adapter.get_stream()
+            cap: cv2.VideoCapture = stream.capture
+            logger.info(f"[{self._source_grid_id}] Connected")
+
             while not self._stop_event.is_set():
                 ok, frame = cap.read()
                 if not ok:
