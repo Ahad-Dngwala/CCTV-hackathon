@@ -17,6 +17,8 @@ hls: yes
 hlsAddress: :8888
 hlsAlwaysRemux: yes
 hlsSegmentDuration: 2s
+hlsAllowOrigin: '*'
+webrtcAllowOrigin: '*'
 
 paths:
   cam01:

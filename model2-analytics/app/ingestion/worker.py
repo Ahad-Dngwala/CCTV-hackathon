@@ -130,8 +130,10 @@ class CameraWorker:
                 try:
                     self._output_queue.put_nowait(packet)
                 except queue.Full:
-                    # Queue full -> drop frame, never block
-                    logger.debug(f"[{self._source_grid_id}] Queue full — frame dropped")
+                    # Queue full -> drop frame, throttle to avoid burning CPU when queue has no consumers
+                    time.sleep(0.1)
+
+                time.sleep(0.03)  # Yield GIL and pace reading to avoid spinning at 100% CPU
 
         finally:
             self._adapter.disconnect()

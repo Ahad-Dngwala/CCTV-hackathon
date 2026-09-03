@@ -52,36 +52,6 @@ def _build_stream_urls(cam: CameraModel) -> tuple[str, str, str]:
     return rtsp, whep, hls
 
 
-# ── HTML View: Live Multi-Camera Grid ────────────────────────────
-
-
-@router.get("/grid", response_class=HTMLResponse)
-def live_grid_page(
-    request: Request,
-    department_id: Optional[str] = Query(None),
-    district_id: Optional[str] = Query(None),
-    db: Session = Depends(get_db),
-):
-    """
-    Renders the Model 2 Control Room Live Video Grid UI.
-    """
-    user = getattr(request.state, "user", None)
-    departments = db.query(DeptModel).order_by(DeptModel.name).all()
-    districts = db.query(DistModel).order_by(DistModel.name).all()
-
-    return request.app.state.templates.TemplateResponse(
-        request=request,
-        name="grid.html",
-        context={
-            "user": user,
-            "departments": departments,
-            "districts": districts,
-            "selected_department": department_id or "",
-            "selected_district": district_id or "",
-        },
-    )
-
-
 # ── REST API: Streams List ───────────────────────────────────────
 
 
