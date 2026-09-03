@@ -37,6 +37,7 @@ services:
       dockerfile: infra/Dockerfile
     image: sentinel-model1-app:latest
     pull_policy: build
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
@@ -44,10 +45,26 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: "postgresql://sentinel:sentinel_dev@db:5432/sentinel"
+      GRID_HOST: "${GRID_HOST:-cctv.corp8.cloud}"
+      MEDIAMTX_API: "${MEDIAMTX_API:-mediamtx:9997}"
+      DISABLE_INGESTION: "${DISABLE_INGESTION:-false}"
     volumes:
       - ../model1-registry/app:/app/app
       - ../model2-analytics:/model2-analytics
       - ../shared:/app/shared
+
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    ports:
+      - "8554:8554"          # RTSP
+      - "8889:8889"          # WHEP HTTP signaling
+      - "8888:8888"          # HLS
+      - "8189:8189/udp"      # WebRTC UDP media data
+      - "8189:8189/tcp"      # WebRTC TCP media data
+      - "127.0.0.1:9997:9997"  # HTTP API
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
+    restart: unless-stopped
 
 volumes:
   sentinel_pgdata:

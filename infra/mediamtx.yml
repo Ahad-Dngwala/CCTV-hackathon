@@ -1,0 +1,111 @@
+# MediaMTX config for Sentinel
+logLevel: info
+logDestinations: [stdout]
+
+api: yes
+apiAddress: :9997
+
+rtsp: yes
+rtspAddress: :8554
+protocols: [tcp]
+
+webrtc: yes
+webrtcAddress: :8889
+webrtcAdditionalHosts: [127.0.0.1, localhost]
+
+hls: yes
+hlsAddress: :8888
+hlsAlwaysRemux: yes
+hlsSegmentDuration: 2s
+
+paths:
+  cam01:
+    source: rtsp://103.250.160.189:8554/stream/cam01
+    sourceOnDemand: yes
+  cam02:
+    source: rtsp://103.250.160.189:8554/stream/cam02
+    sourceOnDemand: yes
+  cam03:
+    source: rtsp://103.250.160.189:8554/stream/cam03
+    sourceOnDemand: yes
+  cam04:
+    source: rtsp://103.250.160.189:8554/stream/cam04
+    sourceOnDemand: yes
+  cam05:
+    source: rtsp://103.250.160.189:8554/stream/cam05
+    sourceOnDemand: yes
+  cam06:
+    source: rtsp://103.250.160.189:8554/stream/cam06
+    sourceOnDemand: yes
+  cam07:
+    source: rtsp://103.250.160.189:8554/stream/cam07
+    sourceOnDemand: yes
+  cam08:
+    source: rtsp://103.250.160.189:8554/stream/cam08
+    sourceOnDemand: yes
+  cam09:
+    source: rtsp://103.250.160.189:8554/stream/cam09
+    sourceOnDemand: yes
+  cam10:
+    source: rtsp://103.250.160.189:8554/stream/cam10
+    sourceOnDemand: yes
+  cam11:
+    source: rtsp://103.250.160.189:8554/stream/cam11
+    sourceOnDemand: yes
+  cam12:
+    source: rtsp://103.250.160.189:8554/stream/cam12
+    sourceOnDemand: yes
+  cam13:
+    source: rtsp://103.250.160.189:8554/stream/cam13
+    sourceOnDemand: yes
+  cam14:
+    source: rtsp://103.250.160.189:8554/stream/cam14
+    sourceOnDemand: yes
+  cam15:
+    source: rtsp://103.250.160.189:8554/stream/cam15
+    sourceOnDemand: yes
+  cam16:
+    source: rtsp://103.250.160.189:8554/stream/cam16
+    sourceOnDemand: yes
+  cam17:
+    source: rtsp://103.250.160.189:8554/stream/cam17
+    sourceOnDemand: yes
+  cam18:
+    source: rtsp://103.250.160.189:8554/stream/cam18
+    sourceOnDemand: yes
+  cam19:
+    source: rtsp://103.250.160.189:8554/stream/cam19
+    sourceOnDemand: yes
+  cam20:
+    source: rtsp://103.250.160.189:8554/stream/cam20
+    sourceOnDemand: yes
+  cam21:
+    source: rtsp://103.250.160.189:8554/stream/cam21
+    sourceOnDemand: yes
+  cam22:
+    source: rtsp://103.250.160.189:8554/stream/cam22
+    sourceOnDemand: yes
+  cam23:
+    source: rtsp://103.250.160.189:8554/stream/cam23
+    sourceOnDemand: yes
+  cam24:
+    source: rtsp://103.250.160.189:8554/stream/cam24
+    sourceOnDemand: yes
+  cam25:
+    source: rtsp://103.250.160.189:8554/stream/cam25
+    sourceOnDemand: yes
+  cam26:
+    source: rtsp://103.250.160.189:8554/stream/cam26
+    sourceOnDemand: yes
+  cam27:
+    source: rtsp://103.250.160.189:8554/stream/cam27
+    sourceOnDemand: yes
+  cam28:
+    source: rtsp://103.250.160.189:8554/stream/cam28
+    sourceOnDemand: yes
+  cam29:
+    source: rtsp://103.250.160.189:8554/stream/cam29
+    sourceOnDemand: yes
+  cam30:
+    source: rtsp://103.250.160.189:8554/stream/cam30
+    sourceOnDemand: yes

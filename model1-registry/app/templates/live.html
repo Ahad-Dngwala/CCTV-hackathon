@@ -1,0 +1,718 @@
+{% extends "base.html" %}
+
+{% block title %}Sentinel — Live CCTV Matrix{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js"></script>
+<style>
+/* ── Live Matrix Layout ──────────────────────────────────────── */
+.live-page { display: flex; flex-direction: column; min-height: calc(100vh - 64px); }
+
+/* ── Toolbar ─────────────────────────────────────────────────── */
+.matrix-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem;
+  background: rgba(8,14,30,0.97); backdrop-filter: blur(12px);
+  padding: 0.65rem 1.2rem; border-bottom: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0; z-index: 10;
+}
+.toolbar-section { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
+.toolbar-label { font-size: 0.68rem; font-weight: 800; letter-spacing: 0.1em; color: #64748b; text-transform: uppercase; }
+.tab-btn {
+  background: rgba(20,30,60,0.8); border: 1px solid #1a2540; color: #94a3b8;
+  padding: 0.28rem 0.7rem; border-radius: 0.35rem; font-size: 0.75rem; font-weight: 600;
+  cursor: pointer; transition: all 0.15s ease; white-space: nowrap;
+}
+.tab-btn:hover { background: #1a2540; color: #cbd5e1; border-color: #2a3a5c; }
+.tab-btn.active {
+  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+  border-color: transparent; color: #fff; box-shadow: 0 0 14px rgba(79,70,229,0.45);
+}
+.layout-btn {
+  background: rgba(20,30,60,0.8); border: 1px solid #1a2540; color: #64748b;
+  padding: 0.28rem 0.55rem; border-radius: 0.35rem; font-size: 0.8rem;
+  cursor: pointer; transition: all 0.15s ease; line-height: 1;
+}
+.layout-btn:hover { background: #1a2540; color: #cbd5e1; }
+.layout-btn.active { background: rgba(37,99,235,0.15); border-color: #2563eb; color: #60a5fa; }
+.toolbar-spacer { flex: 1; min-width: 0.5rem; }
+.status-pill {
+  font-size: 0.7rem; font-weight: 600; padding: 0.22rem 0.6rem;
+  border-radius: 9999px; display: flex; align-items: center; gap: 0.3rem; white-space: nowrap;
+}
+.status-pill.online { background: rgba(16,185,129,0.12); color: #10b981; border: 1px solid rgba(16,185,129,0.3); }
+.status-pill.loading { background: rgba(234,179,8,0.12); color: #eab308; border: 1px solid rgba(234,179,8,0.3); }
+.status-pill.error { background: rgba(239,68,68,0.12); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); }
+.pulse { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: pa 1.5s infinite; }
+@keyframes pa { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.35;transform:scale(0.8)} }
+
+/* ── Grid scroll area ────────────────────────────────────────── */
+.grid-container {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+  padding: 0.85rem; scroll-behavior: smooth;
+  background: #030712;
+}
+.grid-container::-webkit-scrollbar { width: 5px; }
+.grid-container::-webkit-scrollbar-track { background: transparent; }
+.grid-container::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+
+/* ── Video grid ──────────────────────────────────────────────── */
+.video-grid { display: grid; gap: 0.75rem; width: 100%; }
+.video-grid[data-layout="1"] { grid-template-columns: 1fr; }
+.video-grid[data-layout="2"] { grid-template-columns: repeat(2, 1fr); }
+.video-grid[data-layout="3"] { grid-template-columns: repeat(3, 1fr); }
+.video-grid[data-layout="4"] { grid-template-columns: repeat(4, 1fr); }
+.video-grid[data-layout="5"] { grid-template-columns: repeat(5, 1fr); }
+
+/* ── Camera card ─────────────────────────────────────────────── */
+.camera-card {
+  background: #080f20; border: 1px solid #1a2744;
+  border-radius: 0.6rem; overflow: hidden;
+  display: flex; flex-direction: column;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+}
+.camera-card:hover {
+  border-color: #2563eb; transform: translateY(-2px);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.8), 0 0 0 1px rgba(37,99,235,0.2);
+}
+
+.cam-header {
+  padding: 0.4rem 0.75rem; background: rgba(10,18,36,0.98);
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid rgba(255,255,255,0.05); flex-shrink: 0; gap: 0.5rem;
+}
+.cam-title {
+  font-size: 0.76rem; font-weight: 700; color: #f1f5f9;
+  display: flex; align-items: center; gap: 0.35rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+}
+.cam-meta { font-size: 0.62rem; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+.cam-actions { display: flex; align-items: center; gap: 0.35rem; flex-shrink: 0; }
+.badge {
+  font-size: 0.6rem; font-weight: 800; padding: 0.12rem 0.45rem;
+  border-radius: 9999px; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap;
+}
+.badge-live { background: rgba(16,185,129,0.18); color: #10b981; border: 1px solid rgba(16,185,129,0.4); }
+.badge-buffering { background: rgba(234,179,8,0.18); color: #eab308; border: 1px solid rgba(234,179,8,0.4); }
+.badge-error { background: rgba(239,68,68,0.18); color: #ef4444; border: 1px solid rgba(239,68,68,0.4); }
+.badge-connecting { background: rgba(51,65,85,0.5); color: #94a3b8; border: 1px solid #334155; }
+.btn-icon {
+  background: rgba(255,255,255,0.05); border: 1px solid #1e293b; color: #94a3b8;
+  padding: 0.2rem 0.45rem; border-radius: 0.3rem; font-size: 0.68rem; font-weight: 600;
+  cursor: pointer; transition: all 0.15s; display: flex; align-items: center; gap: 0.25rem;
+}
+.btn-icon:hover { background: #2563eb; color: #fff; border-color: #2563eb; }
+
+/* ── Video / Image area ──────────────────────────────────────── */
+.cam-body {
+  position: relative; width: 100%; aspect-ratio: 16/9;
+  background: #020617; overflow: hidden; flex-shrink: 0;
+}
+.cam-video { width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
+.cam-video.hidden { display: none !important; }
+
+/* ── Loading / error overlay ─────────────────────────────────── */
+.cam-overlay {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.45rem;
+  background: rgba(3,7,18,0.85); pointer-events: none; z-index: 2;
+  transition: opacity 0.2s ease;
+}
+.cam-overlay.gone { display: none !important; }
+.overlay-text { font-size: 0.7rem; font-weight: 600; color: #94a3b8; text-align: center; max-width: 180px; line-height: 1.35; }
+.overlay-spinner {
+  width: 24px; height: 24px; border: 2.5px solid #1e293b;
+  border-top-color: #3b82f6; border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Footer strip ────────────────────────────────────────────── */
+.cam-footer {
+  padding: 0.3rem 0.75rem; background: rgba(6,12,24,0.96);
+  display: flex; align-items: center; justify-content: space-between;
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
+.cam-footer-info { font-size: 0.62rem; color: #64748b; font-family: ui-monospace, SFMono-Regular, monospace; }
+.rtsp-chip {
+  font-size: 0.58rem; color: #38bdf8; background: rgba(56,189,248,0.1);
+  padding: 0.1rem 0.35rem; border-radius: 0.25rem; border: 1px solid rgba(56,189,248,0.25);
+  cursor: pointer; text-decoration: none;
+}
+.rtsp-chip:hover { background: rgba(56,189,248,0.2); }
+
+/* ── Pagination ──────────────────────────────────────────────── */
+.page-info { font-size: 0.72rem; color: #64748b; padding-left: 0.3rem; }
+
+/* ── Fullscreen modal ────────────────────────────────────────── */
+.stream-modal {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.92);
+  backdrop-filter: blur(16px); z-index: 9999;
+  display: flex; align-items: center; justify-content: center; padding: 1.5rem;
+}
+.modal-card {
+  background: #080f20; border: 1px solid #1e293b; border-radius: 0.75rem;
+  width: 100%; max-width: 1100px; display: flex; flex-direction: column;
+  overflow: hidden; box-shadow: 0 32px 80px rgba(0,0,0,0.95); max-height: 92vh;
+}
+.modal-header {
+  padding: 0.75rem 1.2rem; background: rgba(10,18,36,0.99);
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid rgba(255,255,255,0.06); flex-shrink: 0;
+}
+.modal-body { flex: 1; min-height: 0; background: #000; aspect-ratio: 16/9; position: relative; }
+.modal-video { width: 100%; height: 100%; object-fit: contain; display: block; }
+.modal-close {
+  background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.25); color: #ef4444;
+  width: 30px; height: 30px; border-radius: 0.35rem; font-size: 0.95rem;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all 0.12s;
+}
+.modal-close:hover { background: #ef4444; color: #fff; }
+
+/* ── Toast notifications ─────────────────────────────────────── */
+.notif-bar { position: fixed; bottom: 1.2rem; right: 1.2rem; z-index: 10000; display: flex; flex-direction: column; gap: 0.4rem; pointer-events: none; }
+.notif {
+  background: #0f172a; border: 1px solid #334155; border-radius: 0.45rem;
+  padding: 0.55rem 0.9rem; font-size: 0.76rem; color: #cbd5e1; max-width: 320px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6); animation: ni 0.2s ease;
+}
+@keyframes ni { from{opacity:0;transform:translateX(14px)} to{opacity:1;transform:none} }
+
+/* ── Empty / error state ─────────────────────────────────────── */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1rem; padding: 5rem 2rem; color: #64748b; text-align: center; grid-column: 1/-1;
+}
+.empty-state .ei { font-size: 2.5rem; }
+.empty-state h3 { color: #94a3b8; font-size: 1.1rem; margin: 0; }
+.empty-state p { font-size: 0.85rem; max-width: 340px; line-height: 1.5; margin: 0; }
+
+* { box-sizing: border-box; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="live-page" id="live-page">
+
+  <!-- Toolbar -->
+  <div class="matrix-toolbar" id="matrix-toolbar">
+
+    <div class="toolbar-section">
+      <span class="toolbar-label">Pages</span>
+      <div id="pagination-tabs" style="display:flex;gap:0.35rem;flex-wrap:wrap;"></div>
+      <span class="page-info" id="page-info"></span>
+    </div>
+
+    <div class="toolbar-spacer"></div>
+
+    <div class="toolbar-section">
+      <span class="toolbar-label">Grid</span>
+      <button class="layout-btn" data-cols="1" onclick="setLayout(1)" title="1 Column">1&#215;1</button>
+      <button class="layout-btn" data-cols="2" onclick="setLayout(2)" title="2 Columns">2&#215;2</button>
+      <button class="layout-btn active" data-cols="3" onclick="setLayout(3)" title="3 Columns">3&#215;2</button>
+      <button class="layout-btn" data-cols="4" onclick="setLayout(4)" title="4 Columns">4&#215;2</button>
+      <button class="layout-btn" data-cols="5" onclick="setLayout(5)" title="5 Columns">5&#215;2</button>
+    </div>
+
+    <div class="toolbar-section">
+      <span class="toolbar-label">Source</span>
+      <button class="tab-btn active" id="proto-direct" onclick="setProtocol('direct')" title="Direct RTSP/TCP Server Decode">Direct (RTSP)</button>
+      <button class="tab-btn" id="proto-hls" onclick="setProtocol('hls')" title="HLS via CDN">HLS</button>
+    </div>
+
+    <div id="feed-status" class="status-pill loading">
+      <span class="pulse"></span>&nbsp;Connecting...
+    </div>
+
+  </div>
+
+  <!-- Grid -->
+  <div class="grid-container" id="grid-container">
+    <div class="video-grid" id="video-grid" data-layout="3"></div>
+  </div>
+
+</div>
+
+<!-- Fullscreen Modal -->
+<div id="stream-modal" class="stream-modal" style="display:none;">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div style="display:flex;align-items:center;gap:0.6rem;">
+        <span style="font-size:1.1rem;">&#128249;</span>
+        <div>
+          <div id="modal-title" style="color:#f8fafc;font-weight:700;font-size:0.95rem;"></div>
+          <div id="modal-sub" style="color:#64748b;font-size:0.7rem;font-family:monospace;overflow:hidden;text-overflow:ellipsis;max-width:550px;white-space:nowrap;"></div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:0.6rem;">
+        <span class="badge badge-live">&#9679;&nbsp;LIVE</span>
+        <button class="modal-close" onclick="closeModal()" title="Close (Esc)">&#10005;</button>
+      </div>
+    </div>
+    <div class="modal-body" style="position:relative;">
+      <video id="modal-video" class="modal-video" autoplay muted playsinline controls style="display:none;"></video>
+      <img id="modal-img" class="modal-video" alt="Live Stream Feed" style="display:none;object-fit:contain;position:absolute;inset:0;width:100%;height:100%;">
+    </div>
+  </div>
+</div>
+
+<!-- Toasts -->
+<div class="notif-bar" id="notif-bar"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+/**
+ * Sentinel Live Camera Matrix
+ *
+ * Rules from Integrator Guide strictly implemented:
+ *  - Camera list loaded dynamically from /api/v1/streams/catalogue (NO hardcoded IDs)
+ *  - RTSP forced over TCP (rtsp_transport=tcp) via server decoder
+ *  - Timing driven from PTS, never CAP_PROP_FPS or arrival time
+ *  - Exponential backoff reconnect: 2s start -> 2x per failure -> capped at 30s
+ *  - Join-time decode warnings logged, not treated as fatal
+ *  - Scene discontinuity (loop point) handled cleanly
+ *  - On-demand streaming: only active viewing cameras draw bandwidth
+ */
+
+var catalogue = [];
+var currentPage = 1;
+var perPage = 6;
+var currentLayout = 3;
+var currentProtocol = 'direct'; // 'direct' (RTSP server-decode) | 'hls'
+var hlsInstances = {};
+var retryTimers = {};
+var backoffState = {};
+var modalHls = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+  setLayout(3, false);
+  fetchCatalogue();
+  setInterval(fetchCatalogue, 5 * 60 * 1000); // refresh catalogue every 5 mins
+});
+
+// ── Catalogue API ──────────────────────────────────────────────────
+function fetchCatalogue() {
+  setStatus('loading', 'Loading cameras...');
+  fetch('/api/v1/streams/catalogue')
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(function(data) {
+      var live = (data.cameras || []).filter(function(c) { return c.is_live !== false; });
+      if (live.length === 0) { showEmptyState(); return; }
+      catalogue = live;
+      buildPagination();
+      loadPage(currentPage);
+      setStatus('online', live.length + ' cameras online');
+    })
+    .catch(function(err) {
+      setStatus('error', 'API error');
+      notify('Catalogue load failed: ' + err.message + '. Retrying in 5s.');
+      setTimeout(fetchCatalogue, 5000);
+    });
+}
+
+// ── Pagination ─────────────────────────────────────────────────────
+function buildPagination() {
+  var total = Math.ceil(catalogue.length / perPage) || 1;
+  var bar = document.getElementById('pagination-tabs');
+  bar.innerHTML = '';
+  for (var p = 1; p <= total; p++) {
+    var s = (p - 1) * perPage + 1;
+    var e = Math.min(p * perPage, catalogue.length);
+    var btn = document.createElement('button');
+    btn.className = 'tab-btn' + (p === currentPage ? ' active' : '');
+    btn.id = 'page-btn-' + p;
+    btn.textContent = s + '–' + e;
+    (function(pageIdx) {
+      btn.onclick = function() { loadPage(pageIdx); };
+    })(p);
+    bar.appendChild(btn);
+  }
+  updatePageInfo(total);
+}
+
+function updatePageInfo(total) {
+  var t = total || Math.ceil(catalogue.length / perPage) || 1;
+  var el = document.getElementById('page-info');
+  if (el) el.textContent = '(' + currentPage + '/' + t + ')';
+}
+
+// ── Load Page ──────────────────────────────────────────────────────
+function loadPage(pageNum) {
+  var total = Math.ceil(catalogue.length / perPage) || 1;
+  if (pageNum > total) pageNum = total;
+  currentPage = pageNum;
+
+  document.querySelectorAll('#pagination-tabs .tab-btn').forEach(function(b, i) {
+    b.classList.toggle('active', i + 1 === pageNum);
+  });
+  updatePageInfo();
+
+  destroyAll();
+
+  var grid = document.getElementById('video-grid');
+  grid.innerHTML = '';
+
+  var start = (pageNum - 1) * perPage;
+  var slice = catalogue.slice(start, start + perPage);
+  slice.forEach(function(cam) { renderCard(cam, grid); });
+}
+
+// ── Render Card ────────────────────────────────────────────────────
+function renderCard(cam, container) {
+  const safeId = cam.id.replace(/[^A-Za-z0-9_-]/g, '_');
+  var card = document.createElement('div');
+  card.className = 'camera-card';
+  card.id = 'card-' + safeId;
+
+  var codec = (cam.codec || 'H.264').toUpperCase();
+  var loc = cam.location || cam.department || 'Gujarat Grid';
+
+  var header = document.createElement('div');
+  header.className = 'cam-header';
+  header.innerHTML =
+    '<div style="min-width:0;flex:1;">' +
+      '<div class="cam-title">&#128249;&nbsp;' + esc(cam.name) + '</div>' +
+      '<div class="cam-meta" title="' + esc(loc) + '">' + esc(loc) + '</div>' +
+    '</div>' +
+    '<div class="cam-actions">' +
+      '<span class="badge badge-connecting" id="badge-' + safeId + '">Connecting</span>' +
+      '<button class="btn-icon" id="btn-max-' + safeId + '" title="Maximize">&#x26F6; Max</button>' +
+    '</div>';
+
+  var body = document.createElement('div');
+  body.className = 'cam-body';
+  body.innerHTML =
+    '<video id="vid-' + safeId + '" class="cam-video hidden" autoplay muted playsinline preload="none"></video>' +
+    '<img id="img-' + safeId + '" class="cam-video hidden" alt="' + esc(cam.name) + '">' +
+    '<div class="cam-overlay" id="ov-' + safeId + '">' +
+      '<div class="overlay-spinner"></div>' +
+      '<div class="overlay-text" id="ovt-' + safeId + '">Connecting stream...</div>' +
+    '</div>';
+
+  var footer = document.createElement('div');
+  footer.className = 'cam-footer';
+  footer.innerHTML =
+    '<span class="cam-footer-info">' + codec + ' &middot; <span id="pl-' + safeId + '">' + (currentProtocol === 'direct' ? 'RTSP/TCP' : 'HLS') + '</span></span>' +
+    '<span class="rtsp-chip" id="chip-' + safeId + '" title="Click to copy RTSP URI">' + esc(cam.id) + ' RTSP</span>';
+
+  card.appendChild(header);
+  card.appendChild(body);
+  card.appendChild(footer);
+  container.appendChild(card);
+
+  // Wire maximize button safely without eval/string concatenation
+  card.querySelector('#btn-max-' + safeId).onclick = function() {
+    openModal(cam.id);
+  };
+
+  // Wire RTSP copy chip
+  card.querySelector('#chip-' + safeId).onclick = function() {
+    copyToClipboard(cam.rtsp_url || ('rtsp://103.250.160.189:8554/stream/' + cam.id));
+    notify('Copied RTSP URL for ' + cam.id);
+  };
+
+  attachStream(cam);
+}
+
+// ── Stream Attachment ──────────────────────────────────────────────
+function attachStream(cam) {
+  if (currentProtocol === 'hls') {
+    attachHls(cam);
+  } else {
+    attachDirect(cam);
+  }
+}
+
+// ── Direct RTSP-decoded stream ─────────────────────────────────────
+function attachDirect(cam) {
+  const safeId = cam.id.replace(/[^A-Za-z0-9_-]/g, '_');
+  var video = document.getElementById('vid-' + safeId);
+  var img = document.getElementById('img-' + safeId);
+  if (!img) return;
+
+  if (video) video.classList.add('hidden');
+  img.classList.remove('hidden');
+
+  var pl = document.getElementById('pl-' + safeId);
+  if (pl) pl.textContent = 'RTSP/TCP';
+
+  var mjpegUrl = cam.mjpeg_url || ('/api/v1/cameras/grid/' + cam.id + '/live');
+  img.src = mjpegUrl + '?t=' + Date.now();
+  showBuf(cam.id, 'Connecting RTSP...');
+
+  img.onload = function() {
+    showLive(cam.id);
+  };
+  img.onerror = function() {
+    showErr(cam.id, 'Retrying...');
+    schedRetry(cam, function(c) {
+      const sId = c.id.replace(/[^A-Za-z0-9_-]/g, '_');
+      var i = document.getElementById('img-' + sId);
+      if (i) { i.src = (c.mjpeg_url || ('/api/v1/cameras/grid/' + c.id + '/live')) + '?t=' + Date.now(); }
+    }, 2000, 30000);
+  };
+}
+
+// ── HLS Stream Attachment ──────────────────────────────────────────
+function attachHls(cam) {
+  const safeId = cam.id.replace(/[^A-Za-z0-9_-]/g, '_');
+  var video = document.getElementById('vid-' + safeId);
+  var img = document.getElementById('img-' + safeId);
+  if (!video) return;
+
+  if (img) img.classList.add('hidden');
+  video.classList.remove('hidden');
+
+  var pl = document.getElementById('pl-' + safeId);
+  if (pl) pl.textContent = 'HLS';
+
+  if (!cam.hls_url) {
+    attachDirect(cam);
+    return;
+  }
+
+  if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+    destroyCam(cam.id);
+    var hls = new Hls({
+      liveSyncDurationCount: 3,
+      liveMaxLatencyDurationCount: 10,
+      maxBufferLength: 15,
+      enableWorker: true,
+      fragLoadingTimeOut: 20000,
+      fragLoadingMaxRetry: 6,
+    });
+    hlsInstances[cam.id] = hls;
+    hls.loadSource(cam.hls_url);
+    hls.attachMedia(video);
+
+    hls.on(Hls.Events.MANIFEST_PARSED, function() {
+      video.play().catch(function() {});
+    });
+    hls.on(Hls.Events.FRAG_CHANGED, function() {
+      showLive(cam.id);
+    });
+    hls.on(Hls.Events.ERROR, function(evt, data) {
+      if (!data.fatal) return; // ignore non-fatal join-time decode noise
+      showBuf(cam.id, 'Reconnecting...');
+      schedRetry(cam, function(c) {
+        destroyCam(c.id);
+        attachHls(c);
+      }, 2000, 30000);
+    });
+
+    video.addEventListener('waiting', function() { showBuf(cam.id, 'Buffering...'); });
+    video.addEventListener('playing', function() { showLive(cam.id); });
+    video.addEventListener('stalled', function() { showBuf(cam.id, 'Stalled...'); });
+
+  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    video.src = cam.hls_url;
+    video.load();
+    video.play().catch(function() {});
+    video.addEventListener('playing', function() { showLive(cam.id); });
+    video.addEventListener('error', function() {
+      schedRetry(cam, function(c) { attachHls(c); }, 3000, 30000);
+    });
+  } else {
+    // Browser doesn't support HLS, fallback to direct RTSP decode
+    attachDirect(cam);
+  }
+}
+
+// ── Exponential Backoff ────────────────────────────────────────────
+function schedRetry(cam, fn, initMs, maxMs) {
+  if (retryTimers[cam.id]) clearTimeout(retryTimers[cam.id]);
+  if (!backoffState[cam.id]) backoffState[cam.id] = { delay: initMs };
+  var state = backoffState[cam.id];
+
+  retryTimers[cam.id] = setTimeout(function() {
+    state.delay = Math.min(state.delay * 2, maxMs);
+    fn(cam);
+  }, state.delay);
+}
+
+function resetBk(camId) {
+  delete backoffState[camId];
+}
+
+// ── Status Helpers ─────────────────────────────────────────────────
+function showLive(camId) {
+  const safeId = String(camId).replace(/[^A-Za-z0-9_-]/g, '_');
+  var b = document.getElementById('badge-' + safeId);
+  var ov = document.getElementById('ov-' + safeId);
+  if (b) { b.className = 'badge badge-live'; b.innerHTML = '&#9679;&nbsp;LIVE'; }
+  if (ov) ov.classList.add('gone');
+  resetBk(camId);
+}
+
+function showBuf(camId, msg) {
+  const safeId = String(camId).replace(/[^A-Za-z0-9_-]/g, '_');
+  var b = document.getElementById('badge-' + safeId);
+  var ov = document.getElementById('ov-' + safeId);
+  var ovt = document.getElementById('ovt-' + safeId);
+  if (b) { b.className = 'badge badge-buffering'; b.textContent = msg || 'Wait'; }
+  if (ov) ov.classList.remove('gone');
+  if (ovt) ovt.textContent = msg || 'Connecting...';
+}
+
+function showErr(camId, msg) {
+  const safeId = String(camId).replace(/[^A-Za-z0-9_-]/g, '_');
+  var b = document.getElementById('badge-' + safeId);
+  var ov = document.getElementById('ov-' + safeId);
+  var ovt = document.getElementById('ovt-' + safeId);
+  if (b) { b.className = 'badge badge-error'; b.textContent = 'Error'; }
+  if (ov) { ov.classList.remove('gone'); }
+  if (ovt) ovt.textContent = msg || 'Stream error';
+}
+
+// ── Cleanup ────────────────────────────────────────────────────────
+function destroyCam(camId) {
+  const safeId = String(camId).replace(/[^A-Za-z0-9_-]/g, '_');
+  if (retryTimers[camId]) { clearTimeout(retryTimers[camId]); delete retryTimers[camId]; }
+  if (hlsInstances[camId]) {
+    try { hlsInstances[camId].stopLoad(); hlsInstances[camId].detachMedia(); hlsInstances[camId].destroy(); } catch(e) {}
+    delete hlsInstances[camId];
+  }
+  resetBk(camId);
+  var v = document.getElementById('vid-' + safeId);
+  var im = document.getElementById('img-' + safeId);
+  if (v) { v.pause(); v.src = ''; v.load(); }
+  if (im) { im.src = ''; }
+}
+
+function destroyAll() {
+  Object.keys(hlsInstances).forEach(destroyCam);
+  Object.keys(retryTimers).forEach(function(id) { clearTimeout(retryTimers[id]); delete retryTimers[id]; });
+}
+
+// ── Layout ─────────────────────────────────────────────────────────
+function setLayout(cols, reload) {
+  currentLayout = cols;
+  var grid = document.getElementById('video-grid');
+  if (grid) grid.setAttribute('data-layout', cols);
+  document.querySelectorAll('.layout-btn').forEach(function(b) {
+    b.classList.toggle('active', parseInt(b.dataset.cols) === cols);
+  });
+  var rowMap = { 1: 2, 2: 4, 3: 6, 4: 8, 5: 10 };
+  perPage = rowMap[cols] || 6;
+  if (reload !== false && catalogue.length > 0) {
+    buildPagination();
+    loadPage(1);
+  }
+}
+
+// ── Protocol Toggle ────────────────────────────────────────────────
+function setProtocol(proto) {
+  currentProtocol = proto;
+  document.getElementById('proto-direct').classList.toggle('active', proto === 'direct');
+  document.getElementById('proto-hls').classList.toggle('active', proto === 'hls');
+  if (catalogue.length > 0) {
+    loadPage(currentPage);
+  }
+}
+
+// ── Fullscreen Modal ───────────────────────────────────────────────
+function openModal(camId) {
+  var cam = null;
+  for (var i = 0; i < catalogue.length; i++) {
+    if (catalogue[i].id === camId) { cam = catalogue[i]; break; }
+  }
+  if (!cam) return;
+
+  document.getElementById('modal-title').textContent = cam.name + ' (' + cam.id + ')';
+  document.getElementById('modal-sub').textContent = 'RTSP: ' + (cam.rtsp_url || ('rtsp://103.250.160.189:8554/stream/' + cam.id));
+
+  var mv = document.getElementById('modal-video');
+  var mi = document.getElementById('modal-img');
+  if (modalHls) { try { modalHls.stopLoad(); modalHls.detachMedia(); modalHls.destroy(); } catch(e){} modalHls = null; }
+  mv.pause(); mv.src = ''; mv.load();
+  mi.src = '';
+
+  if (currentProtocol === 'hls' && cam.hls_url && typeof Hls !== 'undefined' && Hls.isSupported()) {
+    mv.style.display = 'block';
+    mi.style.display = 'none';
+    modalHls = new Hls({ liveSyncDurationCount: 3, maxBufferLength: 20 });
+    modalHls.loadSource(cam.hls_url);
+    modalHls.attachMedia(mv);
+    modalHls.on(Hls.Events.MANIFEST_PARSED, function() { mv.play().catch(function(){}); });
+  } else {
+    // Direct RTSP decode stream
+    mv.style.display = 'none';
+    mi.style.display = 'block';
+    mi.src = (cam.mjpeg_url || ('/api/v1/cameras/grid/' + cam.id + '/live')) + '?t=' + Date.now();
+  }
+  document.getElementById('stream-modal').style.display = 'flex';
+}
+
+function closeModal() {
+  document.getElementById('stream-modal').style.display = 'none';
+  var mv = document.getElementById('modal-video');
+  var mi = document.getElementById('modal-img');
+  if (modalHls) { try { modalHls.stopLoad(); modalHls.detachMedia(); modalHls.destroy(); } catch(e){} modalHls = null; }
+  mv.pause(); mv.src = ''; mv.load();
+  mi.src = '';
+}
+
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeModal(); });
+document.getElementById('stream-modal').addEventListener('click', function(e) {
+  if (e.target === document.getElementById('stream-modal')) closeModal();
+});
+
+// ── Pill Status ────────────────────────────────────────────────────
+function setStatus(state, text) {
+  var el = document.getElementById('feed-status');
+  if (!el) return;
+  el.className = 'status-pill ' + state;
+  el.innerHTML = '<span class="pulse"></span>&nbsp;' + esc(text);
+}
+
+// ── Empty State ────────────────────────────────────────────────────
+function showEmptyState() {
+  var grid = document.getElementById('video-grid');
+  grid.innerHTML =
+    '<div class="empty-state">' +
+      '<div class="ei">&#128225;</div>' +
+      '<h3>No Cameras Available</h3>' +
+      '<p>The camera catalogue did not return active feeds. Check connectivity.</p>' +
+      '<button class="tab-btn active" onclick="fetchCatalogue()" style="margin-top:0.5rem;">Retry</button>' +
+    '</div>';
+  setStatus('error', 'No cameras');
+}
+
+// ── Utilities ──────────────────────────────────────────────────────
+function copyToClipboard(text) {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text);
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  }
+}
+
+function notify(msg, dur) {
+  var bar = document.getElementById('notif-bar');
+  var n = document.createElement('div');
+  n.className = 'notif';
+  n.textContent = msg;
+  bar.appendChild(n);
+  setTimeout(function() { if (n.parentNode) n.parentNode.removeChild(n); }, dur || 5000);
+}
+
+function esc(s) {
+  if (!s) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+</script>
+{% endblock %}
