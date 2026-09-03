@@ -20,8 +20,8 @@ INGESTION_DIR = PIPELINE_DIR / "ingestion"
 FUSION_DIR = PIPELINE_DIR / "fusion"
 EVENTS_DIR = PIPELINE_DIR / "events"
 
-# ── Weights (outside repo, as decided) ───────────────────────────
-WEIGHTS_DIR = Path("C:/Users/katha/Hackathons/CCTV Hackathon/weights")
+# ── Weights (configurable via env var; default: repo-root/weights) ──────────
+WEIGHTS_DIR = Path(os.getenv("MODEL2_WEIGHTS_DIR", str(REPO_ROOT / "weights"))).expanduser()
 YOLO26M_PRETRAINED = "yolo26m.pt"  # Official Ultralytics checkpoint
 FINETUNED_WEIGHTS = WEIGHTS_DIR / "yolo26m_vehicles_best.pt"
 

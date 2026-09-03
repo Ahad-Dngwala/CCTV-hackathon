@@ -7,13 +7,7 @@ import logging
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
 
-from pipeline.config import (
-    TRACK_BUFFER,
-    TRACK_HIGH_THRESH,
-    TRACK_LOW_THRESH,
-    MATCH_THRESH,
-    MAX_TIME_LOST,
-)
+from pipeline.config import TRACK_BUFFER, MAX_TIME_LOST
 
 logger = logging.getLogger("sentinel.tracking")
 
@@ -37,8 +31,8 @@ class Track:
 
     def _generate_color(self) -> Tuple[int, int, int]:
         """Generate a unique color per track ID for visualization."""
-        np.random.seed(self.track_id * 42)
-        return tuple(int(c) for c in np.random.randint(100, 255, 3))
+        rng = np.random.default_rng(self.track_id * 42)
+        return tuple(int(c) for c in rng.integers(100, 255, size=3))
 
     def update(self, detection: Dict[str, Any]):
         """Update track with new detection."""

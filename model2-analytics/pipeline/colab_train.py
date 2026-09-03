@@ -1,11 +1,11 @@
 # Model 2 — YOLO26m Fine-Tuning on vehicles-q0x2v
-# Google Colab Notebook — Free GPU (T4)
-# Copy this into a Google Colab notebook and run all cells
+# Google Colab script — Free GPU (T4)
+# Run in Google Colab: upload this file and execute, or paste cells individually.
 
 # ============================================================
 # CELL 1: Setup
 # ============================================================
-!pip install ultralytics opencv-python-headless datasets huggingface-hub scikit-learn
+# !pip install ultralytics opencv-python-headless datasets huggingface-hub scikit-learn
 
 import os, sys, numpy as np, cv2, torch, json, shutil
 from pathlib import Path
@@ -82,6 +82,9 @@ names:
 for cls_id, cls_name in sorted(CLASS_NAMES.items()):
     yaml_content += f"  {cls_id}: {cls_name}\n"
 
+DATASET_YAML = DATASET_DIR / "dataset.yaml"
+DATASET_YAML.write_text(yaml_content)
+print(f"Dataset ready! YAML: {DATASET_YAML}")
 
 # ============================================================
 # CELL 3: Train YOLO26m
@@ -229,7 +232,3 @@ print(f"Metrics saved to: {OUTPUT_DIR / 'metrics.json'}")
 # drive.mount('/content/drive')
 # shutil.copy2(WEIGHTS_DIR / "yolo26m_vehicles_best.pt", "/content/drive/MyDrive/yolo26m_vehicles_best.pt")
 # print("Model saved to Google Drive!")
-
-DATASET_YAML = DATASET_DIR / "dataset.yaml"
-DATASET_YAML.write_text(yaml_content)
-print(f"Dataset ready! YAML: {DATASET_YAML}")
