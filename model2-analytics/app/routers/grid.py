@@ -45,7 +45,7 @@ def _build_stream_urls(cam: CameraModel) -> tuple[str, str, str]:
     source_id = cam.source_grid_id or str(cam.id)[:8]
     cam_tag = _format_cam_tag(source_id)
 
-    rtsp = f"rtsp://103.250.160.189:8554/stream/{cam_tag}"
+    rtsp = f"rtsp://kushwahavarun86%40gmail.com:77YY-GGER-EW2M@103.250.160.189:8554/stream/{cam_tag}"
     whep = f"http://103.250.160.189:8889/stream/{cam_tag}/whep"
     hls = f"https://cctv.corp8.cloud/{cam_tag}/index.m3u8"
 

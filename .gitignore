@@ -10,6 +10,12 @@ ENV/
 .vscode/
 *.sqlite3
 
+# Crops and runtime media (stored in model2-analytics)
+model2-analytics/detection-image/*
+!model2-analytics/detection-image/.gitkeep
+model2-analytics/uploads/*
+!model2-analytics/uploads/.gitkeep
+
 # ── Model 2 — AI pipeline heavy/generated artifacts (03-Sep-2026) ──
 weights/
 model2-analytics/pipeline/dataset/

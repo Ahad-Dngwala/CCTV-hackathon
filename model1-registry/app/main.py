@@ -118,6 +118,13 @@ BASE_DIR = Path(__file__).resolve().parent
 app.state.templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
+# Mount model-2 detection-image directory
+DETECTION_IMG_DIR = Path("/model2-analytics/detection-image")
+if not DETECTION_IMG_DIR.exists():
+    DETECTION_IMG_DIR = Path(__file__).resolve().parents[2] / "model2-analytics" / "detection-image"
+DETECTION_IMG_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/detection-image", StaticFiles(directory=str(DETECTION_IMG_DIR)), name="detection-image")
+
 # ── Model 1 Routers ──────────────────────────────────────────────
 
 app.include_router(auth.router)

@@ -486,9 +486,13 @@ async function attachStreamPlayer(videoId, whepUrl, hlsUrl) {
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
 
+            const authHeader = 'Basic ' + btoa('kushwahavarun86@gmail.com:77YY-GGER-EW2M');
             const resp = await fetch(whepUrl, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/sdp' },
+                headers: {
+                    'Content-Type': 'application/sdp',
+                    'Authorization': authHeader
+                },
                 body: offer.sdp
             });
 

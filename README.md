@@ -28,15 +28,18 @@ The entire platform (PostgreSQL + PostGIS database and the FastAPI application) 
    Open your browser and navigate to:
    👉 **`http://localhost:8000`**
 
-   - **Interactive Map Dashboard**: `http://localhost:8000/`
-   - **Command Login Portal**: `http://localhost:8000/login`
-   - **Camera Registry & CRUD**: `http://localhost:8000/cameras`
-   - **Vehicle Watchlist (Model 2)**: `http://localhost:8000/watchlist`
-   - **Department Management**: `http://localhost:8000/departments`
-   - **District Overview**: `http://localhost:8000/districts`
-   - **System Audit Log**: `http://localhost:8000/audit`
-   - **Surveillance Gap Analysis**: `http://localhost:8000/gap-analysis`
-   - **Swagger OpenAPI Docs**: `http://localhost:8000/docs`
+    - **Interactive Map Dashboard**: `http://localhost:8000/`
+    - **Command Login Portal**: `http://localhost:8000/login`
+    - **Camera Registry & CRUD**: `http://localhost:8000/cameras`
+    - **Control Room Live Grid (30 Cameras)**: `http://localhost:8000/grid`
+    - **Live AI Vehicle Detection (Cam 04 & 22)**: `http://localhost:8000/detection`
+    - **Pre-Recorded Video AI Detection**: `http://localhost:8000/recorded-detection`
+    - **Vehicle Watchlist (Model 2)**: `http://localhost:8000/watchlist`
+    - **Department Management**: `http://localhost:8000/departments`
+    - **District Overview**: `http://localhost:8000/districts`
+    - **System Audit Log**: `http://localhost:8000/audit`
+    - **Surveillance Gap Analysis**: `http://localhost:8000/gap-analysis`
+    - **Swagger OpenAPI Docs**: `http://localhost:8000/docs`
 
 4. **Operational Demo Accounts** (Password: `password123`):
    - `admin_home` (`dept_admin` — Home Department)
@@ -103,11 +106,22 @@ The entire platform (PostgreSQL + PostGIS database and the FastAPI application) 
 - `GET /api/v1/districts` — List all 33 Gujarat districts with camera counts and GeoJSON boundaries
 - `GET /api/v1/gap-analysis` — PostGIS spatial camera coverage calculation (1km buffer)
 
-### Model 2 — Live Grid & Vehicle Watchlist
+### Model 2 — Live Grid, AI Detection & Video Analytics
 - `GET /grid` — Control-Room Multi-Camera Live Grid UI (2×2, 3×3, 4×4 matrix views)
 - `GET /api/ingest` — Hackathon ingestion contract — returns all cameras with RTSP/WHEP/HLS URLs
 - `GET /api/v1/grid/streams` — JSON API: all active camera stream URLs (with dept/district filters)
 - `POST /api/v1/grid/sync` — Sync camera catalogue from external source into DB
+- `GET /detections` or `GET /detection` — Live AI Vehicle Detection Dashboard
+- `GET /api/v1/detections` — Paginated vehicle detection audit history from DB
+- `GET /api/v1/detections/stats` — Real-time vehicle detection counts and active tracks
+- `WS /ws/detections` — WebSocket stream for live bounding boxes, track IDs, and sightings
+- `GET /recorded-detection` — Pre-Recorded Video AI Detection Dashboard UI
+- `POST /api/v1/recorded/upload` — Multipart video upload (up to 2 GB) with OpenCV metadata extraction
+- `GET /api/v1/recorded/cameras` — List active cameras for location association
+- `POST /api/v1/recorded/start` — Start isolated background video analysis worker
+- `POST /api/v1/recorded/pause` / `resume` / `stop` — Execution controls
+- `GET /api/v1/recorded/status/{job_id}` — Query status, frame count, processing FPS
+- `WS /ws/recorded/{job_id}` — Real-time video frame and bounding box WebSocket stream
 - `GET /api/v1/watchlist/vehicles` — List & search vehicle targets (filter by `category`, `status`, `plate_number`, `department_id`)
 - `POST /api/v1/watchlist/vehicles` — Add new vehicle target (with Indian plate format validation & duplicate checks)
 - `GET /api/v1/watchlist/vehicles/{id}` — Get single watchlist target detail

@@ -351,15 +351,48 @@ def gap_analysis_page(
 
 
 @router.get("/detections", response_class=HTMLResponse)
-def detections_placeholder(request: Request):
+@router.get("/detection", response_class=HTMLResponse)
+def detections_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: Optional[UserModel] = Depends(get_optional_current_user),
+):
+    """Phase 5 — Live AI Vehicle Detection Dashboard."""
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+
+    # Resolve Camera 04 and Camera 22 UUIDs for the JS to use with /api/v1/grid/streams
+    cam04 = db.query(CameraModel).filter(CameraModel.source_grid_id == "4").first()
+    cam22 = db.query(CameraModel).filter(CameraModel.source_grid_id == "22").first()
+
     return request.app.state.templates.TemplateResponse(
         request=request,
-        name="placeholder.html",
+        name="detection.html",
         context={
-            "page_title": "Detections",
-            "description": "Model 2 — not built yet, see docs/API_Contract.md §2",
+            "user": user,
+            "cam04_id": str(cam04.id) if cam04 else None,
+            "cam22_id": str(cam22.id) if cam22 else None,
         },
     )
+
+
+@router.get("/recorded-detection", response_class=HTMLResponse)
+def recorded_detection_page(
+    request: Request,
+    user: Optional[UserModel] = Depends(get_optional_current_user),
+):
+    """Phase 9 — Pre-Recorded Video AI Detection Dashboard."""
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+
+    return request.app.state.templates.TemplateResponse(
+        request=request,
+        name="recorded_detection.html",
+        context={
+            "user": user,
+        },
+    )
+
 
 
 # ── Watchlist page (Model 2) ───────────────────────────────────
