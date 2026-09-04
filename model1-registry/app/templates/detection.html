@@ -1,0 +1,772 @@
+{% extends "base.html" %}
+{% block title %}Sentinel — Live AI Vehicle Detection{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+<style>
+/* ══ Detection Dashboard ══════════════════════════════════════════ */
+.det-wrap { padding: 1.5rem; max-width: 1600px; margin: 0 auto; }
+
+/* Header */
+.det-hdr {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    flex-wrap: wrap; gap: 1rem; margin-bottom: 1.75rem;
+}
+.det-hdr h1 {
+    font-size: 1.75rem; font-weight: 800; color: #f8fafc;
+    margin: 0; display: flex; align-items: center; gap: .55rem;
+}
+.det-hdr p { color: #94a3b8; font-size: .875rem; margin: .2rem 0 0; }
+
+.hdr-pills { display: flex; gap: .65rem; flex-wrap: wrap; align-items: center; }
+.pill {
+    background: rgba(15,23,42,.75); border: 1px solid rgba(255,255,255,.1);
+    border-radius: 9999px; padding: .3rem .85rem;
+    font-size: .8rem; font-weight: 600; color: #cbd5e1;
+    display: flex; align-items: center; gap: .4rem;
+}
+.pill .v { color: #38bdf8; font-weight: 800; }
+
+/* Body: feeds | sidebar */
+.det-body {
+    display: grid; grid-template-columns: 1fr 370px; gap: 1.5rem; align-items: start;
+}
+@media(max-width:1100px){ .det-body { grid-template-columns: 1fr; } }
+
+.feeds-col { display: flex; flex-direction: column; gap: 1.25rem; }
+
+/* Camera card */
+.cam-card {
+    position: relative; background: #0f172a;
+    border: 1px solid rgba(255,255,255,.07); border-radius: 14px; overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0,0,0,.35);
+    transition: border-color .2s, box-shadow .2s;
+}
+.cam-card:hover {
+    border-color: rgba(56,189,248,.45);
+    box-shadow: 0 12px 40px rgba(56,189,248,.12);
+}
+.cam-topbar {
+    position: absolute; top:0; left:0; right:0; z-index:10;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: .6rem .85rem;
+    background: linear-gradient(to bottom, rgba(7,15,35,.88), transparent);
+    pointer-events: none;
+}
+.cam-badge {
+    background: rgba(7,15,35,.85); backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,.12); border-radius: 6px;
+    padding: .2rem .55rem; font-size: .72rem; font-weight: 700; color: #fff;
+    display: flex; align-items: center; gap: .3rem;
+}
+.cam-badge--on  { color:#34d399; border-color:rgba(52,211,153,.35); }
+.cam-badge--off { color:#f87171; border-color:rgba(248,113,113,.35); }
+.pulse { width:7px; height:7px; border-radius:50%; background:currentColor;
+         box-shadow:0 0 7px currentColor; animation:pu 1.5s infinite; flex-shrink:0; }
+@keyframes pu { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.7)} }
+
+.cam-video { width:100%; aspect-ratio:16/9; background:#000; }
+.cam-video video { width:100%; height:100%; object-fit:cover; display:block; }
+
+.cam-bar {
+    padding: .7rem 1rem; background: rgba(7,15,35,.95);
+    border-top: 1px solid rgba(255,255,255,.06);
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: .4rem;
+}
+.cam-bar-name { font-size: .9rem; font-weight: 700; color: #f1f5f9; }
+.cam-bar-meta { display:flex; gap:.7rem; font-size:.73rem; color:#64748b; }
+
+/* Sidebar */
+.evts-sidebar {
+    background: rgba(15,22,36,.85); backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,.07); border-radius: 14px;
+    display: flex; flex-direction: column;
+    height: calc(100vh - 136px); min-height: 540px;
+    position: sticky; top: 76px; overflow: hidden;
+}
+.evts-head {
+    padding: 1rem 1.1rem .85rem;
+    border-bottom: 1px solid rgba(255,255,255,.07); flex-shrink: 0;
+}
+.evts-head-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:.6rem; }
+.evts-title { font-size:1rem; font-weight:700; color:#f8fafc; display:flex; align-items:center; gap:.4rem; }
+.evts-cnt {
+    background:rgba(99,102,241,.2); color:#818cf8;
+    border:1px solid rgba(99,102,241,.35); border-radius:9999px;
+    font-size:.72rem; font-weight:700; padding:.15rem .55rem;
+}
+.evts-stats { display:flex; gap:.5rem; }
+.estat { flex:1; background:rgba(15,23,42,.6); border:1px solid rgba(255,255,255,.07);
+         border-radius:8px; padding:.4rem .5rem; text-align:center; }
+.estat .ev { font-size:1.1rem; font-weight:800; color:#38bdf8; line-height:1; }
+.estat .el { font-size:.65rem; color:#64748b; margin-top:.15rem; text-transform:uppercase; }
+
+.evts-list {
+    flex:1; overflow-y:auto; padding:.85rem;
+    display:flex; flex-direction:column; gap:.55rem;
+}
+.evts-list::-webkit-scrollbar{width:3px}
+.evts-list::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:4px}
+
+/* Event card */
+.ec {
+    background:rgba(15,23,42,.9); border:1px solid rgba(255,255,255,.07);
+    border-radius:10px; padding:.7rem .85rem;
+    animation: ec-in .28s cubic-bezier(.16,1,.3,1);
+    transition: border-color .2s;
+}
+.ec:hover { border-color:rgba(99,102,241,.35); }
+.ec--alert { border-color:rgba(239,68,68,.45)!important; background:rgba(127,29,29,.15)!important; }
+@keyframes ec-in { from{opacity:0;transform:translateY(-7px)} to{opacity:1;transform:none} }
+
+.ec-r1 { display:flex; justify-content:space-between; align-items:center; margin-bottom:.3rem; }
+.ec-badge {
+    font-size:.7rem; font-weight:700; text-transform:uppercase;
+    padding:.15rem .42rem; border-radius:5px;
+    display:inline-flex; align-items:center; gap:.28rem;
+}
+.b-car           {background:rgba(34,197,94,.12);  color:#4ade80; border:1px solid rgba(34,197,94,.3)}
+.b-truck         {background:rgba(249,115,22,.12); color:#fb923c; border:1px solid rgba(249,115,22,.3)}
+.b-mini-truck    {background:rgba(245,158,11,.12); color:#fbbf24; border:1px solid rgba(245,158,11,.3)}
+.b-bus           {background:rgba(168,85,247,.12); color:#c084fc; border:1px solid rgba(168,85,247,.3)}
+.b-motorcycle    {background:rgba(14,165,233,.12); color:#38bdf8; border:1px solid rgba(14,165,233,.3)}
+.b-auto-rickshaw {background:rgba(234,179,8,.12);  color:#facc15; border:1px solid rgba(234,179,8,.35)}
+.b-bicycle       {background:rgba(16,185,129,.12); color:#34d399; border:1px solid rgba(16,185,129,.3)}
+.b-vehicle       {background:rgba(100,116,139,.12);color:#94a3b8; border:1px solid rgba(100,116,139,.3)}
+
+.ec-time { font-size:.7rem; color:#475569; font-family:monospace; }
+.ec-r2 { display:flex; justify-content:space-between; align-items:center; margin-top:.28rem; }
+.ec-cam { font-size:.75rem; color:#94a3b8; }
+.ec-conf { font-size:.7rem; color:#64748b; margin-top:.2rem; }
+.ec-conf strong { color:#34d399; }
+
+.evts-empty { text-align:center; padding:2.5rem 1rem; color:#475569; }
+.evts-empty .ei { font-size:2.2rem; margin-bottom:.4rem; }
+.evts-empty p { font-size:.82rem; }
+
+.evts-foot {
+    padding:.6rem .85rem; border-top:1px solid rgba(255,255,255,.07);
+    display:flex; gap:.5rem; flex-shrink:0;
+}
+.evts-foot button {
+    flex:1; padding:.38rem; font-size:.77rem; border-radius:7px;
+    border:1px solid rgba(255,255,255,.09); background:rgba(255,255,255,.04);
+    color:#94a3b8; cursor:pointer; transition:background .15s;
+}
+.evts-foot button:hover { background:rgba(255,255,255,.09); color:#e2e8f0; }
+
+.ws-dot { width:8px; height:8px; border-radius:50%; background:#475569;
+           transition:background .3s,box-shadow .3s; flex-shrink:0; }
+.ws-dot--on { background:#34d399; box-shadow:0 0 8px #34d399; animation:pu 2s infinite; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="det-wrap">
+
+    <!-- Header -->
+    <div class="det-hdr">
+        <div>
+            <h1>🤖 Live AI Detection</h1>
+            <p>Real-time vehicle detection — Camera 04 (Paldi Circle) · Camera 22 (BK Mervada)</p>
+        </div>
+        <div class="hdr-pills">
+            <span class="pill"><span class="ws-dot" id="wsDot"></span><span id="wsLbl">Connecting…</span></span>
+            <span class="pill">⚡ Today: <span class="v" id="stToday">—</span></span>
+            <span class="pill">📋 Total: <span class="v" id="stTotal">—</span></span>
+            <button onclick="clearFeed()"
+                style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
+                       color:#94a3b8;padding:.3rem .75rem;border-radius:9999px;cursor:pointer;
+                       font-size:.8rem;font-weight:600;">🧹 Clear</button>
+        </div>
+    </div>
+
+    <!-- Body -->
+    <div class="det-body">
+
+        <!-- Feeds -->
+        <div class="feeds-col" id="feedsCol">
+            <div style="text-align:center;padding:3rem;color:#64748b;">
+                <div class="pulse" style="width:14px;height:14px;margin:0 auto 1rem;"></div>
+                <p style="font-size:.9rem;">Connecting to live feeds…</p>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="evts-sidebar">
+            <div class="evts-head">
+                <div class="evts-head-row">
+                    <div class="evts-title">⚡ Live Sightings</div>
+                    <span class="evts-cnt" id="evtCnt">0</span>
+                </div>
+                <div class="evts-stats">
+                    <div class="estat"><div class="ev" id="eToday">0</div><div class="el">Today</div></div>
+                    <div class="estat"><div class="ev" id="eCam04">0</div><div class="el">Cam 04</div></div>
+                    <div class="estat"><div class="ev" id="eCam22">0</div><div class="el">Cam 22</div></div>
+                </div>
+            </div>
+
+            <div class="evts-list" id="evtsList">
+                <div class="evts-empty" id="evtsEmpty">
+                    <div class="ei">🛰️</div>
+                    <p>Monitoring Camera 04 &amp; Camera 22<br>for vehicle activity…</p>
+                </div>
+            </div>
+
+            <div class="evts-foot">
+                <button onclick="clearFeed()">🧹 Clear</button>
+                <button onclick="loadStats()">🔄 Stats</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══ Section: Vehicle Detection Audit Report ══════════════ -->
+    <div class="det-report-section" style="margin-top: 2.25rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.1rem;">
+            <div>
+                <h2 style="font-size:1.35rem; font-weight:800; color:#f8fafc; display:flex; align-items:center; gap:.5rem; margin:0;">
+                    📊 Vehicle Detection Audit Report
+                </h2>
+                <p style="font-size:.82rem; color:#94a3b8; margin:.25rem 0 0;">
+                    Confirmed vehicle sightings logged to PostgreSQL with crop signatures, Indian plate OCR, and cross-camera tracks
+                </p>
+            </div>
+            <div style="display:flex; align-items:center; gap:.75rem;">
+                <select id="reportCamFilter" onchange="loadReport(1)" style="background:#0f172a; border:1px solid rgba(255,255,255,.15); color:#f8fafc; border-radius:8px; padding:.4rem .85rem; font-size:.82rem; font-weight:500;">
+                    <option value="">All Cameras</option>
+                    <option value="cam04">Camera 04 (Paldi Circle)</option>
+                    <option value="cam22">Camera 22 (BK Mervada)</option>
+                </select>
+                <button onclick="loadReport(1)" style="background:rgba(59,130,246,.15); border:1px solid rgba(59,130,246,.4); color:#60a5fa; border-radius:8px; padding:.4rem .9rem; font-size:.82rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:.4rem;">
+                    🔄 Refresh Log
+                </button>
+            </div>
+        </div>
+
+        <div style="background:#0f172a; border:1px solid rgba(255,255,255,.08); border-radius:14px; overflow:hidden; box-shadow:0 8px 32px rgba(0,0,0,.35);">
+            <div style="overflow-x:auto;">
+                <table style="width:100%; border-collapse:collapse; text-align:left; font-size:.84rem; color:#e2e8f0;">
+                    <thead>
+                        <tr style="background:rgba(15,23,42,.95); border-bottom:1px solid rgba(255,255,255,.1); text-transform:uppercase; font-size:.72rem; letter-spacing:.05em; color:#94a3b8;">
+                            <th style="padding:.85rem 1rem;">Crop</th>
+                            <th style="padding:.85rem 1rem;">Timestamp</th>
+                            <th style="padding:.85rem 1rem;">Camera</th>
+                            <th style="padding:.85rem 1rem;">Vehicle Class</th>
+                            <th style="padding:.85rem 1rem;">License Plate</th>
+                            <th style="padding:.85rem 1rem;">Global Track ID</th>
+                            <th style="padding:.85rem 1rem;">Confidence</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reportBody">
+                        <tr>
+                            <td colspan="7" style="text-align:center; padding:2.5rem; color:#64748b;">
+                                Loading sightings from database…
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:.8rem 1.25rem; background:rgba(7,15,35,.95); border-top:1px solid rgba(255,255,255,.06); font-size:.8rem; color:#94a3b8;">
+                <span id="reportTotalText">0 sightings recorded</span>
+                <div style="display:flex; align-items:center; gap:.5rem;">
+                    <button id="btnPrevPage" onclick="changeReportPage(-1)" style="background:#1e293b; border:1px solid rgba(255,255,255,.1); color:#f8fafc; border-radius:6px; padding:.3rem .75rem; cursor:pointer;">← Prev</button>
+                    <span id="reportPageIndicator" style="padding:.3rem .5rem; font-weight:600;">Page 1</span>
+                    <button id="btnNextPage" onclick="changeReportPage(1)" style="background:#1e293b; border:1px solid rgba(255,255,255,.1); color:#f8fafc; border-radius:6px; padding:.3rem .75rem; cursor:pointer;">Next →</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Zooming Crop Image -->
+    <div id="cropModal" onclick="this.style.display='none'" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.85); backdrop-filter:blur(8px); z-index:9999; align-items:center; justify-content:center; cursor:pointer;">
+        <div style="max-width:90vw; max-height:85vh; background:#0f172a; padding:1.25rem; border-radius:14px; border:1px solid rgba(255,255,255,.15); text-align:center;" onclick="event.stopPropagation()">
+            <img id="cropModalImg" src="" style="max-width:100%; max-height:70vh; border-radius:8px; object-fit:contain; display:block; margin:0 auto .75rem; box-shadow:0 8px 30px rgba(0,0,0,.6);">
+            <div id="cropModalCaption" style="font-size:.95rem; font-weight:700; color:#f8fafc;"></div>
+            <button onclick="document.getElementById('cropModal').style.display='none'" style="margin-top:.85rem; background:#334155; border:none; color:#f8fafc; border-radius:6px; padding:.4rem 1.25rem; cursor:pointer; font-weight:600;">Close</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// Attach WebRTC WHEP (Primary) or HLS (Fallback) stream to video element
+async function attachStreamPlayer(videoId, whepUrl, hlsUrl) {
+    const video = document.getElementById(videoId);
+    if (!video) return;
+
+    // 1. Direct WebRTC WHEP connection (Instant sub-second live preview from public IP)
+    if (whepUrl && window.RTCPeerConnection) {
+        try {
+            const pc = new RTCPeerConnection({
+                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+            });
+
+            pc.addTransceiver('video', { direction: 'recvonly' });
+
+            pc.ontrack = (event) => {
+                if (event.streams && event.streams[0]) {
+                    video.srcObject = event.streams[0];
+                    video.play().catch(e => console.log('WHEP autoplay notice:', e));
+                }
+            };
+
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+
+            const authHeader = 'Basic ' + btoa('kushwahavarun86@gmail.com:77YY-GGER-EW2M');
+            const resp = await fetch(whepUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/sdp',
+                    'Authorization': authHeader
+                },
+                body: offer.sdp
+            });
+
+            if (resp.ok) {
+                const answerSdp = await resp.text();
+                await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+                return; // WebRTC connected successfully
+            }
+        } catch (err) {
+            console.warn('WHEP negotiation fallback to HLS for', videoId, err);
+        }
+    }
+
+    // 2. HLS stream fallback (low-latency config)
+    if (hlsUrl && typeof Hls !== 'undefined' && Hls.isSupported() && hlsUrl.includes('.m3u8')) {
+        const hls = new Hls({
+            liveSyncDurationCount:     1,   // stay 1 segment behind live edge
+            liveMaxLatencyDurationCount: 2, // max 2 segments behind before seeking
+            maxBufferLength:           4,   // buffer at most 4s ahead
+            maxMaxBufferLength:        8,
+            backBufferLength:          0,   // flush back-buffer immediately
+        });
+        hls.loadSource(hlsUrl);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, function() {
+            video.play().catch(e => console.log('Autoplay deferred:', e));
+        });
+    } else if (hlsUrl) {
+        video.src = hlsUrl;
+    }
+}
+
+// ══ Load Cam04 + Cam22 from /api/v1/grid/streams ═════════════════
+const CAM04_ID = "{{ cam04_id }}";
+const CAM22_ID = "{{ cam22_id }}";
+
+async function loadFeeds() {
+    try {
+        const resp = await fetch('/api/v1/grid/streams');
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const streams = await resp.json();
+
+        // Match Cam04 and Cam22 reliably
+        const wanted = streams.filter(s =>
+            String(s.source_grid_id) === '4' || String(s.source_grid_id) === '22' ||
+            s.id === CAM04_ID || s.id === CAM22_ID ||
+            (s.name && (s.name.includes('Paldi') || s.name.includes('Mervada')))
+        );
+
+        const col = document.getElementById('feedsCol');
+        col.innerHTML = '';
+
+        if (!wanted.length) {
+            col.innerHTML = '<div style="color:#64748b;padding:2rem;text-align:center;">Cameras 04 / 22 not found in stream catalogue.</div>';
+            return;
+        }
+
+        wanted.sort((a, b) => {
+            const idA = String(a.source_grid_id || '');
+            const idB = String(b.source_grid_id || '');
+            return parseInt(idA) - parseInt(idB);
+        });
+
+        wanted.forEach(cam => {
+            const isOn   = (cam.connectivity_status || 'online') === 'online';
+            const tag    = String(cam.source_grid_id) === '4' ? 'cam04' : 'cam22';
+            const label  = tag === 'cam04' ? '04 — Paldi Circle' : '22 — BK Mervada';
+            const dept   = cam.department_name || 'Traffic Dept';
+            const loc    = cam.location_label || cam.district_name || 'Gujarat';
+
+            const card = document.createElement('div');
+            card.className = 'cam-card';
+            card.innerHTML = `
+                <div class="cam-topbar">
+                    <span class="cam-badge ${isOn ? 'cam-badge--on' : 'cam-badge--off'}">
+                        <span class="pulse"></span> ${isOn ? 'ONLINE' : 'OFFLINE'}
+                    </span>
+                    <span class="cam-badge">🏛️ ${dept}</span>
+                </div>
+                <div class="feed-video-container" style="width:100%; aspect-ratio:16/9; background:#000; position:relative; overflow:hidden;">
+                    <video id="video-feed-${cam.id}" controls autoplay muted playsinline style="width:100%; height:100%; object-fit:cover; background:#000; display:block;"></video>
+                    <canvas id="canvas-feed-${tag}" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:5;"></canvas>
+                </div>
+                <div class="cam-bar">
+                    <span class="cam-bar-name">📷 Camera ${label}</span>
+                    <div class="cam-bar-meta">
+                        <span>📍 ${loc}</span>
+                        <span>🎯 Indian YOLOv8</span>
+                        <span id="trk-${tag}">0 tracks</span>
+                    </div>
+                </div>
+            `;
+            col.appendChild(card);
+            // Seed ResizeObserver cache for this camera's canvas (Bug 2 fix)
+            const cvs = document.getElementById(`canvas-feed-${tag}`);
+            if (cvs) _observeCanvas(cvs);
+            attachStreamPlayer(`video-feed-${cam.id}`, cam.whep_url, cam.hls_url);
+        });
+    } catch (err) {
+        console.error('loadFeeds error:', err);
+    }
+}
+
+// ══ Stats ════════════════════════════════════════════════════════
+async function loadStats() {
+    try {
+        const r = await fetch('/api/v1/detections/stats');
+        const j = await r.json();
+        if (j.status !== 'ok') return;
+        const s = j.stats;
+        document.getElementById('stToday').textContent = s.total_today ?? '—';
+        document.getElementById('stTotal').textContent = s.total_all_time ?? '—';
+        document.getElementById('eToday').textContent  = s.total_today ?? 0;
+
+        const el04 = document.getElementById('trk-cam04');
+        const el22 = document.getElementById('trk-cam22');
+        if (el04) el04.textContent = `${s.active_tracks?.cam04 ?? 0} tracks`;
+        if (el22) el22.textContent = `${s.active_tracks?.cam22 ?? 0} tracks`;
+    } catch (_) {}
+}
+
+// ══ Event card rendering ══════════════════════════════════════════
+const evtsList  = document.getElementById('evtsList');
+const evtsEmpty = document.getElementById('evtsEmpty');
+const evtCnt    = document.getElementById('evtCnt');
+const eCam04    = document.getElementById('eCam04');
+const eCam22    = document.getElementById('eCam22');
+let totalEvts = 0, cnt04 = 0, cnt22 = 0;
+
+const BADGE_MAP = {
+    car: 'b-car',
+    truck: 'b-truck',
+    'mini-truck': 'b-mini-truck',
+    minitruck: 'b-mini-truck',
+    bus: 'b-bus',
+    motorcycle: 'b-motorcycle',
+    bike: 'b-motorcycle',
+    'auto rickshaw': 'b-auto-rickshaw',
+    rickshaw: 'b-auto-rickshaw',
+    cng: 'b-auto-rickshaw',
+    bicycle: 'b-bicycle',
+    cycle: 'b-bicycle',
+};
+const EMOJI_MAP = {
+    car: '🚗',
+    truck: '🚛',
+    'mini-truck': '🛻',
+    minitruck: '🛻',
+    bus: '🚌',
+    motorcycle: '🛵',
+    bike: '🛵',
+    'auto rickshaw': '🛺',
+    rickshaw: '🛺',
+    cng: '🛺',
+    bicycle: '🚲',
+    cycle: '🚲',
+};
+
+function renderEvent(d, prepend = true) {
+    if (evtsEmpty) evtsEmpty.style.display = 'none';
+
+    totalEvts++;
+    evtCnt.textContent = totalEvts;
+
+    if (d.camera_tag === 'cam04') { cnt04++; eCam04.textContent = cnt04; }
+    else { cnt22++; eCam22.textContent = cnt22; }
+
+    const cls   = (d.class_name || 'vehicle').toLowerCase();
+    const badge = BADGE_MAP[cls] || 'b-vehicle';
+    const emoji = EMOJI_MAP[cls] || '🚘';
+    const cam   = d.camera_tag === 'cam04' ? '📍 Cam 04 — Paldi' : '📍 Cam 22 — BK Mervada';
+    const isAlert = !!d.alert;
+
+    const card = document.createElement('div');
+    card.className = 'ec' + (isAlert ? ' ec--alert' : '');
+    card.innerHTML = `
+        <div class="ec-r1">
+            <span class="ec-badge ${badge}">${emoji} ${d.class_name || 'Vehicle'} #${d.track_id || ''}</span>
+            <span class="ec-time">${d.timestamp || ''}</span>
+        </div>
+        <div class="ec-r2">
+            <span class="ec-cam">${cam}</span>
+        </div>
+        <div class="ec-conf">Confidence: <strong>${d.confidence ?? '—'}%</strong>
+            ${isAlert ? '<span style="color:#f87171;font-size:.7rem;margin-left:.5rem;font-weight:700;">🚨 WATCHLIST</span>' : ''}
+        </div>
+    `;
+    if (prepend) evtsList.insertBefore(card, evtsList.firstChild);
+    else evtsList.appendChild(card);
+
+    while (evtsList.children.length > 60) evtsList.removeChild(evtsList.lastChild);
+}
+
+function clearFeed() {
+    while (evtsList.firstChild) evtsList.removeChild(evtsList.firstChild);
+    if (evtsEmpty) { evtsEmpty.style.display = ''; evtsList.appendChild(evtsEmpty); }
+    totalEvts = cnt04 = cnt22 = 0;
+    evtCnt.textContent = '0';
+    eCam04.textContent = '0';
+    eCam22.textContent = '0';
+}
+
+// ══ Canvas dimension cache (avoids per-frame reflow) ════════════
+// getBoundingClientRect() forces browser layout; cache dims via ResizeObserver.
+const _canvasDims = {};
+function _observeCanvas(canvas) {
+    const id = canvas.id;
+    const ro = new ResizeObserver(entries => {
+        for (const entry of entries) {
+            const { width, height } = entry.contentRect;
+            canvas.width  = Math.round(width);
+            canvas.height = Math.round(height);
+            _canvasDims[id] = { w: canvas.width, h: canvas.height };
+        }
+    });
+    ro.observe(canvas);
+    // Seed initial dimensions synchronously once
+    const r = canvas.getBoundingClientRect();
+    canvas.width  = Math.round(r.width);
+    canvas.height = Math.round(r.height);
+    _canvasDims[id] = { w: canvas.width, h: canvas.height };
+}
+
+// ══ Live Bounding Box Drawing on Video Canvas ═════════════════════
+function drawBoxes(camTag, boxes) {
+    const canvas = document.getElementById(`canvas-feed-${camTag}`);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Use cached dimensions — no reflow
+    const dims = _canvasDims[canvas.id];
+    if (!dims) return;
+    const cw = dims.w;
+    const ch = dims.h;
+
+    ctx.clearRect(0, 0, cw, ch);
+    if (!boxes || !boxes.length) return;
+
+    boxes.forEach(b => {
+        const [nx1, ny1, nx2, ny2] = b.bbox;
+        const x = nx1 * cw;
+        const y = ny1 * ch;
+        const w = (nx2 - nx1) * cw;
+        const h = (ny2 - ny1) * ch;
+
+        const cls = (b.class_name || 'Vehicle').toLowerCase();
+        let color = '#38bdf8';
+        if (cls.includes('rickshaw') || cls.includes('cng')) color = '#f59e0b';
+        else if (cls.includes('bike') || cls.includes('motorcycle') || cls.includes('cycle')) color = '#10b981';
+        else if (cls.includes('bus')) color = '#a855f7';
+        else if (cls.includes('truck')) color = '#ec4899';
+        else if (cls.includes('car')) color = '#3b82f6';
+
+        // Glowing bounding box
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 6;
+        ctx.strokeRect(x, y, w, h);
+        ctx.shadowBlur = 0;
+
+        // Label pill with persistent Track ID
+        const trkPrefix = b.track_id ? `#${b.track_id} ` : '';
+        const confStr = b.confidence ? ` ${Math.round(b.confidence)}%` : '';
+        const label = `${trkPrefix}${b.class_name}${confStr}`;
+        ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
+        const textWidth = ctx.measureText(label).width;
+        const padX = 6;
+
+        ctx.fillStyle = 'rgba(7, 15, 35, 0.92)';
+        ctx.fillRect(x, Math.max(0, y - 18), textWidth + padX * 2, 18);
+
+        ctx.fillStyle = color;
+        ctx.fillText(label, x + padX, Math.max(13, y - 5));
+    });
+
+    clearTimeout(canvas._clearTimer);
+    canvas._clearTimer = setTimeout(() => {
+        ctx.clearRect(0, 0, cw, ch);
+    }, 600);
+}
+
+// ══ Database Vehicle Detection Report ════════════════════════════
+let currentReportPage = 1;
+let totalReportPages = 1;
+
+async function loadReport(page = 1) {
+    currentReportPage = page;
+    const filter = document.getElementById('reportCamFilter')?.value || '';
+    let url = `/api/v1/detections?page=${page}&page_size=15`;
+    if (filter) url += `&camera_tag=${filter}`;
+
+    try {
+        const resp = await fetch(url);
+        const data = await resp.json();
+        if (data.status !== 'ok') return;
+
+        const tbody = document.getElementById('reportBody');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+
+        if (!data.detections || !data.detections.length) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2.5rem;color:#64748b;">No detections recorded in database yet.</td></tr>';
+            const tot = document.getElementById('reportTotalText');
+            if (tot) tot.textContent = '0 sightings recorded';
+            return;
+        }
+
+        totalReportPages = data.pages || 1;
+        const tot = document.getElementById('reportTotalText');
+        if (tot) tot.textContent = `${data.total} total vehicle sightings in database`;
+        const ind = document.getElementById('reportPageIndicator');
+        if (ind) ind.textContent = `Page ${data.page} of ${totalReportPages}`;
+
+        const prevBtn = document.getElementById('btnPrevPage');
+        const nextBtn = document.getElementById('btnNextPage');
+        if (prevBtn) prevBtn.disabled = data.page <= 1;
+        if (nextBtn) nextBtn.disabled = data.page >= totalReportPages;
+
+        data.detections.forEach(d => tbody.appendChild(createReportRow(d)));
+    } catch (err) {
+        console.error('loadReport error:', err);
+    }
+}
+
+function createReportRow(d) {
+    const tr = document.createElement('tr');
+    tr.id = `rep-row-${d.id}`;
+    tr.style.borderBottom = '1px solid rgba(255,255,255,.05)';
+    tr.style.transition = 'background .15s';
+    tr.onmouseenter = () => tr.style.background = 'rgba(255,255,255,.03)';
+    tr.onmouseleave = () => tr.style.background = 'transparent';
+
+    const cropImg = d.crop_path
+        ? `<img src="${d.crop_path}" onclick="openCropModal('${d.crop_path}', '${d.vehicle_type || 'Vehicle'} — ${d.detected_plate}')" style="width:48px;height:48px;border-radius:6px;object-fit:cover;cursor:pointer;border:1px solid rgba(255,255,255,.15);display:block;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+           <div style="display:none;width:48px;height:48px;border-radius:6px;background:#1e293b;align-items:center;justify-content:center;font-size:1.2rem;">🚘</div>`
+        : `<div style="width:48px;height:48px;border-radius:6px;background:#1e293b;display:flex;align-items:center;justify-content:center;font-size:1.2rem;">🚘</div>`;
+
+    const vtype = d.vehicle_type || d.class_name || 'Vehicle';
+    const cls = vtype.toLowerCase();
+    const badge = BADGE_MAP[cls] || 'b-vehicle';
+    const emoji = EMOJI_MAP[cls] || '🚘';
+
+    tr.innerHTML = `
+        <td style="padding:.75rem 1rem;">${cropImg}</td>
+        <td style="padding:.75rem 1rem; font-family:monospace; color:#94a3b8; font-size:.8rem;">${d.timestamp}</td>
+        <td style="padding:.75rem 1rem;"><span style="font-weight:600; color:#f1f5f9;">${d.camera_tag === 'cam04' ? '📷 Cam 04' : '📷 Cam 22'}</span><br><span style="font-size:.73rem; color:#64748b;">${d.camera_name || ''}</span></td>
+        <td style="padding:.75rem 1rem;"><span class="ec-badge ${badge}">${emoji} ${vtype}</span></td>
+        <td style="padding:.75rem 1rem;"><span style="display:inline-block; padding:.2rem .55rem; background:#1e293b; border:1px solid rgba(255,255,255,.18); border-radius:4px; font-family:monospace; font-weight:700; letter-spacing:1px; color:#38bdf8;">${d.detected_plate || '—'}</span></td>
+        <td style="padding:.75rem 1rem; font-family:monospace; font-size:.75rem; color:#94a3b8;">${d.vehicle_track_id && d.vehicle_track_id !== '—' ? d.vehicle_track_id.substring(0, 8) + '…' : '—'}</td>
+        <td style="padding:.75rem 1rem;"><span style="color:#34d399; font-weight:700;">${d.confidence}%</span></td>
+    `;
+    return tr;
+}
+
+function prependReportRow(d) {
+    const tbody = document.getElementById('reportBody');
+    if (!tbody) return;
+    if (tbody.children.length === 1 && tbody.children[0].children.length === 1) {
+        tbody.innerHTML = '';
+    }
+    const row = createReportRow(d);
+    row.style.background = 'rgba(56, 189, 248, 0.08)';
+    setTimeout(() => row.style.background = 'transparent', 2000);
+    tbody.insertBefore(row, tbody.firstChild);
+    while (tbody.children.length > 25) {
+        tbody.removeChild(tbody.lastChild);
+    }
+}
+
+function changeReportPage(delta) {
+    const target = currentReportPage + delta;
+    if (target >= 1 && target <= totalReportPages) {
+        loadReport(target);
+    }
+}
+
+function openCropModal(url, title) {
+    const modal = document.getElementById('cropModal');
+    const img = document.getElementById('cropModalImg');
+    const caption = document.getElementById('cropModalCaption');
+    if (!modal || !img) return;
+    img.src = url;
+    caption.textContent = title;
+    modal.style.display = 'flex';
+}
+
+// ══ WebSocket ═════════════════════════════════════════════════════
+let ws = null;
+let _wsPingInterval = null;
+const wsDot = document.getElementById('wsDot');
+const wsLbl = document.getElementById('wsLbl');
+
+function connectWS() {
+    if (ws && ws.readyState < 2) return;
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${proto}//${location.host}/ws/detections`);
+
+    ws.onopen = () => {
+        wsDot.className = 'ws-dot ws-dot--on';
+        wsLbl.textContent = 'Live Active';
+        clearInterval(_wsPingInterval);
+        _wsPingInterval = setInterval(() => ws && ws.readyState === 1 && ws.send('ping'), 25000);
+    };
+    ws.onmessage = ({ data }) => {
+        try {
+            const msg = JSON.parse(data);
+            if (msg.type === 'FRAME_BOXES') {
+                drawBoxes(msg.data.camera_tag, msg.data.boxes);
+                if (msg.data.active_tracks !== undefined) {
+                    const trkEl = document.getElementById(`trk-${msg.data.camera_tag}`);
+                    if (trkEl) trkEl.textContent = `${msg.data.active_tracks} tracks`;
+                }
+            } else if (msg.type === 'NEW_DETECTION') {
+                renderEvent(msg.data, true);
+                prependReportRow(msg.data);
+            } else if (msg.type === 'INIT_BACKLOG' && Array.isArray(msg.data)) {
+                msg.data.slice().reverse().forEach(d => renderEvent(d, true));
+            }
+        } catch (_) {}
+    };
+    ws.onerror = () => {};
+    ws.onclose = () => {
+        wsDot.className = 'ws-dot';
+        wsLbl.textContent = 'Reconnecting…';
+        clearInterval(_wsPingInterval);
+        _wsPingInterval = null;
+        ws = null;
+        setTimeout(connectWS, 2500);
+    };
+}
+
+// ══ Boot ══════════════════════════════════════════════════════════
+function boot() {
+    loadFeeds();
+    connectWS();
+    loadStats();
+    loadReport(1);
+    setInterval(loadStats, 15000);
+    setInterval(() => loadReport(currentReportPage), 10000);
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+} else {
+    boot();
+}
+</script>
+{% endblock %}
