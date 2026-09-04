@@ -4,6 +4,7 @@ App configuration via pydantic-settings.
 Reads from environment variables (or a .env file if present).
 """
 
+import os
 from pydantic_settings import BaseSettings
 
 

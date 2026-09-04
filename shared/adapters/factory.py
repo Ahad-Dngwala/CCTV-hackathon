@@ -71,10 +71,13 @@ class AdapterFactory:
         # Inject credentials from environment if needed (embed user:pass into rtsp_url in memory)
         if "103.250.160.189" in rtsp_url and "@" not in rtsp_url:
             import os
+            from urllib.parse import quote
             user = os.environ.get("GRID_RTSP_USER", "")
             password = os.environ.get("GRID_RTSP_PASS", "")
             if user and password:
-                rtsp_url = rtsp_url.replace("rtsp://", f"rtsp://{user}:{password}@")
+                user_enc = quote(user, safe="")
+                pass_enc = quote(password, safe="")
+                rtsp_url = rtsp_url.replace("rtsp://", f"rtsp://{user_enc}:{pass_enc}@")
 
         meta = CameraMetadata(
             source_grid_id=source_grid_id,

@@ -15,10 +15,10 @@ webrtcAdditionalHosts: [127.0.0.1, localhost]
 
 hls: yes
 hlsAddress: :8888
-hlsAlwaysRemux: yes
 hlsSegmentDuration: 2s
-hlsAllowOrigin: '*'
-webrtcAllowOrigin: '*'
+# CORS origins restricted to Sentinel UI (localhost:8000) to prevent unauthorized embedding
+hlsAllowOrigin: 'http://localhost:8000'
+webrtcAllowOrigin: 'http://localhost:8000'
 
 paths:
   cam01:

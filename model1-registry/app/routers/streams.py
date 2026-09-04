@@ -17,6 +17,7 @@ import os
 import threading
 import time
 from typing import Dict, List, Optional
+from urllib.parse import quote
 import uuid
 
 import cv2
@@ -170,6 +171,18 @@ _STREAM_READERS: Dict[str, CameraStreamReader] = {}
 _REGISTRY_LOCK = threading.Lock()
 
 
+def _build_authenticated_rtsp_url(stream_id: str) -> str:
+    """
+    Builds the internal RTSP connection URL with properly percent-encoded credentials (RFC 3986).
+    Protects against special characters (like '@' in email usernames) breaking the URI scheme.
+    """
+    if settings.GRID_RTSP_USER and settings.GRID_RTSP_PASS:
+        user_enc = quote(settings.GRID_RTSP_USER, safe="")
+        pass_enc = quote(settings.GRID_RTSP_PASS, safe="")
+        return f"rtsp://{user_enc}:{pass_enc}@{settings.GRID_RTSP_HOST}:{settings.GRID_RTSP_PORT}/stream/{stream_id}"
+    return f"rtsp://{settings.GRID_RTSP_HOST}:{settings.GRID_RTSP_PORT}/stream/{stream_id}"
+
+
 def get_or_create_stream_reader(cam_id: str, rtsp_url: str) -> CameraStreamReader:
     with _REGISTRY_LOCK:
         if cam_id not in _STREAM_READERS:
@@ -177,8 +190,10 @@ def get_or_create_stream_reader(cam_id: str, rtsp_url: str) -> CameraStreamReade
         else:
             reader = _STREAM_READERS[cam_id]
             if reader.rtsp_url != rtsp_url:
-                reader.rtsp_url = rtsp_url
-                reader._running = False
+                with reader._lock:
+                    reader.rtsp_url = rtsp_url
+                    reader._running = False
+                _STREAM_READERS[cam_id] = CameraStreamReader(rtsp_url=rtsp_url, cam_id=cam_id)
         return _STREAM_READERS[cam_id]
 
 
@@ -210,10 +225,7 @@ async def get_camera_frame_by_grid_id(grid_id: str):
     elif not clean_id.startswith("cam"):
         clean_id = f"cam{clean_id}"
 
-    if settings.GRID_RTSP_USER and settings.GRID_RTSP_PASS:
-        rtsp_url = f"rtsp://{settings.GRID_RTSP_USER}:{settings.GRID_RTSP_PASS}@{settings.GRID_RTSP_HOST}:{settings.GRID_RTSP_PORT}/stream/{clean_id}"
-    else:
-        rtsp_url = f"rtsp://{settings.GRID_RTSP_HOST}:{settings.GRID_RTSP_PORT}/stream/{clean_id}"
+    rtsp_url = _build_authenticated_rtsp_url(clean_id)
 
     reader = get_or_create_stream_reader(cam_id=clean_id, rtsp_url=rtsp_url)
     reader.touch()
@@ -242,10 +254,7 @@ async def stream_camera_by_grid_id(grid_id: str):
     elif not clean_id.startswith("cam"):
         clean_id = f"cam{clean_id}"
 
-    if settings.GRID_RTSP_USER and settings.GRID_RTSP_PASS:
-        rtsp_url = f"rtsp://{settings.GRID_RTSP_USER}:{settings.GRID_RTSP_PASS}@{settings.GRID_RTSP_HOST}:{settings.GRID_RTSP_PORT}/stream/{clean_id}"
-    else:
-        rtsp_url = f"rtsp://{settings.GRID_RTSP_HOST}:{settings.GRID_RTSP_PORT}/stream/{clean_id}"
+    rtsp_url = _build_authenticated_rtsp_url(clean_id)
 
     reader = get_or_create_stream_reader(cam_id=clean_id, rtsp_url=rtsp_url)
 
@@ -279,10 +288,7 @@ async def stream_camera_by_uuid(camera_id: uuid.UUID):
     if not rtsp_url:
         if grid_id.isdigit():
             grid_id = f"cam{int(grid_id):02d}"
-        if settings.GRID_RTSP_USER and settings.GRID_RTSP_PASS:
-            rtsp_url = f"rtsp://{settings.GRID_RTSP_USER}:{settings.GRID_RTSP_PASS}@{settings.GRID_RTSP_HOST}:{settings.GRID_RTSP_PORT}/stream/{grid_id}"
-        else:
-            rtsp_url = f"rtsp://{settings.GRID_RTSP_HOST}:{settings.GRID_RTSP_PORT}/stream/{grid_id}"
+        rtsp_url = _build_authenticated_rtsp_url(grid_id)
 
     reader = get_or_create_stream_reader(
         cam_id=str(camera_id),

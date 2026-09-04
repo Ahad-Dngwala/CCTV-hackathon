@@ -406,8 +406,9 @@ function renderCard(cam, container) {
 
   // Wire RTSP copy chip (clean URL, no credentials)
   card.querySelector('#chip-' + safeId).onclick = function() {
-    copyToClipboard('rtsp://103.250.160.189:8554/stream/' + cam.id);
-    notify('Copied RTSP URL: rtsp://103.250.160.189:8554/stream/' + cam.id);
+    var urlToCopy = cam.rtsp_url || ('rtsp://' + window.location.hostname + ':8554/stream/' + cam.id);
+    copyToClipboard(urlToCopy);
+    notify('Copied RTSP URL: ' + urlToCopy);
   };
 
   attachStream(cam);
