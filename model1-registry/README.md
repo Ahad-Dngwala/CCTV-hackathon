@@ -46,6 +46,13 @@ psql -h 127.0.0.1 -U postgres -c "CREATE DATABASE sentinel_test OWNER sentinel;"
 pytest
 ```
 
+`tests/conftest.py` shells out to `psql` itself (to build `sentinel_test` from the real schema/triggers/seed - see below), so `psql` needs to be resolvable when you run `pytest`, not just available for the one-time setup command above. It's found automatically if it's on your `PATH` (`shutil.which("psql")`, checked first) or, on Windows, in the default install location (`C:\Program Files\PostgreSQL\<version>\bin`). If neither applies - e.g. a portable/zip install, or a terminal that was already open before installing Postgres and hasn't picked up the updated `PATH` - set `PSQL_PATH` to `psql`'s full path (`psql.exe` on Windows) before running `pytest`, and it'll be used directly with no PATH changes needed:
+
+```powershell
+$env:PSQL_PATH = "C:\Program Files\PostgreSQL\16\bin\psql.exe"
+pytest
+```
+
 Each test runs inside its own transaction + `SAVEPOINT` that's rolled back afterward, so tests can freely create/update/delete rows (including through the real API, which calls `db.commit()`) without leaking state between tests or needing a reseed per test. `tests/conftest.py` applies `shared/db/schema.sql` → `triggers.sql` → `seed.sql` once per test session — exactly what `docker-compose` does in production — so the fixtures exercise the real seeded departments/districts/cameras.
 
 Coverage: auth (login/logout/role checks), camera CRUD + department-scoped RBAC (create/update/delete cross-department 403s, bulk import), districts (including a regression guard for the empty-`districts`-table seed bug), and gap-analysis geodesic math (coverage bounds, radius scaling, real-world area sanity checks per district).

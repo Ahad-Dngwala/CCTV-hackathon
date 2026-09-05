@@ -18,7 +18,9 @@ Design:
     per test.
 """
 
+import functools
 import os
+import shutil
 import subprocess
 import sys
 import uuid
@@ -43,6 +45,75 @@ ADMIN_DB_URL = "postgresql://sentinel:sentinel_dev@127.0.0.1:5432/postgres"
 SEED_PASSWORD = "password123"  # matches README's documented demo accounts
 
 
+@functools.lru_cache(maxsize=1)
+def _resolve_psql() -> str:
+    """Locate the psql executable, resolved once per test session.
+
+    Plain ``"psql"`` (the previous, literal invocation) only works if it's
+    already on PATH - true out of the box on most Linux/macOS setups and
+    CI images, but a common Windows gap: the official PostgreSQL installer
+    only prepends its bin/ directory to PATH for *new* shells/terminals
+    opened after install (an already-open terminal or IDE keeps the old
+    PATH), and some install methods (zip/portable installs, some package
+    managers) never add it to PATH at all. When that happens,
+    ``subprocess.run(["psql", ...])`` fails with the distinctly
+    unhelpful ``FileNotFoundError: [WinError 2]`` deep inside a pytest
+    fixture traceback - nothing about that error says "psql isn't on
+    PATH" to whoever hits it, and no PATH-copying fix (see _psql_env
+    below, which already fixed a *different*, earlier bug) can paper
+    over psql genuinely not being resolvable at all.
+
+    Resolution order:
+      1. ``PSQL_PATH`` env var, if set - an explicit escape hatch so
+         nobody has to fight PATH at all; just point it at the real
+         psql/psql.exe.
+      2. ``shutil.which("psql")`` - respects whatever PATH the test
+         process actually has, cross-platform, and is what most
+         environments (Linux, macOS, a properly-configured Windows PATH)
+         hit.
+      3. Common Windows install locations for the official installer
+         (``Program Files\\PostgreSQL\\<version>\\bin``), highest version
+         first, since that's the default install path and installer
+         PATH updates don't apply retroactively to a shell that was
+         already open when Postgres was installed.
+      4. Otherwise, raise a clear, actionable RuntimeError instead of
+         letting a bare WinError 2 surface as the failure.
+    """
+    override = os.environ.get("PSQL_PATH")
+    if override:
+        if not Path(override).is_file():
+            raise RuntimeError(
+                f"PSQL_PATH is set to {override!r}, but no file exists there. "
+                "Point PSQL_PATH at the full path to your psql executable "
+                "(psql.exe on Windows)."
+            )
+        return override
+
+    found = shutil.which("psql")
+    if found:
+        return found
+
+    if sys.platform == "win32":
+        for base in (
+            r"C:\Program Files\PostgreSQL",
+            r"C:\Program Files (x86)\PostgreSQL",
+        ):
+            candidates = sorted(Path(base).glob("*/bin/psql.exe"), reverse=True)
+            if candidates:
+                return str(candidates[0])
+
+    raise RuntimeError(
+        "Could not find the 'psql' executable. The test suite shells out to "
+        "psql to build the sentinel_test database from shared/db/schema.sql "
+        "(see model1-registry/README.md's Testing section). Either add "
+        "PostgreSQL's bin/ directory to your PATH (on Windows this is "
+        "usually 'C:\\Program Files\\PostgreSQL\\<version>\\bin' - open a "
+        "new terminal after installing, since PATH changes don't apply to "
+        "terminals that were already open) or set the PSQL_PATH environment "
+        "variable to psql's full path (e.g. psql.exe's location) and rerun."
+    )
+
+
 def _psql_env() -> dict:
     """Inherit the caller's real environment and only add PGPASSWORD.
 
@@ -62,7 +133,7 @@ def _psql_env() -> dict:
 def _run_psql(database: str, sql_file: Path) -> None:
     result = subprocess.run(
         [
-            "psql",
+            _resolve_psql(),
             "-h", "127.0.0.1",
             "-U", "sentinel",
             "-d", database,
@@ -85,13 +156,13 @@ def test_engine():
     """Build a fresh sentinel_test database from the real schema/triggers/seed
     once for the whole test session, and return an engine bound to it."""
     subprocess.run(
-        ["psql", "-h", "127.0.0.1", "-U", "sentinel", "-d", "postgres",
+        [_resolve_psql(), "-h", "127.0.0.1", "-U", "sentinel", "-d", "postgres",
          "-c", f'DROP DATABASE IF EXISTS "{TEST_DB_NAME}";'],
         env=_psql_env(),
         capture_output=True, text=True, check=True,
     )
     subprocess.run(
-        ["psql", "-h", "127.0.0.1", "-U", "sentinel", "-d", "postgres",
+        [_resolve_psql(), "-h", "127.0.0.1", "-U", "sentinel", "-d", "postgres",
          "-c", f'CREATE DATABASE "{TEST_DB_NAME}" OWNER sentinel;'],
         env=_psql_env(),
         capture_output=True, text=True, check=True,
