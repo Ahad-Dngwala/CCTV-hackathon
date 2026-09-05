@@ -21,7 +21,8 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -31,8 +32,10 @@ local_repo_root = current_dir.parent.parent
 if (local_repo_root / "shared").exists() and str(local_repo_root) not in sys.path:
     sys.path.insert(0, str(local_repo_root))
 
+from app.auth.dependencies import get_current_user  # noqa: E402
 from app.config import settings  # noqa: E402
 from app.routers import audit, auth, cameras, departments, districts, gap_analysis, pages, streams  # noqa: E402
+from shared.db.models import User as UserModel  # noqa: E402
 from model2_analytics.app.ingestion.supervisor import IngestionSupervisor  # noqa: E402
 from model2_analytics.app.ingestion.catalogue import (  # noqa: E402
     CataloguePoller,
@@ -118,12 +121,36 @@ BASE_DIR = Path(__file__).resolve().parent
 app.state.templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
-# Mount model-2 detection-image directory
+# Model-2 detection-image directory (cropped vehicle/plate images from the
+# detection pipeline). NOT a plain StaticFiles mount (AuditReport1.md
+# finding 1.5) — a FastAPI Depends() can't be attached directly to a
+# StaticFiles mount, so this wraps the same directory in an explicit route
+# that requires a logged-in user and rejects path traversal before ever
+# touching the filesystem, instead of serving every file to anyone who can
+# guess a filename.
 DETECTION_IMG_DIR = Path("/model2-analytics/detection-image")
 if not DETECTION_IMG_DIR.exists():
     DETECTION_IMG_DIR = Path(__file__).resolve().parents[2] / "model2-analytics" / "detection-image"
 DETECTION_IMG_DIR.mkdir(parents=True, exist_ok=True)
-app.mount("/detection-image", StaticFiles(directory=str(DETECTION_IMG_DIR)), name="detection-image")
+_DETECTION_IMG_DIR_RESOLVED = DETECTION_IMG_DIR.resolve()
+
+
+@app.get("/detection-image/{file_path:path}", name="detection-image")
+async def get_detection_image(
+    file_path: str,
+    current_user: UserModel = Depends(get_current_user),
+):
+    """Serve a detection-pipeline crop image, but only to a logged-in user."""
+    requested = (_DETECTION_IMG_DIR_RESOLVED / file_path).resolve()
+    try:
+        requested.relative_to(_DETECTION_IMG_DIR_RESOLVED)
+    except ValueError:
+        # Path escapes DETECTION_IMG_DIR (e.g. "../../etc/passwd") — treat
+        # exactly like "not found" rather than confirming it exists elsewhere.
+        raise HTTPException(status_code=404, detail="Not found")
+    if not requested.is_file():
+        raise HTTPException(status_code=404, detail="Not found")
+    return FileResponse(str(requested))
 
 # ── Model 1 Routers ──────────────────────────────────────────────
 
