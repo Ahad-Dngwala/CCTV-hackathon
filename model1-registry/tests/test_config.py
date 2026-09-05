@@ -25,6 +25,21 @@ def _import_config_in_subprocess(env_overrides: dict) -> subprocess.CompletedPro
     # correctly on both Windows (";") and POSIX (":").
     env = os.environ.copy()
     env["PYTHONPATH"] = os.pathsep.join([str(MODEL1_ROOT), str(REPO_ROOT)])
+
+    # These tests exist specifically to pin down the SECRET_KEY/DEBUG
+    # fail-fast behavior for particular combinations (default vs. real key,
+    # DEBUG true vs. false) — that only holds if the subprocess sees
+    # exactly the combination each test passes in. Inheriting the parent
+    # environment (above) is required for Windows, but if the developer's
+    # own shell already exports SECRET_KEY/DEBUG (e.g. because they're
+    # following .env.example to run the app in the same session before
+    # running pytest), that would silently leak through env.update() below
+    # and could make e.g. test_default_secret_key_with_debug_false_refuses_to_start
+    # pass or fail based on unrelated shell state instead of app/config.py's
+    # actual behavior. Clear both first so env_overrides is the sole source
+    # of truth for what this subprocess sees, on any OS and any shell.
+    env.pop("SECRET_KEY", None)
+    env.pop("DEBUG", None)
     env.update(env_overrides)
     return subprocess.run(
         [sys.executable, "-c", "import app.config"],
