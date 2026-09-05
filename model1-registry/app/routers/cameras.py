@@ -311,6 +311,13 @@ def update_camera(
     lat = update_data.pop("latitude", None)
     lon = update_data.pop("longitude", None)
 
+    if "department_id" in update_data and current_user.department_id:
+        if update_data["department_id"] != current_user.department_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Cannot transfer camera to a different department.",
+            )
+
     for field, value in update_data.items():
         setattr(cam, field, value)
 

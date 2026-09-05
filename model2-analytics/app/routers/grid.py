@@ -14,6 +14,9 @@ from fastapi import APIRouter, Depends, Query, Request, HTTPException, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session, joinedload
 
+from app.auth.dependencies import get_current_user, require_role
+from shared.db.models import User as UserModel
+
 from shared.db.models import Camera as CameraModel
 from shared.db.models import Department as DeptModel
 from shared.db.models import District as DistModel
@@ -57,11 +60,13 @@ def _build_stream_urls(cam: CameraModel) -> tuple[str, str, str]:
 
 @router.get("/api/v1/grid/streams", response_model=List[CameraStreamResponse])
 def get_grid_streams(
+    request: Request,
     department_id: Optional[uuid.UUID] = Query(None, description="Filter streams by department"),
     district_id: Optional[uuid.UUID] = Query(None, description="Filter streams by district"),
     connectivity_status: Optional[str] = Query(None, description="Filter by status (online/offline)"),
     is_live_only: bool = Query(False, description="Filter active live streams only"),
     db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
 ):
     """
     Retrieve all camera feeds and their stream endpoints (RTSP, WHEP WebRTC, HLS) for video grid rendering.
@@ -118,7 +123,10 @@ def get_grid_streams(
 
 
 @router.get("/api/ingest")
-def get_ingest_catalogue(db: Session = Depends(get_db)):
+def get_ingest_catalogue(
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
     """
     Hackathon Portal Ingestion Contract Endpoint.
     Returns every camera with its id, location, codec, live status, stream properties, and all 3 URLs.
@@ -154,7 +162,11 @@ def get_ingest_catalogue(db: Session = Depends(get_db)):
 
 
 @router.post("/api/v1/grid/sync", response_model=CatalogueSyncResponse)
-def sync_ingest_catalogue(payload: CatalogueSyncRequest, db: Session = Depends(get_db)):
+def sync_ingest_catalogue(
+    payload: CatalogueSyncRequest,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(require_role("dept_admin")),
+):
     """
     Sync camera streams from the ingestion catalogue into the database.
     """

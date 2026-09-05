@@ -7,6 +7,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.auth.dependencies import get_current_user
+from shared.db.models import User as UserModel
 from shared.db.models import Camera as CameraModel
 from shared.db.models import Department as DepartmentModel
 from shared.db.models import User as UserModel
