@@ -14,6 +14,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
+from app.auth.dependencies import require_role
+from shared.db.models import User as UserModel
+
 from shared.db.models import (
     VehicleWatchlist as VehicleWatchlistModel,
     Department as DepartmentModel,
@@ -53,6 +56,7 @@ def list_watchlist_vehicles(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
+    current_user: UserModel = Depends(require_role("dept_admin", "operator")),
 ):
     """
     Retrieve all vehicle watchlist entries with optional filtering.
@@ -77,6 +81,7 @@ def list_watchlist_vehicles(
 def create_watchlist_vehicle(
     payload: VehicleWatchlistCreate,
     db: Session = Depends(get_db),
+    current_user: UserModel = Depends(require_role("dept_admin", "operator")),
 ):
     """
     Add a new vehicle to the watchlist (stolen, wanted, or blacklisted).
@@ -125,6 +130,7 @@ def create_watchlist_vehicle(
 def get_watchlist_vehicle(
     id: uuid.UUID,
     db: Session = Depends(get_db),
+    current_user: UserModel = Depends(require_role("dept_admin", "operator")),
 ):
     """
     Get details of a specific watchlist entry by UUID.
@@ -143,6 +149,7 @@ def update_watchlist_vehicle(
     id: uuid.UUID,
     payload: VehicleWatchlistUpdate,
     db: Session = Depends(get_db),
+    current_user: UserModel = Depends(require_role("dept_admin", "operator")),
 ):
     """
     Update details or status of a watchlist entry (e.g. resolve a case).
@@ -177,6 +184,7 @@ def update_watchlist_vehicle(
 def delete_watchlist_vehicle(
     id: uuid.UUID,
     db: Session = Depends(get_db),
+    current_user: UserModel = Depends(require_role("dept_admin", "operator")),
 ):
     """
     Delete a vehicle watchlist entry permanently and cascade associated alerts.

@@ -9,6 +9,7 @@ combinations we import app.config fresh in a subprocess rather than in
 this process.
 """
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -18,7 +19,12 @@ REPO_ROOT = MODEL1_ROOT.parent
 
 
 def _import_config_in_subprocess(env_overrides: dict) -> subprocess.CompletedProcess:
-    env = {"PATH": "/usr/bin:/bin", "PYTHONPATH": f"{MODEL1_ROOT}:{REPO_ROOT}"}
+    # Inherit the real environment (needed on Windows for python.exe's own
+    # DLL search path, SystemRoot, etc. — a hardcoded PATH=/usr/bin:/bin
+    # only works on Linux) and use os.pathsep so PYTHONPATH is joined
+    # correctly on both Windows (";") and POSIX (":").
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.pathsep.join([str(MODEL1_ROOT), str(REPO_ROOT)])
     env.update(env_overrides)
     return subprocess.run(
         [sys.executable, "-c", "import app.config"],

@@ -18,6 +18,7 @@ Design:
     per test.
 """
 
+import os
 import subprocess
 import sys
 import uuid
@@ -42,6 +43,22 @@ ADMIN_DB_URL = "postgresql://sentinel:sentinel_dev@127.0.0.1:5432/postgres"
 SEED_PASSWORD = "password123"  # matches README's documented demo accounts
 
 
+def _psql_env() -> dict:
+    """Inherit the caller's real environment and only add PGPASSWORD.
+
+    Previously this replaced the whole environment with a hardcoded
+    ``PATH=/usr/bin:/bin``, which only happens to work on Linux (where psql
+    lives under /usr/bin). On Windows there is no /usr/bin, so psql.exe
+    (and the DLL search path python itself needs) can't be resolved at
+    all, which surfaces as ``FileNotFoundError: [WinError 2]`` for every
+    test that touches the database. Extending os.environ instead makes
+    this work wherever ``psql`` is already on PATH, on any OS.
+    """
+    env = os.environ.copy()
+    env["PGPASSWORD"] = "sentinel_dev"
+    return env
+
+
 def _run_psql(database: str, sql_file: Path) -> None:
     result = subprocess.run(
         [
@@ -52,7 +69,7 @@ def _run_psql(database: str, sql_file: Path) -> None:
             "-v", "ON_ERROR_STOP=1",
             "-f", str(sql_file),
         ],
-        env={"PGPASSWORD": "sentinel_dev", "PATH": "/usr/bin:/bin"},
+        env=_psql_env(),
         capture_output=True,
         text=True,
     )
@@ -70,13 +87,13 @@ def test_engine():
     subprocess.run(
         ["psql", "-h", "127.0.0.1", "-U", "sentinel", "-d", "postgres",
          "-c", f'DROP DATABASE IF EXISTS "{TEST_DB_NAME}";'],
-        env={"PGPASSWORD": "sentinel_dev", "PATH": "/usr/bin:/bin"},
+        env=_psql_env(),
         capture_output=True, text=True, check=True,
     )
     subprocess.run(
         ["psql", "-h", "127.0.0.1", "-U", "sentinel", "-d", "postgres",
          "-c", f'CREATE DATABASE "{TEST_DB_NAME}" OWNER sentinel;'],
-        env={"PGPASSWORD": "sentinel_dev", "PATH": "/usr/bin:/bin"},
+        env=_psql_env(),
         capture_output=True, text=True, check=True,
     )
 
@@ -208,6 +225,22 @@ def viewer_client(db_session):
 @pytest.fixture()
 def anon_client(client):
     return client
+
+
+@pytest.fixture(autouse=True)
+def _reset_login_rate_limiter():
+    """The login rate limiter (app/auth/rate_limit.py) is a module-level
+    singleton shared across the whole test session, same as streams.py's
+    _STREAM_READERS. Without resetting it between tests, a handful of
+    deliberate wrong-password tests could accumulate toward the same
+    lockout threshold real users hit, and start failing unrelated,
+    later tests with 429s instead of the auth result they're actually
+    testing for."""
+    from app.auth.rate_limit import login_rate_limiter
+
+    login_rate_limiter.reset_all()
+    yield
+    login_rate_limiter.reset_all()
 
 
 def unique_camera_name(prefix: str = "Test Cam") -> str:
