@@ -13,6 +13,27 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, Request, HTTPException, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session, joinedload
+from urllib.parse import urlparse
+
+def is_safe_url(url: Optional[str]) -> bool:
+    if not url:
+        return True
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ["http", "https", "rtsp"]:
+            return False
+        host = parsed.hostname
+        if not host:
+            return False
+        forbidden = ["localhost", "127.0.0.1", "169.254.169.254", "0.0.0.0", "::1"]
+        if host in forbidden or host.endswith(".internal"):
+            return False
+        return True
+    except Exception:
+        return False
+
+from app.auth.dependencies import get_current_user, require_role
+from shared.db.models import User as UserModel
 
 from shared.db.models import Camera as CameraModel
 from shared.db.models import Department as DeptModel
@@ -42,12 +63,19 @@ def _format_cam_tag(source_id: str) -> str:
 
 def _build_stream_urls(cam: CameraModel) -> tuple[str, str, str]:
     """Helper to generate RTSP, WHEP, and HLS URLs for a camera pointing to the Sentinel Grid gateway."""
+    from app.config import settings
+
     source_id = cam.source_grid_id or str(cam.id)[:8]
     cam_tag = _format_cam_tag(source_id)
 
-    rtsp = f"rtsp://kushwahavarun86%40gmail.com:77YY-GGER-EW2M@103.250.160.189:8554/stream/{cam_tag}"
-    whep = f"http://103.250.160.189:8889/stream/{cam_tag}/whep"
-    hls = f"https://cctv.corp8.cloud/{cam_tag}/index.m3u8"
+    user = settings.GRID_RTSP_USER
+    passwd = settings.GRID_RTSP_PASS
+    host = settings.GRID_RTSP_HOST
+    auth = f"{user}:{passwd}@" if user and passwd else ""
+
+    rtsp = f"rtsp://{auth}{host}:{settings.GRID_RTSP_PORT}/stream/{cam_tag}"
+    whep = f"http://{host}:{settings.GRID_WHEP_PORT}/stream/{cam_tag}/whep"
+    hls = f"https://{settings.GRID_CDN_HOST}/{cam_tag}/index.m3u8"
 
     return rtsp, whep, hls
 
@@ -57,11 +85,15 @@ def _build_stream_urls(cam: CameraModel) -> tuple[str, str, str]:
 
 @router.get("/api/v1/grid/streams", response_model=List[CameraStreamResponse])
 def get_grid_streams(
+    request: Request,
     department_id: Optional[uuid.UUID] = Query(None, description="Filter streams by department"),
     district_id: Optional[uuid.UUID] = Query(None, description="Filter streams by district"),
     connectivity_status: Optional[str] = Query(None, description="Filter by status (online/offline)"),
     is_live_only: bool = Query(False, description="Filter active live streams only"),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
 ):
     """
     Retrieve all camera feeds and their stream endpoints (RTSP, WHEP WebRTC, HLS) for video grid rendering.
@@ -81,7 +113,7 @@ def get_grid_streams(
     if is_live_only:
         query = query.filter(CameraModel.is_live.is_(True))
 
-    cameras = query.all()
+    cameras = query.order_by(CameraModel.name).limit(limit).offset(offset).all()
     results = []
 
     for cam in cameras:
@@ -118,7 +150,10 @@ def get_grid_streams(
 
 
 @router.get("/api/ingest")
-def get_ingest_catalogue(db: Session = Depends(get_db)):
+def get_ingest_catalogue(
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
     """
     Hackathon Portal Ingestion Contract Endpoint.
     Returns every camera with its id, location, codec, live status, stream properties, and all 3 URLs.
@@ -154,7 +189,11 @@ def get_ingest_catalogue(db: Session = Depends(get_db)):
 
 
 @router.post("/api/v1/grid/sync", response_model=CatalogueSyncResponse)
-def sync_ingest_catalogue(payload: CatalogueSyncRequest, db: Session = Depends(get_db)):
+def sync_ingest_catalogue(
+    payload: CatalogueSyncRequest,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(require_role("dept_admin")),
+):
     """
     Sync camera streams from the ingestion catalogue into the database.
     """
@@ -163,6 +202,9 @@ def sync_ingest_catalogue(payload: CatalogueSyncRequest, db: Session = Depends(g
     updated_count = 0
 
     for item in items:
+        if not is_safe_url(item.rtsp_url) or not is_safe_url(item.whep_url) or not is_safe_url(item.hls_url):
+            raise HTTPException(status_code=400, detail=f"Invalid or unsafe URL provided for source_grid_id {item.id}")
+
         cam = db.query(CameraModel).filter(CameraModel.source_grid_id == item.id).first()
         if cam:
             cam.location_label = item.location_label or cam.location_label

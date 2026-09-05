@@ -8,6 +8,8 @@ from shared.db.models import District as DistrictModel
 from shared.db.models import User as UserModel
 from shared.db.session import get_db
 
+from app.auth.dependencies import get_current_user
+from shared.db.models import User as UserModel
 from shared.schemas.district import District as DistrictSchema
 from app.auth.dependencies import get_current_user
 
