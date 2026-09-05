@@ -13,6 +13,24 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, Request, HTTPException, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session, joinedload
+from urllib.parse import urlparse
+
+def is_safe_url(url: Optional[str]) -> bool:
+    if not url:
+        return True
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ["http", "https", "rtsp"]:
+            return False
+        host = parsed.hostname
+        if not host:
+            return False
+        forbidden = ["localhost", "127.0.0.1", "169.254.169.254", "0.0.0.0", "::1"]
+        if host in forbidden or host.endswith(".internal"):
+            return False
+        return True
+    except Exception:
+        return False
 
 from shared.db.models import Camera as CameraModel
 from shared.db.models import Department as DeptModel
@@ -42,12 +60,19 @@ def _format_cam_tag(source_id: str) -> str:
 
 def _build_stream_urls(cam: CameraModel) -> tuple[str, str, str]:
     """Helper to generate RTSP, WHEP, and HLS URLs for a camera pointing to the Sentinel Grid gateway."""
+    from app.config import settings
+
     source_id = cam.source_grid_id or str(cam.id)[:8]
     cam_tag = _format_cam_tag(source_id)
 
-    rtsp = f"rtsp://kushwahavarun86%40gmail.com:77YY-GGER-EW2M@103.250.160.189:8554/stream/{cam_tag}"
-    whep = f"http://103.250.160.189:8889/stream/{cam_tag}/whep"
-    hls = f"https://cctv.corp8.cloud/{cam_tag}/index.m3u8"
+    user = settings.GRID_RTSP_USER
+    passwd = settings.GRID_RTSP_PASS
+    host = settings.GRID_RTSP_HOST
+    auth = f"{user}:{passwd}@" if user and passwd else ""
+
+    rtsp = f"rtsp://{auth}{host}:{settings.GRID_RTSP_PORT}/stream/{cam_tag}"
+    whep = f"http://{host}:{settings.GRID_WHEP_PORT}/stream/{cam_tag}/whep"
+    hls = f"https://{settings.GRID_CDN_HOST}/{cam_tag}/index.m3u8"
 
     return rtsp, whep, hls
 
@@ -163,6 +188,9 @@ def sync_ingest_catalogue(payload: CatalogueSyncRequest, db: Session = Depends(g
     updated_count = 0
 
     for item in items:
+        if not is_safe_url(item.rtsp_url) or not is_safe_url(item.whep_url) or not is_safe_url(item.hls_url):
+            raise HTTPException(status_code=400, detail=f"Invalid or unsafe URL provided for source_grid_id {item.id}")
+
         cam = db.query(CameraModel).filter(CameraModel.source_grid_id == item.id).first()
         if cam:
             cam.location_label = item.location_label or cam.location_label

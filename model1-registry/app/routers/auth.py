@@ -68,6 +68,7 @@ def login(
         value=access_token,
         httponly=True,
         samesite="lax",
+        secure=True,
         path="/",
     )
 
@@ -85,5 +86,5 @@ def login(
 @router.post("/logout")
 def logout(response: Response):
     """Log out current user by clearing the authentication cookie."""
-    response.delete_cookie(key="access_token", path="/")
+    response.delete_cookie(key="access_token", path="/", secure=True, httponly=True, samesite="lax")
     return {"status": "logged_out"}

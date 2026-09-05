@@ -27,19 +27,26 @@ from pipeline.tracking.frame_tracker import InFrameTracker
 logger = logging.getLogger("sentinel.runner")
 logger.setLevel(logging.INFO)
 
+import os
+
+user = os.getenv("GRID_RTSP_USER", "")
+passwd = os.getenv("GRID_RTSP_PASS", "")
+host = os.getenv("GRID_RTSP_HOST", "103.250.160.189")
+auth = f"{user}:{passwd}@" if user and passwd else ""
+
 # ── Camera configuration ───────────────────────────────────────────
 CAMERAS = [
     {
         "tag":            "cam04",
         "name":           "Camera 04 — Paldi Circle (Ahmedabad)",
         "source_grid_id": "4",
-        "rtsp_url":       "rtsp://kushwahavarun86%40gmail.com:77YY-GGER-EW2M@103.250.160.189:8554/stream/cam04",
+        "rtsp_url":       f"rtsp://{auth}{host}:8554/stream/cam04",
     },
     {
         "tag":            "cam22",
         "name":           "Camera 22 — BK Mervada (Banaskantha)",
         "source_grid_id": "22",
-        "rtsp_url":       "rtsp://kushwahavarun86%40gmail.com:77YY-GGER-EW2M@103.250.160.189:8554/stream/cam22",
+        "rtsp_url":       f"rtsp://{auth}{host}:8554/stream/cam22",
     },
 ]
 

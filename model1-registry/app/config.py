@@ -9,11 +9,11 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "postgresql://sentinel:sentinel_dev@127.0.0.1:5432/sentinel"
+    DATABASE_URL: str
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8000
-    DEBUG: bool = True
-    SECRET_KEY: str = "sentinel-secret-key-hackathon-2026-secure"
+    DEBUG: bool = False
+    SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 hours
 
