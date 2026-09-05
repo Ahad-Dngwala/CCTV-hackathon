@@ -132,4 +132,4 @@ The entire platform (PostgreSQL + PostGIS database and the FastAPI application) 
 
 ## 📄 License & Project Context
 
-See [Project_Context.md](file:///c:/Users/Asus%20f15/QuantumMachineLearning/Project_Context.md) for full architectural background, rationale, and design principles.
+See [Project_Context.md](./Project_Context.md) for full architectural background, rationale, and design principles.
