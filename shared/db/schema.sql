@@ -131,15 +131,17 @@ CREATE TABLE vehicles_watchlist (
 );
 CREATE UNIQUE INDEX idx_vehicles_watchlist_plate_unique ON vehicles_watchlist (plate_number) WHERE status = 'active';
 
--- Bonus scope — persons watchlist
+-- Persons watchlist with 512-d biometric face embedding
 CREATE TABLE persons_watchlist (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name           TEXT NOT NULL,
     category       TEXT NOT NULL CHECK (category IN ('wanted', 'missing', 'suspect')),
     face_embedding VECTOR(512),
+    photo_path     TEXT,
     status         TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'resolved')),
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS idx_persons_watchlist_embedding ON persons_watchlist USING hnsw (face_embedding vector_cosine_ops);
 
 -- Vehicle tracks — resolved global identity for vehicles
 CREATE TABLE vehicle_tracks (

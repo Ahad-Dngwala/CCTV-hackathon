@@ -35,6 +35,7 @@ The entire platform (PostgreSQL + PostGIS database and the FastAPI application) 
     - **Live AI Vehicle Detection (Cam 04 & 22)**: `http://localhost:8000/detection`
     - **Pre-Recorded Video AI Detection**: `http://localhost:8000/recorded-detection`
     - **Vehicle Watchlist (Model 2)**: `http://localhost:8000/watchlist`
+    - **Person Watchlist & Biometrics (Model 2)**: `http://localhost:8000/watchlist/persons`
     - **Department Management**: `http://localhost:8000/departments`
     - **District Overview**: `http://localhost:8000/districts`
     - **System Audit Log**: `http://localhost:8000/audit`
@@ -127,6 +128,13 @@ The entire platform (PostgreSQL + PostGIS database and the FastAPI application) 
 - `GET /api/v1/watchlist/vehicles/{id}` — Get single watchlist target detail
 - `PATCH /api/v1/watchlist/vehicles/{id}` — Update target case status (`active` / `resolved`) or details
 - `DELETE /api/v1/watchlist/vehicles/{id}` — Delete watchlist target and cascade associated alerts
+- `GET /watchlist/persons` — Person Watchlist & Facial Biometric Dashboard UI
+- `GET /api/v1/watchlist/persons` — List & filter person targets (filter by `category`, `status`, `name`)
+- `POST /api/v1/watchlist/persons` — Register person target with 5-gate AI quality validation (YuNet + solvePnP 3D pose) and 512-d InceptionResnetV1 embedding in `pgvector`
+- `GET /api/v1/watchlist/persons/{id}` — Get single person watchlist target detail
+- `PATCH /api/v1/watchlist/persons/{id}` — Update person details or toggle status (`active` / `resolved`)
+- `DELETE /api/v1/watchlist/persons/{id}` — Remove person target and disk reference photo
+- `GET /api/v1/watchlist/persons/photos/{photo_filename}` — Authenticated serving of reference face portrait
 
 ---
 

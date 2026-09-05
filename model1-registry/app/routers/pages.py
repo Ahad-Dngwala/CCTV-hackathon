@@ -428,6 +428,24 @@ def watchlist_page(
     )
 
 
+@router.get("/watchlist/persons", response_class=HTMLResponse)
+def persons_watchlist_page(
+    request: Request,
+    user: Optional[UserModel] = Depends(get_optional_current_user),
+):
+    """Person Watchlist & Facial Biometric Registry Page."""
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+
+    return request.app.state.templates.TemplateResponse(
+        request=request,
+        name="persons_watchlist.html",
+        context={
+            "user": user,
+        },
+    )
+
+
 @router.get("/alerts", response_class=HTMLResponse)
 def alerts_placeholder(request: Request):
     return request.app.state.templates.TemplateResponse(
