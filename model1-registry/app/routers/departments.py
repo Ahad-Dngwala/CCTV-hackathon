@@ -11,8 +11,11 @@ from app.auth.dependencies import get_current_user
 from shared.db.models import User as UserModel
 from shared.db.models import Camera as CameraModel
 from shared.db.models import Department as DepartmentModel
+from shared.db.models import User as UserModel
 from shared.db.session import get_db
 from shared.schemas.department import Department as DepartmentSchema
+
+from app.auth.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/v1/departments", tags=["departments"])
 
