@@ -8,6 +8,8 @@ import os
 from pydantic_settings import BaseSettings
 
 
+
+
 class Settings(BaseSettings):
     DATABASE_URL: str
     APP_HOST: str = "0.0.0.0"
@@ -33,3 +35,4 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+

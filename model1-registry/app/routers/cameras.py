@@ -107,6 +107,7 @@ def list_cameras(
     connectivity_status: Optional[str] = Query(None),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
 ):
     q = db.query(CameraModel).options(
         joinedload(CameraModel.department),
@@ -270,7 +271,11 @@ async def bulk_import(
 
 
 @router.get("/{camera_id}", response_model=CameraSchema)
-def get_camera(camera_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_camera(
+    camera_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
     cam = (
         db.query(CameraModel)
         .options(
@@ -353,7 +358,11 @@ def delete_camera(
 
 
 @router.get("/{camera_id}/history")
-def get_camera_history(camera_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_camera_history(
+    camera_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
     """Audit trail for one camera — status_history rows."""
     cam = db.query(CameraModel).filter(CameraModel.id == camera_id).first()
     if not cam:
