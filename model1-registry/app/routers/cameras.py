@@ -106,6 +106,8 @@ def list_cameras(
     district_id: Optional[uuid.UUID] = Query(None),
     connectivity_status: Optional[str] = Query(None),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
+    limit: int = Query(100, ge=1, le=1000, description="Max records to return"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
     db: Session = Depends(get_db),
 ):
     q = db.query(CameraModel).options(
@@ -124,7 +126,7 @@ def list_cameras(
         # Default: only active cameras
         q = q.filter(CameraModel.is_active == True)  # noqa: E712
 
-    cameras = q.order_by(CameraModel.name).all()
+    cameras = q.order_by(CameraModel.name).limit(limit).offset(offset).all()
     return [_camera_to_schema(c) for c in cameras]
 
 
@@ -181,7 +183,14 @@ async def bulk_import(
     if not file.filename or not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only .csv files are accepted.")
 
+    # Size limit (5MB) to prevent memory exhaustion
+    if file.size and file.size > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File too large (max 5MB).")
+
     content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File too large (max 5MB).")
+
     text_content = content.decode("utf-8-sig")  # handle BOM
     reader = csv.DictReader(io.StringIO(text_content))
 
@@ -252,11 +261,11 @@ async def bulk_import(
                     f"SRID=4326;POINT({lon} {lat})"
                 )
 
-            db.add(cam)
-            db.flush()
+            with db.begin_nested():
+                db.add(cam)
+                db.flush()
             created += 1
         except Exception as exc:
-            db.rollback()
             errors.append(f"Row {i}: {exc}")
             errored += 1
 
