@@ -227,5 +227,21 @@ def anon_client(client):
     return client
 
 
+@pytest.fixture(autouse=True)
+def _reset_login_rate_limiter():
+    """The login rate limiter (app/auth/rate_limit.py) is a module-level
+    singleton shared across the whole test session, same as streams.py's
+    _STREAM_READERS. Without resetting it between tests, a handful of
+    deliberate wrong-password tests could accumulate toward the same
+    lockout threshold real users hit, and start failing unrelated,
+    later tests with 429s instead of the auth result they're actually
+    testing for."""
+    from app.auth.rate_limit import login_rate_limiter
+
+    login_rate_limiter.reset_all()
+    yield
+    login_rate_limiter.reset_all()
+
+
 def unique_camera_name(prefix: str = "Test Cam") -> str:
     return f"{prefix} {uuid.uuid4().hex[:8]}"

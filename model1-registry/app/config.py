@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 hours
 
+    # Login rate limiting / lockout (AuditReport1.md finding 2.2). Keyed on
+    # (client IP, username) - see app/auth/rate_limit.py.
+    LOGIN_MAX_ATTEMPTS: int = 5
+    LOGIN_WINDOW_SECONDS: int = 300    # 5 minutes: failures older than this don't count
+    LOGIN_LOCKOUT_SECONDS: int = 900   # 15 minutes: how long a lockout lasts once triggered
+
     # VMS ingestion settings
     GRID_HOST: str = "cctv.corp8.cloud"
     MEDIAMTX_API: str = "localhost:9997"

@@ -73,6 +73,49 @@ def test_logout_clears_session(admin_home_client):
     assert "/login" in page.headers.get("location", "")
 
 
+def test_login_lockout_after_repeated_failures(client):
+    """AuditReport1.md finding 2.2: repeated wrong-password attempts must
+    eventually get throttled instead of allowed forever."""
+    from app.config import settings
+
+    for _ in range(settings.LOGIN_MAX_ATTEMPTS):
+        resp = client.post(
+            "/api/v1/auth/login",
+            json={"username": "admin_home", "password": "not-the-password"},
+        )
+        assert resp.status_code == 401
+
+    # One more attempt - even with the *correct* password now - must be
+    # throttled, since the lockout blocks the (ip, username) pair itself,
+    # not just further wrong guesses.
+    locked_resp = client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin_home", "password": "password123"},
+    )
+    assert locked_resp.status_code == 429
+    assert "Retry-After" in locked_resp.headers
+
+
+def test_login_lockout_is_scoped_to_username_not_shared_across_accounts(client):
+    """Locking out one account from an IP must not collateral-lock a
+    different account from that same IP."""
+    from app.config import settings
+
+    for _ in range(settings.LOGIN_MAX_ATTEMPTS):
+        client.post(
+            "/api/v1/auth/login",
+            json={"username": "admin_home", "password": "not-the-password"},
+        )
+
+    # admin_rto is a different account; same TestClient (same "IP"), but
+    # a different rate-limit key entirely.
+    other_resp = client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin_rto", "password": "password123"},
+    )
+    assert other_resp.status_code == 200
+
+
 def test_operator_and_viewer_can_login_but_are_not_dept_admin(operator_client, viewer_client):
     assert operator_client.get("/api/v1/cameras").status_code == 200
     assert viewer_client.get("/api/v1/cameras").status_code == 200

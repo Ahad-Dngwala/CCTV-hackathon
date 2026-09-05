@@ -7,10 +7,11 @@ POST /api/v1/auth/logout
 from typing import Optional
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.auth.rate_limit import login_rate_limiter, rate_limit_key
 from app.auth.security import create_access_token, verify_password
 from app.config import settings
 from shared.db.models import User as UserModel
@@ -49,10 +50,22 @@ class LoginResponse(BaseModel):
 @router.post("/login", response_model=LoginResponse)
 def login(
     credentials: LoginRequest,
+    request: Request,
     response: Response,
     db: Session = Depends(get_db),
 ):
     """Authenticate user with username and password, issuing an httpOnly JWT cookie."""
+    client_ip = request.client.host if request.client else "unknown"
+    rl_key = rate_limit_key(client_ip, credentials.username)
+
+    retry_after = login_rate_limiter.seconds_until_unlocked(rl_key)
+    if retry_after > 0:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many failed login attempts. Try again later.",
+            headers={"Retry-After": str(int(retry_after) + 1)},
+        )
+
     user = (
         db.query(UserModel)
         .filter(UserModel.username == credentials.username)
@@ -60,10 +73,13 @@ def login(
     )
 
     if not user or not user.is_active or not verify_password(credentials.password, user.hashed_password):
+        login_rate_limiter.record_failure(rl_key)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password.",
         )
+
+    login_rate_limiter.record_success(rl_key)
 
     token_data = {
         "sub": str(user.id),
