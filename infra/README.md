@@ -10,6 +10,7 @@ This directory contains the Docker Compose configuration and container definitio
 |---|---|---|
 | `db` | `Dockerfile.db` (`postgis/postgis:16-3.4` + `pgvector`) | PostgreSQL + PostGIS spatial engine + vector embeddings |
 | `app` | `Dockerfile` (`python:3.12-slim`) | Sentinel FastAPI Web App (Model 1 & Model 2) |
+| `caddy` | `caddy:2-alpine` | Reverse proxy + automatic HTTPS in front of `app` |
 
 ---
 
@@ -54,6 +55,29 @@ docker compose exec db psql -U sentinel -d sentinel -c "SELECT count(*) FROM cam
 
 Environment settings are configured via `DATABASE_URL` in `docker-compose.yml`:
 `postgresql://sentinel:sentinel_dev@db:5432/sentinel`
+
+---
+
+## 🔐 TLS / Reverse Proxy (Caddy)
+
+`app` itself only ever speaks plain HTTP on the private compose network -
+`caddy` is the only service exposed on ports 80/443, and it terminates TLS
+before forwarding to `app:8000`. Config lives in `infra/Caddyfile`.
+
+- **Local dev**: leave `DOMAIN` unset. Caddy falls back to `localhost`
+  and serves its own locally-trusted self-signed certificate - no DNS or
+  extra setup needed, `docker compose up -d` just works.
+- **Real deployment**: point a real DNS record at this host and set
+  `DOMAIN=your-real-domain.example` (e.g. in a `.env` file next to
+  `docker-compose.yml`, see `.env.example`). Caddy automatically obtains
+  and renews a real Let's Encrypt certificate for that domain - no manual
+  certbot/renewal steps required.
+
+The app's own login cookie (`routers/auth.py`) sets `secure=True`
+whenever `DEBUG=false` (the default `docker-compose.yml` already sets
+this), so once Caddy is fronting the app with real TLS, the session
+cookie also refuses to travel over plain HTTP - see AuditReport1.md
+finding 2.1 for why this was previously missing entirely.
 
 ---
 

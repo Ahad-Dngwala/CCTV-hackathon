@@ -12,8 +12,19 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.auth.security import create_access_token, verify_password
+from app.config import settings
 from shared.db.models import User as UserModel
 from shared.db.session import get_db
+
+# secure=True refuses to send the cookie over plain HTTP at all - correct
+# once infra/Caddyfile is terminating real TLS (AuditReport1.md finding
+# 2.1), but it would break local http://localhost:8000 development if
+# always on, since browsers silently drop "secure" cookies set over HTTP.
+# settings.DEBUG is already the app's one existing prod/dev switch (see
+# config.py's own SECRET_KEY fail-fast), so reuse it here instead of
+# adding a second flag: DEBUG=True (local/test default) -> not secure,
+# DEBUG=False (the docker-compose default) -> secure.
+_COOKIE_SECURE = not settings.DEBUG
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -68,6 +79,7 @@ def login(
         value=access_token,
         httponly=True,
         samesite="lax",
+        secure=_COOKIE_SECURE,
         path="/",
     )
 
@@ -85,5 +97,13 @@ def login(
 @router.post("/logout")
 def logout(response: Response):
     """Log out current user by clearing the authentication cookie."""
-    response.delete_cookie(key="access_token", path="/")
+    # Match the attributes the cookie was actually set with (samesite,
+    # secure) - some browsers only clear a cookie via Set-Cookie when the
+    # deleting response's attributes line up with how it was set.
+    response.delete_cookie(
+        key="access_token",
+        path="/",
+        samesite="lax",
+        secure=_COOKIE_SECURE,
+    )
     return {"status": "logged_out"}

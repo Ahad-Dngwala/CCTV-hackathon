@@ -16,6 +16,27 @@ def test_login_success_sets_httponly_cookie(client):
     assert "HttpOnly" in set_cookie_header
 
 
+def test_login_cookie_secure_flag_matches_debug_setting(client):
+    """AuditReport1.md finding 2.1: the cookie must not claim `Secure` while
+    running with DEBUG=true (the local-dev/test default, no TLS present) -
+    a browser would otherwise be fine, but this would be a lie about the
+    cookie's own guarantees. settings.DEBUG=False (docker-compose's
+    default, see infra/Caddyfile for the TLS termination that makes
+    `Secure` meaningful there) is exercised in test_config.py's subprocess
+    tests instead, since Settings() here is fixed for the whole process.
+    """
+    from app.config import settings
+
+    resp = client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin_home", "password": "password123"},
+    )
+    assert resp.status_code == 200
+    set_cookie_header = resp.headers.get("set-cookie", "")
+    assert settings.DEBUG is True, "test suite is expected to run with DEBUG=true"
+    assert "Secure" not in set_cookie_header
+
+
 def test_login_wrong_password_rejected(client):
     resp = client.post(
         "/api/v1/auth/login",
