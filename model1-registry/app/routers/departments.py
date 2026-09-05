@@ -9,14 +9,20 @@ from sqlalchemy.orm import Session
 
 from shared.db.models import Camera as CameraModel
 from shared.db.models import Department as DepartmentModel
+from shared.db.models import User as UserModel
 from shared.db.session import get_db
 from shared.schemas.department import Department as DepartmentSchema
+
+from app.auth.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/v1/departments", tags=["departments"])
 
 
 @router.get("", response_model=list[DepartmentSchema])
-def list_departments(db: Session = Depends(get_db)):
+def list_departments(
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
     """List all departments with a camera count per department."""
     rows = (
         db.query(

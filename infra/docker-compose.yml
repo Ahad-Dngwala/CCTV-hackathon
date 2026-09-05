@@ -45,6 +45,14 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: "postgresql://sentinel:sentinel_dev@db:5432/sentinel"
+      # No safe default exists for SECRET_KEY - it signs every login
+      # session's JWT, and the checked-in app/config.py default is public.
+      # Previously there was no way to override this without hand-editing
+      # this file; now `docker compose up` refuses to start until a real
+      # value is set (see .env.example). DEBUG must also be explicit here,
+      # since app/config.py only enforces SECRET_KEY when DEBUG=false.
+      SECRET_KEY: "${SECRET_KEY:?SECRET_KEY must be set - see .env.example}"
+      DEBUG: "${DEBUG:-false}"
       GRID_HOST: "${GRID_HOST:-cctv.corp8.cloud}"
       MEDIAMTX_API: "${MEDIAMTX_API:-mediamtx:9997}"
       DISABLE_INGESTION: "${DISABLE_INGESTION:-true}"

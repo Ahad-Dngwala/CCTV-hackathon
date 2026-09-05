@@ -27,7 +27,9 @@ import numpy as np
 from sqlalchemy.orm import Session
 
 from shared.db.models import Camera as CameraModel
+from shared.db.models import User as UserModel
 from shared.db.session import get_db
+from app.auth.dependencies import get_current_user
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -214,7 +216,10 @@ async def frame_generator(reader: CameraStreamReader):
 
 
 @router.get("/grid/{grid_id}/frame")
-async def get_camera_frame_by_grid_id(grid_id: str):
+async def get_camera_frame_by_grid_id(
+    grid_id: str,
+    current_user: UserModel = Depends(get_current_user),
+):
     """
     Returns the single latest JPEG frame for a camera.
     Ultra-lightweight endpoint used by matrix cards to prevent browser socket exhaustion.
@@ -243,7 +248,10 @@ async def get_camera_frame_by_grid_id(grid_id: str):
 
 
 @router.get("/grid/{grid_id}/live")
-async def stream_camera_by_grid_id(grid_id: str):
+async def stream_camera_by_grid_id(
+    grid_id: str,
+    current_user: UserModel = Depends(get_current_user),
+):
     """
     Streams live video frames directly for a government grid camera (e.g. cam01 through cam30).
     Decodes both H.264 and HEVC (H.265) server-side with zero browser codec dependencies.
@@ -270,7 +278,10 @@ async def stream_camera_by_grid_id(grid_id: str):
 
 
 @router.get("/{camera_id}/live")
-async def stream_camera_by_uuid(camera_id: uuid.UUID):
+async def stream_camera_by_uuid(
+    camera_id: uuid.UUID,
+    current_user: UserModel = Depends(get_current_user),
+):
     """
     Streams live video frames for a database camera row.
     """
@@ -310,7 +321,11 @@ async def stream_camera_by_uuid(camera_id: uuid.UUID):
 
 
 @streams_router.get("/catalogue")
-async def get_stream_catalogue(request: Request, db: Session = Depends(get_db)):
+async def get_stream_catalogue(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
     """
     Returns the live camera stream catalogue for the /live grid view.
     Always returns sanitized, public URLs (passwords protected in backend config).
