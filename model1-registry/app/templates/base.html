@@ -53,9 +53,11 @@
                 <a href="/districts" class="nav-link {% if request.url.path == '/districts' %}active{% endif %}" id="nav-districts">
                     <span class="nav-link-icon">📍</span> Districts
                 </a>
+                {% if user and user.role in ('dept_admin', 'operator') %}
                 <a href="/audit" class="nav-link {% if request.url.path == '/audit' %}active{% endif %}" id="nav-audit">
                     <span class="nav-link-icon">📜</span> Audit Log
                 </a>
+                {% endif %}
                 <a href="/gap-analysis" class="nav-link {% if request.url.path == '/gap-analysis' %}active{% endif %}" id="nav-gap-analysis">
                     <span class="nav-link-icon">📊</span> Gap Analysis
                 </a>

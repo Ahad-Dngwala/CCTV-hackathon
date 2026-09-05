@@ -286,15 +286,25 @@ def audit_page(
     if not user:
         return RedirectResponse(url="/login", status_code=302)
 
+    # AuditReport1.md #8: mirrors the API's role/department scoping in
+    # routers/audit.py::get_global_audit_log - a "viewer" (read-only, no
+    # department per Project_Context.md §3) shouldn't land on a page
+    # showing the full cross-department change history either. Redirect
+    # to the home page rather than rendering a table this role isn't
+    # meant to see, same idea as camera_new_form/camera_edit_form
+    # redirecting non-dept_admins away from forms they can't use.
+    if user.role not in ("dept_admin", "operator"):
+        return RedirectResponse(url="/", status_code=302)
+
+    from shared.db.models import Camera as CameraModel
     from shared.db.models import StatusHistory as StatusHistoryModel
 
-    rows = (
-        db.query(StatusHistoryModel)
-        .options(joinedload(StatusHistoryModel.camera))
-        .order_by(StatusHistoryModel.changed_at.desc())
-        .limit(200)
-        .all()
-    )
+    query = db.query(StatusHistoryModel).options(joinedload(StatusHistoryModel.camera))
+    if user.department_id:
+        query = query.filter(
+            StatusHistoryModel.camera.has(CameraModel.department_id == user.department_id)
+        )
+    rows = query.order_by(StatusHistoryModel.changed_at.desc()).limit(200).all()
 
     user_ids = {r.changed_by for r in rows if r.changed_by is not None}
     users_by_id = {}
