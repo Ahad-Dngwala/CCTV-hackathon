@@ -129,7 +129,7 @@ CREATE TABLE vehicles_watchlist (
     status        TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'resolved')),
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX idx_vehicles_watchlist_plate ON vehicles_watchlist (plate_number) WHERE status = 'active';
+CREATE UNIQUE INDEX idx_vehicles_watchlist_plate_unique ON vehicles_watchlist (plate_number) WHERE status = 'active';
 
 -- Bonus scope — persons watchlist
 CREATE TABLE persons_watchlist (

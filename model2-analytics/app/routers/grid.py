@@ -65,6 +65,8 @@ def get_grid_streams(
     district_id: Optional[uuid.UUID] = Query(None, description="Filter streams by district"),
     connectivity_status: Optional[str] = Query(None, description="Filter by status (online/offline)"),
     is_live_only: bool = Query(False, description="Filter active live streams only"),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(get_current_user),
 ):
@@ -86,7 +88,7 @@ def get_grid_streams(
     if is_live_only:
         query = query.filter(CameraModel.is_live.is_(True))
 
-    cameras = query.all()
+    cameras = query.order_by(CameraModel.name).limit(limit).offset(offset).all()
     results = []
 
     for cam in cameras:
