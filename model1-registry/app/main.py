@@ -140,8 +140,29 @@ async def lifespan(app: FastAPI):
     # start_federation_services registers each adapter's cameras into the
     # DB and starts its event stream as its own background task, then
     # returns — it does not block startup waiting on them.
-    from shared.db.session import _SessionLocal as _sl
-    await start_federation_services(db_session_factory=_sl, redis_url=settings.REDIS_URL)
+    #
+    # That registration goes through db_session_factory directly (the
+    # module-level _SessionLocal, bound to settings.DATABASE_URL) instead
+    # of the get_db dependency, so it's invisible to the per-test
+    # SAVEPOINT/rollback session tests/conftest.py wires up via a get_db
+    # override - same class of problem as the catalogue poll above, just
+    # via a different DB path. In practice, every TestClient startup
+    # writes real vms_systems/cameras rows straight into whatever database
+    # settings.DATABASE_URL points at (the dev "sentinel" DB by default,
+    # per .env.example) outside any test's transaction - which errors
+    # outright if that database hasn't had shared/db/schema.sql applied to
+    # it (bootstrap_local_db.sh only creates the role/database and
+    # extensions, not the schema), and leaves real rows behind even when
+    # it hasn't errored. DISABLE_FEDERATION_STARTUP (set by
+    # tests/conftest.py, same mechanism as DISABLE_CATALOGUE_POLL above)
+    # skips this entirely during tests; unset (services run normally) for
+    # every real deployment. model3_federation/tests exercises
+    # register_adapter() and the correlation engine directly against the
+    # test session instead, so no coverage is lost by skipping this here.
+    disable_federation_startup = os.environ.get("DISABLE_FEDERATION_STARTUP", "false").lower() == "true"
+    if not disable_federation_startup:
+        from shared.db.session import _SessionLocal as _sl
+        await start_federation_services(db_session_factory=_sl, redis_url=settings.REDIS_URL)
 
     yield
 
@@ -152,6 +173,9 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
     supervisor.stop_all()
+    # Safe to call unconditionally even when disable_federation_startup
+    # skipped the start above - stop_federation_services() only cancels
+    # whatever is in _tasks, which stays [] if nothing was ever started.
     await stop_federation_services()
 
 

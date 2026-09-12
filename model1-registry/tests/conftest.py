@@ -49,6 +49,18 @@ for p in (str(MODEL1_ROOT), str(REPO_ROOT)):
 # network access (CI, sandboxes, offline dev).
 os.environ.setdefault("DISABLE_CATALOGUE_POLL", "true")
 
+# Same reasoning as above, for a different startup task: model3_federation's
+# start_federation_services() registers adapter cameras through shared/db/
+# session.py's module-level _SessionLocal directly, not through get_db, so
+# it sits outside this file's SAVEPOINT/rollback session entirely and writes
+# straight into whatever database settings.DATABASE_URL points at - which
+# errors outright unless that database happens to have shared/db/schema.sql
+# applied to it (bootstrap_local_db.sh's dev "sentinel" database does not).
+# Skipped during tests for the same reason DISABLE_CATALOGUE_POLL is;
+# model3_federation/tests exercises register_adapter() and the correlation
+# engine directly against db_session instead, so no coverage is lost.
+os.environ.setdefault("DISABLE_FEDERATION_STARTUP", "true")
+
 # test_streams.py::test_grid_frame_accessible_when_authenticated hits a real
 # endpoint (app/routers/streams.py) that genuinely tries to open the live
 # grid's RTSP feed via OpenCV/FFmpeg, fails (no real camera/credentials in a
