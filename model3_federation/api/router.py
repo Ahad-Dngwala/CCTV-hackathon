@@ -26,7 +26,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -174,19 +174,41 @@ async def stop_federation_services() -> None:
 # ── WebSocket endpoint ───────────────────────────────────────────────────────
 
 @router.websocket("/ws/federation")
-async def ws_federation(
-    websocket: WebSocket,
-    current_user: UserModel = Depends(get_current_user),
-):
+async def ws_federation(websocket: WebSocket, db: Session = Depends(get_db)):
     """
     WebSocket endpoint for the live federation dashboard.
     Pushes FederatedEvent, FederatedAlert, and CorrelationResult objects
     as JSON to every connected browser client.
 
-    Auth follows the same pattern as model2_analytics's /ws/detections:
-    get_current_user reads the access_token cookie/header, so only
-    logged-in users can open this socket.
+    Auth reuses get_current_user - the same cookie/header check every
+    REST endpoint below uses - but calls it directly rather than wiring
+    it up as Depends(get_current_user) on this function's own signature.
+    This FastAPI/Starlette version does not substitute a WebSocket for a
+    Request-typed dependency on a websocket route: get_current_user takes
+    request: Request, so a Depends(get_current_user) parameter here (as
+    a previous version of this endpoint had) is left unfulfilled, and
+    FastAPI's own dependency solver raises a bare
+    "get_current_user() missing 1 required positional argument: 'request'"
+    TypeError from inside the ASGI app - crashing the connection for
+    every caller regardless of auth, not rejecting it with a clean 401
+    the way the equivalent REST-endpoint case does.
+
+    Calling get_current_user directly sidesteps FastAPI's dependency
+    solver for this one call: Python does not check the request: Request
+    annotation at runtime, and the only things get_current_user (via
+    get_token_from_request) touches on that object - .cookies, .headers -
+    exist on WebSocket too, since Request and WebSocket both derive from
+    Starlette's HTTPConnection. `db` still comes through Depends(get_db)
+    normally on this function's own signature, which works fine here
+    since get_db takes no Request/WebSocket-typed parameter to resolve.
     """
+    try:
+        current_user = get_current_user(websocket, db)
+    except HTTPException:
+        logger.warning("Unauthenticated WebSocket connection to /ws/federation - rejecting cleanly.")
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Unauthorized")
+        return
+
     await websocket.accept()
     _ws_clients.add(websocket)
     logger.info("WebSocket client connected. Total: %d", len(_ws_clients))
