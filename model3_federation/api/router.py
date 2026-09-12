@@ -234,7 +234,7 @@ def get_federated_systems(
         """
         SELECT vs.id, vs.name, vs.vendor, vs.status,
                vs.camera_count, vs.last_heartbeat, vs.protocol, vs.ownership,
-               d.name AS department_name
+               d.name AS department_name, vs.department_hint
         FROM   vms_systems vs
         LEFT JOIN departments d ON d.id = vs.department_id
         ORDER  BY vs.name
@@ -245,17 +245,26 @@ def get_federated_systems(
     for r in rows:
         sys_id = str(r[0])
         epm_bucket = _events_per_min.get(sys_id, [])
+        department_name = r[8]
+        # department_name is NULL exactly when vs.department_id is NULL
+        # (departments can't be deleted while referenced - see triggers.sql),
+        # so this is a direct proxy for "department_id IS NULL". A hint
+        # only shows up here when there's also one on file (registration.py
+        # records it during adapter self-registration) and it's the reason
+        # department is unset, not just an unset field on a manually
+        # onboarded system that was never given a department on purpose.
         result.append({
-            "id":              sys_id,
-            "name":            r[1],
-            "vendor":          r[2],
-            "status":          r[3],
-            "camera_count":    r[4] or 0,
-            "last_heartbeat":  r[5].isoformat() if r[5] else None,
-            "protocol":        r[6],
-            "ownership":       r[7],
-            "department":      r[8],
-            "events_per_min":  len(epm_bucket),
+            "id":                       sys_id,
+            "name":                     r[1],
+            "vendor":                   r[2],
+            "status":                   r[3],
+            "camera_count":             r[4] or 0,
+            "last_heartbeat":           r[5].isoformat() if r[5] else None,
+            "protocol":                 r[6],
+            "ownership":                r[7],
+            "department":               department_name,
+            "unmatched_department_hint": r[9] if department_name is None else None,
+            "events_per_min":           len(epm_bucket),
         })
     return result
 

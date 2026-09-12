@@ -46,21 +46,58 @@ from model3_federation.schemas.models import FederatedCamera
 logger = logging.getLogger("sentinel.federation.registration")
 
 
-def _resolve_department_id(session, department_hint: Optional[str]) -> Optional[str]:
+def _resolve_department_id(
+    session, department_hint: Optional[str], adapter_name: str
+) -> Optional[str]:
     """
     Match an adapter's plain-English department hint (e.g. "Police") against
     departments.name/category. Returns None on no match rather than guessing —
     cameras.department_id has no NOT NULL constraint, so leaving it unset is
     safe and honest; picking an arbitrary department would not be.
+
+    A silent None used to be the only outcome visible anywhere for a hint
+    that stops matching (department renamed, adapter typo, a genuinely new
+    department not yet in `departments`) — no error, no log line, nothing
+    an admin would see. This logs a warning whenever the hint doesn't
+    resolve to exactly one department:
+
+      * zero matches — department_id will be NULL, with no other signal
+        of why. Naming the adapter and the exact hint string here is what
+        makes that diagnosable instead of a silent, unexplained NULL.
+      * more than one match (e.g. a short, generic hint) — previously an
+        undocumented `LIMIT 1` with no ORDER BY, i.e. "whichever row the
+        planner happens to return first," which isn't guaranteed stable
+        across Postgres versions/plans. `ORDER BY id` below makes the pick
+        deterministic; this warning makes it visible that a pick is even
+        being made, so a too-generic hint gets noticed and tightened.
     """
     if not department_hint:
         return None
     from sqlalchemy import text
 
-    row = session.execute(text(
-        "SELECT id FROM departments WHERE name ILIKE :pat OR category ILIKE :pat LIMIT 1"
-    ), {"pat": f"%{department_hint}%"}).fetchone()
-    return str(row[0]) if row else None
+    rows = session.execute(text(
+        "SELECT id, name FROM departments WHERE name ILIKE :pat OR category ILIKE :pat "
+        "ORDER BY id"
+    ), {"pat": f"%{department_hint}%"}).fetchall()
+
+    if not rows:
+        logger.warning(
+            "Adapter %s: department hint %r matched no department; "
+            "department_id will be NULL.",
+            adapter_name, department_hint,
+        )
+        return None
+
+    if len(rows) > 1:
+        matched_names = ", ".join(r[1] for r in rows)
+        logger.warning(
+            "Adapter %s: department hint %r matched %d departments (%s); "
+            "using %r. Consider a more specific hint in the adapter's "
+            "camera data.",
+            adapter_name, department_hint, len(rows), matched_names, rows[0][1],
+        )
+
+    return str(rows[0][0])
 
 
 def _upsert_system_and_cameras(
@@ -74,21 +111,23 @@ def _upsert_system_and_cameras(
 
     session = db_session_factory()
     try:
+        department_hint = cameras[0].department if cameras else None
         department_id = _resolve_department_id(
-            session, cameras[0].department if cameras else None
+            session, department_hint, adapter.system_name
         )
 
         session.execute(text(
             """
             INSERT INTO vms_systems
-              (id, name, vendor, protocol, ownership, department_id, status, camera_count, last_heartbeat)
+              (id, name, vendor, protocol, ownership, department_id, department_hint, status, camera_count, last_heartbeat)
             VALUES
-              (:id, :name, :vendor, 'simulated', :ownership, :dept, 'connected', :count, now())
+              (:id, :name, :vendor, 'simulated', :ownership, :dept, :dept_hint, 'connected', :count, now())
             ON CONFLICT (id) DO UPDATE
-            SET status         = 'connected',
-                department_id  = COALESCE(vms_systems.department_id, EXCLUDED.department_id),
-                camera_count   = :count,
-                last_heartbeat = now()
+            SET status          = 'connected',
+                department_id   = COALESCE(vms_systems.department_id, EXCLUDED.department_id),
+                department_hint = EXCLUDED.department_hint,
+                camera_count    = :count,
+                last_heartbeat  = now()
             """
         ), {
             "id": adapter.system_id,
@@ -96,6 +135,7 @@ def _upsert_system_and_cameras(
             "vendor": adapter.vendor,
             "ownership": ownership,
             "dept": department_id,
+            "dept_hint": department_hint,
             "count": len(cameras),
         })
 
