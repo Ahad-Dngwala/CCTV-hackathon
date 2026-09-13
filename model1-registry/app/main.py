@@ -46,7 +46,11 @@ if _M2_LOCAL_DIR.exists() and str(_M2_LOCAL_DIR) not in sys.path:
 from app.auth.dependencies import get_current_user  # noqa: E402
 from app.config import settings  # noqa: E402
 from app.routers import audit, auth, cameras, departments, districts, gap_analysis, pages, streams  # noqa: E402
-from model3_federation.api.router import router as federation_router, start_federation_services  # noqa: E402
+from model3_federation.api.router import (  # noqa: E402
+    router as federation_router,
+    start_federation_services,
+    stop_federation_services,
+)
 from shared.db.models import User as UserModel  # noqa: E402
 from model2_analytics.app.ingestion.supervisor import IngestionSupervisor  # noqa: E402
 from model2_analytics.app.ingestion.catalogue import (  # noqa: E402
@@ -133,22 +137,11 @@ async def lifespan(app: FastAPI):
             )
 
     # ── Model 3 Federation Services ─────────────────────────
-    # Pass the DB session factory and REDIS_URL so the federation bus
-    # and correlation engine can connect without importing from main.py.
-    import sys as _sys
-    import types as _types
-    # Inject REDIS_URL into a tiny shim module so router.py can import it
-    # without a circular dependency on app.config.
-    _shim = _types.ModuleType("model1_config")
-    _shim.REDIS_URL = settings.REDIS_URL
-    _sys.modules["model1_config"] = _shim
-
+    # start_federation_services registers each adapter's cameras into the
+    # DB and starts its event stream as its own background task, then
+    # returns — it does not block startup waiting on them.
     from shared.db.session import _SessionLocal as _sl
-    _fed_task = asyncio.create_task(
-        start_federation_services(db_session_factory=_sl),
-        name="federation-startup",
-    )
-    app.state.federation_task = _fed_task
+    await start_federation_services(db_session_factory=_sl, redis_url=settings.REDIS_URL)
 
     yield
 
@@ -159,14 +152,7 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
     supervisor.stop_all()
-    # Cancel federation tasks
-    fed_task = getattr(app.state, "federation_task", None)
-    if fed_task is not None:
-        fed_task.cancel()
-        try:
-            await fed_task
-        except asyncio.CancelledError:
-            pass
+    await stop_federation_services()
 
 
 app = FastAPI(
@@ -188,10 +174,13 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 # StaticFiles mount, so this wraps the same directory in an explicit route
 # that requires a logged-in user and rejects path traversal before ever
 # touching the filesystem, instead of serving every file to anyone who can
-# guess a filename.
-DETECTION_IMG_DIR = Path("/app/model2_analytics/detection-image")
-if not DETECTION_IMG_DIR.exists():
-    DETECTION_IMG_DIR = Path(__file__).resolve().parents[2] / "model2_analytics" / "detection-image"
+_DETECTION_IMG_CANDIDATES = [
+    Path("/model2-analytics/detection-image"),
+    Path("/app/model2_analytics/detection-image"),
+    local_repo_root / "model2_analytics" / "detection-image",
+    local_repo_root / "model2-analytics" / "detection-image",
+]
+DETECTION_IMG_DIR = next((p for p in _DETECTION_IMG_CANDIDATES if p.is_dir()), _DETECTION_IMG_CANDIDATES[0])
 DETECTION_IMG_DIR.mkdir(parents=True, exist_ok=True)
 _DETECTION_IMG_DIR_RESOLVED = DETECTION_IMG_DIR.resolve()
 
@@ -262,8 +251,10 @@ app.include_router(federation_router)
 #     stays a deliberate design choice per AuditReport1.md finding 17,
 #     not a workaround for the duplication finding 5 has now closed.
 _M2_ROUTERS_DIR_CANDIDATES = [
-    Path("/app/model2_analytics/app/routers"),                          # Docker
+    Path("/model2-analytics/app/routers"),                              # Docker mount
+    Path("/app/model2_analytics/app/routers"),                          # Docker alternate
     local_repo_root / "model2_analytics" / "app" / "routers",          # Local dev
+    local_repo_root / "model2-analytics" / "app" / "routers",          # Local dev alternate
 ]
 _m2_routers_dir = next((p for p in _M2_ROUTERS_DIR_CANDIDATES if p.is_dir()), None)
 
