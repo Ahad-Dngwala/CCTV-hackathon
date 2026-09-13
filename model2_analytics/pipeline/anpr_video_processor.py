@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import cv2
+import numpy as np
 
 _PROJECT = Path(__file__).resolve().parents[1]
 if str(_PROJECT) not in sys.path:
@@ -342,7 +343,10 @@ class ANPRTrackedProcessor:
                 if area > ts.max_crop_area:
                     ts.max_crop_area = area
                 _resolve_plate(ts)
-                self._update_best_frame(ts, crop, ocr_result.confidence, plate_conf, frame_idx)
+                vehicle_crop = frame[max(0, vy1):vy2, max(0, vx1):vx2]
+                self._update_best_frame(ts, vehicle_crop, ocr_result.confidence,
+                                        plate_conf, frame_idx,
+                                        plate_crop=crop, ocr_text=ocr_result.plate_text)
 
             self._draw(annotated, trk, ts, plate_bbox)
 
@@ -401,7 +405,7 @@ class ANPRTrackedProcessor:
             return None
         return frame[y1:y2, x1:x2]
 
-    def _update_best_frame(self, ts, crop, ocr_conf, plate_conf, frame_idx):
+    def _update_best_frame(self, ts, crop, ocr_conf, plate_conf, frame_idx, plate_crop=None, ocr_text=None):
         if crop is None or crop.size == 0:
             return
         score = ocr_conf * max(plate_conf, 0.01)
@@ -410,7 +414,27 @@ class ANPRTrackedProcessor:
             ts.best_score = score
             ts.best_sharpness = sh
             fname = f"track{ts.track_id}_best.jpg"
-            cv2.imwrite(os.path.join(self.evidence_dir, fname), crop)
+            # Judge-presentable composite: vehicle crop with bounding box +
+            # OCR reading overlaid, and the plate crop (2x zoom) appended
+            # underneath so a single image tells the whole story.
+            vis = crop.copy()
+            cv2.rectangle(vis, (0, 0), (vis.shape[1] - 1, vis.shape[0] - 1), ts.color, 3)
+            hdr = f"ID:{ts.track_id} {ts.vehicle_class}  f{frame_idx}"
+            ocr_line = f"OCR: {ocr_text if ocr_text else '-'} ({ocr_conf:.2f})"
+            cv2.rectangle(vis, (0, 0), (vis.shape[1], 58), (0, 0, 0), -1)
+            cv2.putText(vis, hdr, (6, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+            cv2.putText(vis, ocr_line, (6, 48), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+            panels = [vis]
+            if plate_crop is not None and plate_crop.size > 0:
+                pz = cv2.resize(plate_crop, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+                maxw = max(vis.shape[1], pz.shape[1])
+                pz = cv2.copyMakeBorder(pz, 0, 0, 0, max(0, maxw - pz.shape[1]),
+                                        cv2.BORDER_CONSTANT, value=(30, 30, 30))
+                vis = cv2.copyMakeBorder(vis, 0, 0, 0, max(0, maxw - vis.shape[1]),
+                                         cv2.BORDER_CONSTANT, value=(30, 30, 30))
+                panels = [vis, pz]
+            composite = np.vstack(panels)
+            cv2.imwrite(os.path.join(self.evidence_dir, fname), composite)
             ts.best_crop_path = fname
             ts.best_frame = frame_idx
 
@@ -426,6 +450,21 @@ class ANPRTrackedProcessor:
         if plate_bbox:
             px1, py1, px2, py2 = (int(c) for c in plate_bbox)
             cv2.rectangle(frame, (px1, py1), (px2, py2), (0, 255, 255), 1)
+            # Plate text label near the plate box: resolved text only, or a
+            # stable "reading..." while aggregation is in progress (no
+            # single-frame guesses, so the overlay doesn't flicker garbage).
+            if ts.resolved_text:
+                ptxt = ts.resolved_text
+                pcolor = (0, 255, 255)
+            elif ts.plate_reads:
+                ptxt = "reading..."
+                pcolor = (200, 200, 200)
+            else:
+                ptxt = None
+            if ptxt:
+                py = py1 - 8 if py1 - 8 > 20 else py2 + 22
+                cv2.putText(frame, ptxt, (px1, py),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, pcolor, 2)
 
 
     def run(self):
@@ -494,6 +533,8 @@ class ANPRTrackedProcessor:
                 "dur_frames": ts.last_seen - ts.first_seen + 1,
                 "plate_attempted": len(ts.plate_reads) > 0,
                 "readings_count": len(ts.plate_reads),
+                "avg_bbox_area": round(sum(ts.bbox_areas) / len(ts.bbox_areas), 1) if ts.bbox_areas else 0.0,
+                "class_history": [[f, c, round(cf, 3)] for f, c, cf in ts.class_history],
             })
             # Detail records only for tracks with plate reads
             if not ts.plate_reads:
