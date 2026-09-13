@@ -51,7 +51,7 @@ class FederatedCamera(BaseModel):
 
 class FederatedEvent(BaseModel):
     id: str = Field(default_factory=_new_id)
-    system_id: str                            # UUID of the federated_systems DB row
+    system_id: str                            # UUID of the vms_systems DB row
     system_name: str                          # e.g. "Gujarat Police VMS (Milestone)"
     vendor: str
     camera_external_id: str
@@ -112,7 +112,7 @@ class FederatedAlert(BaseModel):
 # ---------------------------------------------------------------------------
 
 class FederatedSystem(BaseModel):
-    id: str                                   # UUID from federated_systems table
+    id: str                                   # UUID from vms_systems table
     name: str
     vendor: str
     department: str
