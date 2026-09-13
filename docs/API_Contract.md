@@ -40,7 +40,11 @@ Model 2's ingestion adapters poll, not part of our API surface. See
 
 ## 1. Model 1 — Registry endpoints
 
-Owner: `model1-registry`. Data model reference: `Project_Context.md` §3.
+Owner: `model1-registry`. Data model reference: `Project_Context.md` §3;
+full behavior/RBAC/examples: [`docs/model1/README.md`](model1/README.md).
+This table is the one place endpoint status (✅/🚧/❓) lives — when
+`GET /api/v1/export` ships, flip its row below, don't duplicate the
+status elsewhere.
 
 | Method & path | Purpose | Status |
 |---|---|---|
@@ -56,27 +60,46 @@ Owner: `model1-registry`. Data model reference: `Project_Context.md` §3.
 | `GET /api/v1/gap-analysis` | Coverage-hole report (PostGIS spatial query) per `Project_Context.md` §3 | ✅ |
 | `GET /api/v1/export` | CSV/JSON export of filtered camera set | 🚧 |
 
-### Camera object (`shared/schemas`)
+### Camera object (`shared/schemas/camera.py`)
 
 ```json
 {
   "id": "uuid",
   "name": "string",
-  "department_id": "uuid",
-  "location": { "type": "Point", "coordinates": [lon, lat] },
-  "district": "string",
-  "camera_type": "string",
-  "ownership": "string",
+  "department_id": "uuid | null",
+  "department_name": "string | null",
+  "district_id": "uuid | null",
+  "district_name": "string | null",
+  "location": { "type": "Point", "coordinates": [lon, lat] } ,
+  "location_label": "string | null",
+  "camera_type": "string | null",
+  "ownership": "string | null",
   "connectivity_status": "online | offline | maintenance",
-  "storage_type": "string",
-  "retention_days": "int",
+  "storage_type": "string | null",
+  "retention_days": "int | null",
   "vms_url": "string | null",
+  "is_active": "bool",
+  "source_grid_id": "string | null",
+  "codec": "string | null",
+  "stream_width": "int | null",
+  "stream_height": "int | null",
+  "stream_fps": "float | null",
+  "bitrate_kbps": "int | null",
+  "rtsp_url": "string | null",
+  "whep_url": "string | null",
+  "hls_url": "string | null",
   "created_at": "datetime",
   "updated_at": "datetime"
 }
 ```
-Matches `Project_Context.md` §3's data model sketch — refine here as
-fields get added, don't let this drift from `shared/db/`.
+`source_grid_id` through `hls_url` are populated by Model 2's ingestion
+poller, not by Model 1's own API — see `shared/db/models.py`'s
+"grid-sync fields" comment on `cameras`. Full endpoint-by-endpoint
+behavior, RBAC rules, and worked request/response examples now live in
+[`docs/model1/README.md`](model1/README.md) — keep this table and this
+object shape in sync with `shared/schemas/`, but for anything beyond
+"does this field exist and what does it look like," that's the doc to
+read or update.
 
 ---
 

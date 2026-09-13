@@ -146,6 +146,9 @@ docker compose up -d
 Project_Context.md        Working technical specification & architectural decisions
 HackathonPortal.md         Hackathon challenge brief
 docs/
+    model1/README.md       Model 1 - full feature documentation (data model, every endpoint, GIS/gap-analysis internals)
+    PLATFORM.md             The shared FastAPI app shell every model runs inside
+    SECURITY.md             Auth, RBAC, audit trail & cybersecurity posture (cross-model)
     API_Contract.md        REST & WebSocket API specification
     DATASET.md              Dataset notes & video stream catalogue
 shared/                     Shared codebase across models
@@ -169,6 +172,7 @@ scripts/                    One-off setup scripts (e.g. bootstrap_local_db.sh fo
 ## API Endpoints Summary
 
 ### Model 1 - Registry, Auth & GIS
+*(Full documentation, request/response examples, and RBAC rules: [`docs/model1/README.md`](docs/model1/README.md))*
 - `POST /api/v1/auth/login` - Authenticate user and set httpOnly JWT cookie
 - `POST /api/v1/auth/logout` - Log out user and clear session cookie
 - `GET /api/v1/cameras` - List, filter by department, district, and status
@@ -225,4 +229,4 @@ scripts/                    One-off setup scripts (e.g. bootstrap_local_db.sh fo
 
 ## License & Project Context
 
-See [Project_Context.md](./Project_Context.md) for full architectural background, rationale, and design principles.
+See [Project_Context.md](./Project_Context.md) for full architectural background, rationale, and design principles. For Model 1 specifically, [`docs/model1/README.md`](docs/model1/README.md) is the authoritative reference - Project_Context.md is our working spec and may run ahead of or behind what's actually implemented.
