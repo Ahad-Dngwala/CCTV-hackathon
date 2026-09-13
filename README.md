@@ -35,7 +35,9 @@ The entire platform (PostgreSQL + PostGIS database and the FastAPI application) 
    ```
    *This automatically builds the FastAPI app container (`infra/Dockerfile`) and PostgreSQL + PostGIS + pgvector database container (`infra/Dockerfile.db`), and creates the `sentinel` role/database on first boot — no separate setup step needed.*
 
-   Give it 15-30s on first run (the `db` image build + healthcheck). The `app` image's first build is the slow part — its dependencies include `ultralytics`/PyTorch for the AI detection features, so a first-time `docker compose up -d` can take several minutes depending on your connection (subsequent runs are fast, everything's cached). It's not stuck; `docker compose logs -f app` will show the pip install progress if you want to confirm it's still working. `docker compose ps` should show `db` as `healthy` and `app` as `running` before step 4.
+   Give it 15-30s on first run (the `db` image build + healthcheck). The `app` image's first build is the slow part — its dependencies include `ultralytics`/PyTorch for the AI detection features, so a first-time `docker compose up -d` can take a few minutes depending on your connection (subsequent builds reuse a pip cache and are much faster, even after changing requirements or code). It's not stuck; `docker compose logs -f app` will show the pip install progress if you want to confirm it's still working. `docker compose ps` should show `db` as `healthy` and `app` as `running` before step 4.
+
+   **You do not need to `pip install` anything on your host machine for this.** The `app` container installs its own dependencies from `model1-registry/requirements.txt`, `model2_analytics/requirements.txt`, and `model3_federation/requirements.txt` inside the build — a local `pip install -r requirements.txt` doesn't feed the Docker build at all and just costs you the same download twice. The "Running Locally Without Docker" section below (a separate, non-Docker workflow for running tests directly on your machine) is the only place a local `pip install` is actually needed.
 
 4. **Access the Web Dashboard**:
    Open your browser and navigate to:

@@ -1,0 +1,31 @@
+.git
+.gitignore
+
+# Local Python dev artifacts (from `pip install -r requirements-dev.txt`
+# for non-Docker local dev/testing) -- these should never exist inside
+# the build context sent to the Docker daemon. If you ever create a venv
+# inside this repo folder, this line is what stops it from silently
+# bloating every `docker compose build`.
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Editor/OS cruft
+.vscode/
+.idea/
+.DS_Store
+
+# Docs not needed inside the image
+AuditReports/
+docs/
+*.md
+!README.md
+
+# Runtime-written data -- Dockerfile mkdir's these directories fresh and
+# docker-compose.yml bind-mounts over them anyway
+model2_analytics/uploads/*
+model2_analytics/detection-image/*
