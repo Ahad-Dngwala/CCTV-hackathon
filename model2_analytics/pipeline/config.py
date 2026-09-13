@@ -94,6 +94,31 @@ BATCH_SIZE = 16
 LEARNING_RATE = 0.001
 PATIENCE = 10  # early stopping patience
 
-# ── Create output directories ────────────────────────────────────
-for _dir in [WEIGHTS_DIR, DEMO_RESULTS_DIR, EVAL_SCREENSHOTS_DIR, LIVE_SCREENSHOTS_DIR, METRICS_DIR]:
-    _dir.mkdir(parents=True, exist_ok=True)
+# ── OCR settings ───────────────────────────────────────────────
+# Primary OCR engine: "paddle" (PaddleOCR 3.x + EasyOCR fallback) or "easyocr".
+# "paddle" recommended: PaddleOCR 3.x reads angled/distorted plates far better.
+# NOTE: onnxcr / PaddleOCR-default-mkldnn were evaluated and rejected —
+# see ocr_eval/ comparison (PaddleOCR needs enable_mkldnn=False on Win/CPU).
+OCR_ENGINE = "paddle"
+
+# ── Per-class confidence thresholds for vehicle detection ─────────────────
+# Applied AFTER YOLO's predict() (which only takes one global conf arg).
+# Low-confidence classes (motorcycle, rickshaw, bicycle) keep low thresholds
+# since their true-positive confidence is naturally lower on this model.
+# High-confidence classes (car, bus, truck, mini-truck) raise the threshold
+# since low-confidence hits on these are more likely noise than real weak
+# detections.
+# Keys are the NORMALIZED class names (after INDIAN_CLASS_MAP resolution).
+PER_CLASS_CONF_THRESHOLDS = {
+    "Motorcycle": 0.12,
+    "Bicycle": 0.10,
+    "Auto Rickshaw": 0.12,
+    "Car": 0.35,
+    "Bus": 0.35,
+    "Truck": 0.35,
+    "Mini-Truck": 0.30,
+}
+
+# Default imgsz for vehicle detection (overrides the old hardcoded 480).
+# 960 tested: +54% more tracks, 16 FPS on CPU. 1280: +82% tracks, 10 FPS.
+VEHICLE_DETECTION_IMGSZ = 960

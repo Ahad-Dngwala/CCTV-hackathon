@@ -18,6 +18,13 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 
+# Auto-detect CUDA availability
+try:
+    import torch
+    _CUDA_AVAILABLE = torch.cuda.is_available()
+except ImportError:
+    _CUDA_AVAILABLE = False
+
 logger = logging.getLogger("sentinel.plate_detector")
 logger.setLevel(logging.INFO)
 
@@ -59,16 +66,22 @@ class PlateDetector:
 
     def __init__(
         self,
-        confidence_threshold: float = 0.20,  # LOWERED from 0.40 to detect more plates
+        confidence_threshold: float = 0.20,
         imgsz: int = 640,
         device: Optional[str] = None,
-        model_path: Optional[str] = None,  # NEW: custom model path
+        model_path: Optional[str] = None,
     ):
         self.confidence_threshold = confidence_threshold
         self.imgsz                = imgsz
-        self.device               = device
+        # Auto-detect CUDA: use GPU if available and not explicitly overridden
+        if device is None:
+            self.device = "cuda" if _CUDA_AVAILABLE else None
+        else:
+            self.device = device
         self._model               = None
-        self._custom_model_path   = model_path  # NEW
+        self._custom_model_path   = model_path
+
+        logger.info(f"PlateDetector: device={'GPU (CUDA)' if self.device == 'cuda' else 'CPU'}, CUDA available={_CUDA_AVAILABLE}")
 
     # ── Weight resolution ───────────────────────────────────────
     def _resolve_weights(self) -> Optional[str]:
