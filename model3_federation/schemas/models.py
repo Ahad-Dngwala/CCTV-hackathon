@@ -151,6 +151,14 @@ class VMSSystemCreate(BaseModel):
     protocol: str = "manual"
     ownership: str = "government"
     department_id: Optional[str] = None
+    # NEW: config-driven onboarding. When adapter_type is set, `config`
+    # must satisfy that type's CONFIG_FIELDS (see
+    # model3_federation/adapters/registry.py) and create_system() will
+    # actually try to connect before saving — this is what turns "add a
+    # VMS" from a record-only placeholder into a live source. Leave both
+    # unset for the old record-only behavior (unchanged).
+    adapter_type: Optional[str] = None
+    config: Optional[dict] = None
 
     _validate_ownership = field_validator("ownership")(_validate_ownership)
 

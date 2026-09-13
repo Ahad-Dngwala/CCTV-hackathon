@@ -116,14 +116,23 @@ def _upsert_system_and_cameras(
             session, department_hint, adapter.system_name
         )
 
+        # `protocol` used to be hardcoded to the literal string
+        # 'simulated' here regardless of which adapter this was — true
+        # for the three demo adapters, false the moment a real adapter
+        # exists. Falls back to 'simulated' only for adapters that
+        # don't declare an adapter_type (the three demo ones), so
+        # nothing about their behavior changes.
+        protocol = getattr(adapter, "adapter_type", None) or "simulated"
+
         session.execute(text(
             """
             INSERT INTO vms_systems
-              (id, name, vendor, protocol, ownership, department_id, department_hint, status, camera_count, last_heartbeat)
+              (id, name, vendor, protocol, adapter_type, config, ownership, department_id, department_hint, status, camera_count, last_heartbeat)
             VALUES
-              (:id, :name, :vendor, 'simulated', :ownership, :dept, :dept_hint, 'connected', :count, now())
+              (:id, :name, :vendor, :protocol, :adapter_type, :config, :ownership, :dept, :dept_hint, 'connected', :count, now())
             ON CONFLICT (id) DO UPDATE
             SET status          = 'connected',
+                protocol        = :protocol,
                 department_id   = COALESCE(vms_systems.department_id, EXCLUDED.department_id),
                 department_hint = EXCLUDED.department_hint,
                 camera_count    = :count,
@@ -133,6 +142,14 @@ def _upsert_system_and_cameras(
             "id": adapter.system_id,
             "name": adapter.system_name,
             "vendor": adapter.vendor,
+            "protocol": protocol,
+            # adapter_type/config are set on INSERT only (config-driven
+            # rows are created via POST /systems, which already writes
+            # these columns) — re-registration on reconnect shouldn't
+            # overwrite a row's own config with NULL for adapters that
+            # don't carry one (the three demo adapters).
+            "adapter_type": getattr(adapter, "adapter_type", None),
+            "config": None,
             "ownership": ownership,
             "dept": department_id,
             "dept_hint": department_hint,
@@ -183,6 +200,71 @@ def _upsert_system_and_cameras(
         raise
     finally:
         session.close()
+
+
+def _load_dynamic_adapter_rows(db_session_factory: Callable) -> list[dict]:
+    """Synchronous DB read — run in a thread executor.
+    Rows with a non-NULL adapter_type are the config-driven onboarding
+    path (POST /systems with adapter_type + config, see api/router.py);
+    every other row (adapter_type IS NULL) is either a demo adapter's
+    own row or a record-only manual onboarding, neither of which this
+    loads or touches."""
+    from sqlalchemy import text
+
+    session = db_session_factory()
+    try:
+        rows = session.execute(text(
+            "SELECT id, name, adapter_type, config, ownership "
+            "FROM vms_systems WHERE adapter_type IS NOT NULL"
+        )).fetchall()
+        return [
+            {"id": str(r[0]), "name": r[1], "adapter_type": r[2], "config": r[3] or {}, "ownership": r[4]}
+            for r in rows
+        ]
+    finally:
+        session.close()
+
+
+async def load_dynamic_adapters(db_session_factory: Callable) -> list[VMSAdapter]:
+    """
+    Called once at startup (alongside the hardcoded Police/RTO/Municipal
+    adapters in start_federation_services) to bring back every
+    config-driven VMS system that was onboarded through POST /systems
+    with an adapter_type, so a restart doesn't silently drop them.
+
+    Returns only adapters that actually connected — a row whose key
+    now fails (revoked, camera moved, wrong password) is logged and
+    left in the DB as 'disconnected' rather than crashing startup;
+    fixing it is the same "edit and re-test" flow as onboarding it the
+    first time, not a special recovery path.
+    """
+    from model3_federation.adapters.registry import build_adapter
+
+    rows = await asyncio.get_running_loop().run_in_executor(
+        None, _load_dynamic_adapter_rows, db_session_factory
+    )
+
+    live_adapters: list[VMSAdapter] = []
+    for row in rows:
+        try:
+            adapter = build_adapter(row["adapter_type"], row["id"], row["name"], row["config"])
+        except ValueError as exc:
+            logger.error("Skipping vms_systems row %s (%s): %s", row["id"], row["name"], exc)
+            continue
+
+        connected = await adapter.connect()
+        if not connected:
+            logger.warning(
+                "Dynamic adapter %s (%s) did not connect on startup; "
+                "will stay 'disconnected' until re-tested/re-saved.",
+                row["name"], row["adapter_type"],
+            )
+            continue
+
+        await register_adapter(db_session_factory, adapter, ownership=row["ownership"] or "government")
+        live_adapters.append(adapter)
+
+    return live_adapters
 
 
 async def register_adapter(

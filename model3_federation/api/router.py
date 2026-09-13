@@ -35,10 +35,18 @@ from shared.db.models import User as UserModel
 from shared.db.session import get_db
 from model3_federation.bus.event_bus import FederationEventBus
 from model3_federation.correlation.engine import CorrelationEngine
-from model3_federation.registration import register_adapter
+from model3_federation.registration import register_adapter, load_dynamic_adapters
 from model3_federation.adapters.police_vms_adapter import PoliceVMSAdapter
 from model3_federation.adapters.rto_vms_adapter import RTOVMSAdapter
 from model3_federation.adapters.municipal_vms_adapter import MunicipalVMSAdapter
+# Importing these registers their adapter types into the registry
+# (registry.register_adapter_type is a decorator that runs at import
+# time) — see adapters/registry.py. Adding a new config-driven adapter
+# type means adding one class + one import here; it does NOT mean
+# editing _adapters below or any onboarding endpoint.
+import model3_federation.adapters.rest_api_vms_adapter  # noqa: F401  (windy, rest_api)
+import model3_federation.adapters.onvif_vms_adapter  # noqa: F401  (onvif)
+from model3_federation.adapters.registry import build_adapter, list_adapter_types, validate_config
 from model3_federation.schemas.models import FederatedEvent, VMSSystemCreate, VMSSystemUpdate, WSMessage
 
 logger = logging.getLogger("sentinel.federation.api")
@@ -152,6 +160,24 @@ async def start_federation_services(db_session_factory, redis_url: str) -> None:
         _tasks.append(task)
         logger.info("Adapter started: %s", adapter.system_name)
 
+    # Config-driven systems (POST /systems with adapter_type + config —
+    # Windy, ONVIF, or any future registry.py adapter type) get restored
+    # here so a restart doesn't quietly drop everything an operator
+    # onboarded through the UI. These run exactly the same way as the
+    # three demo adapters above from this point on (same task pattern,
+    # same event bus) — the only difference is where their config came
+    # from (DB row vs hardcoded constructor).
+    dynamic_adapters = await load_dynamic_adapters(db_session_factory)
+    for adapter in dynamic_adapters:
+        _adapters.append(adapter)
+        task = asyncio.create_task(
+            adapter.start_event_stream(_bus.publish),
+            name=f"federation-adapter-{adapter.vendor}-{adapter.system_id[:8]}",
+        )
+        task.add_done_callback(_on_task_done)
+        _tasks.append(task)
+        logger.info("Dynamic adapter started: %s", adapter.system_name)
+
     logger.info("Model 3 Federation services started. %d adapters running.", len(_adapters))
 
 
@@ -256,7 +282,7 @@ def get_federated_systems(
         """
         SELECT vs.id, vs.name, vs.vendor, vs.status,
                vs.camera_count, vs.last_heartbeat, vs.protocol, vs.ownership,
-               d.name AS department_name, vs.department_hint
+               d.name AS department_name, vs.department_hint, vs.adapter_type
         FROM   vms_systems vs
         LEFT JOIN departments d ON d.id = vs.department_id
         ORDER  BY vs.name
@@ -287,42 +313,94 @@ def get_federated_systems(
             "department":               department_name,
             "unmatched_department_hint": r[9] if department_name is None else None,
             "events_per_min":           len(epm_bucket),
+            # Present exactly when this row has a live adapter behind it
+            # (config-driven onboarding, POST /systems with adapter_type) —
+            # distinct from `protocol`, which is set to the same string
+            # for these rows but is also free text on old/manual rows, so
+            # it alone can't be used to tell "live" apart from "on file".
+            "adapter_type":             r[10],
         })
     return result
 
 
-# ── Manual VMS onboarding (Finding 1) ─────────────────────────────────────
+# ── Adapter types (config-driven onboarding) ────────────────────────────────
 #
-# The adapter-based self-registration above (register_adapter(), called
-# from start_federation_services() at startup) is the *other* way a
-# vms_systems row gets created, and stays exactly as it is — this is an
-# alternative path alongside it, not a replacement. It exists for VMS
-# integrations that don't have a Python VMSAdapter (adapters/base.py)
-# written for them yet, or never will (e.g. a private vendor who just
-# emails CSVs on request) — a dept_admin/operator can still record that
-# the system exists, who owns it, and which department it belongs to,
-# rather than every department needing code + a deploy before Sentinel
-# knows about their VMS at all.
+# Drives the onboarding form: pick a type, get that type's exact fields,
+# nothing hardcoded in the frontend either. See adapters/registry.py.
+
+@router.get("/adapter-types")
+def get_adapter_types(
+    current_user: UserModel = Depends(get_current_user),
+) -> list[dict[str, Any]]:
+    return list_adapter_types()
+
+
+@router.post("/systems/test-connection")
+async def test_connection(
+    payload: VMSSystemCreate,
+    current_user: UserModel = Depends(require_role("dept_admin", "operator")),
+) -> dict[str, Any]:
+    """
+    The [Test Connection] button: builds a throwaway adapter from
+    adapter_type + config and actually calls connect() + get_cameras()
+    against the real system. Nothing is persisted — this exists so a
+    wrong API key or unreachable host fails loudly on this screen
+    instead of silently producing another 'disconnected' row.
+    """
+    if not payload.adapter_type:
+        raise HTTPException(status_code=400, detail="adapter_type is required to test a connection.")
+
+    errors = validate_config(payload.adapter_type, payload.config or {})
+    if errors:
+        raise HTTPException(status_code=400, detail={"config_errors": errors})
+
+    adapter = build_adapter(payload.adapter_type, str(uuid4()), payload.name, payload.config or {})
+    connected = await adapter.connect()
+    if not connected:
+        return {"success": False, "message": "Could not connect — check the config and try again.", "camera_count": 0}
+
+    cameras = await adapter.get_cameras()
+    if hasattr(adapter, "aclose"):
+        await adapter.aclose()
+
+    return {
+        "success": True,
+        "message": f"Connected. Found {len(cameras)} camera(s).",
+        "camera_count": len(cameras),
+        "sample_cameras": [{"name": c.name, "external_id": c.external_id} for c in cameras[:5]],
+    }
+
+
+# ── VMS onboarding (Finding 1 + generic connector framework) ──────────────
 #
-# A system created here has no adapter behind it, so it's created with
-# status='disconnected' and camera_count=0 (not the 'connected' status
-# adapter self-registration uses) — GET /systems above shows it exactly
-# as that: registered, but not actually integrated yet. That's
-# deliberate, not a bug to hide: it's honest about what's actually
-# talking to Sentinel versus what's merely on file. It'll keep showing
-# disconnected forever unless something (a future adapter, or a manual
-# status update this plan doesn't add) changes it — for a read-only/
-# manual integration that's the correct permanent state, not a stale one.
+# Two ways a vms_systems row gets created:
+#   1. Adapter self-registration (register_adapter(), called from
+#      start_federation_services() at startup) — Police/RTO/Municipal,
+#      hardcoded, always 'connected'.
+#   2. This endpoint — which itself now branches on whether the caller
+#      supplied adapter_type + config:
+#        - WITHOUT adapter_type: exactly the original record-only
+#          behavior. Created 'disconnected', camera_count 0, stays that
+#          way forever. Still exists for VMS integrations with no
+#          adapter written for them at all (e.g. a vendor who only ever
+#          emails CSVs) — a dept_admin can still put it on file.
+#        - WITH adapter_type: actually connects (same registry.py
+#          adapter used by /systems/test-connection above), pulls its
+#          real camera list, saves adapter_type+config so
+#          load_dynamic_adapters() brings it back on every restart, and
+#          starts its background event-stream task immediately — no
+#          redeploy, no editing start_federation_services(). This is
+#          the "enter a base URL/host + API key or credentials + pick a
+#          type, see the real cameras" path.
 #
-# Same role gate as acknowledge_alert below: dept_admin or operator.
+# Same role gate either way: dept_admin or operator.
 
 @router.post("/systems", status_code=201)
-def create_system(
+async def create_system(
     payload: VMSSystemCreate,
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(require_role("dept_admin", "operator")),
 ) -> dict[str, Any]:
-    """Manually register a VMS system that has no adapter (yet, or ever)."""
     if payload.department_id is not None:
         dept_row = db.execute(text(
             "SELECT 1 FROM departments WHERE id = :id"
@@ -334,30 +412,83 @@ def create_system(
             )
 
     system_id = str(uuid4())
+
+    if not payload.adapter_type:
+        # Original record-only path, unchanged.
+        db.execute(text(
+            """
+            INSERT INTO vms_systems (id, name, vendor, protocol, ownership, department_id, status, camera_count)
+            VALUES (:id, :name, :vendor, :protocol, :ownership, :dept, 'disconnected', 0)
+            """
+        ), {
+            "id": system_id, "name": payload.name, "vendor": payload.vendor,
+            "protocol": payload.protocol, "ownership": payload.ownership, "dept": payload.department_id,
+        })
+        db.commit()
+        return {
+            "id": system_id, "name": payload.name, "vendor": payload.vendor,
+            "protocol": payload.protocol, "ownership": payload.ownership,
+            "department_id": payload.department_id, "status": "disconnected", "camera_count": 0,
+        }
+
+    # Config-driven path.
+    errors = validate_config(payload.adapter_type, payload.config or {})
+    if errors:
+        raise HTTPException(status_code=400, detail={"config_errors": errors})
+
+    adapter = build_adapter(payload.adapter_type, system_id, payload.name, payload.config or {})
+    connected = await adapter.connect()
+
     db.execute(text(
         """
-        INSERT INTO vms_systems (id, name, vendor, protocol, ownership, department_id, status, camera_count)
-        VALUES (:id, :name, :vendor, :protocol, :ownership, :dept, 'disconnected', 0)
+        INSERT INTO vms_systems
+          (id, name, vendor, protocol, adapter_type, config, ownership, department_id, status, camera_count)
+        VALUES
+          (:id, :name, :vendor, :protocol, :adapter_type, :config, :ownership, :dept, :status, 0)
         """
     ), {
         "id": system_id,
         "name": payload.name,
-        "vendor": payload.vendor,
-        "protocol": payload.protocol,
+        "vendor": payload.vendor or adapter.vendor,
+        "protocol": payload.adapter_type,
+        "adapter_type": payload.adapter_type,
+        "config": json.dumps(payload.config or {}),
         "ownership": payload.ownership,
         "dept": payload.department_id,
+        "status": "connected" if connected else "disconnected",
     })
     db.commit()
 
+    if not connected:
+        if hasattr(adapter, "aclose"):
+            await adapter.aclose()
+        return {
+            "id": system_id, "name": payload.name, "adapter_type": payload.adapter_type,
+            "status": "disconnected", "camera_count": 0,
+            "message": "Saved, but could not connect. Edit and re-test — this will retry on next restart too.",
+        }
+
+    # Connected: pull its real camera list now (same helper
+    # start_federation_services uses for the demo adapters — same
+    # session-factory convention as main.py's lifespan hook, see
+    # shared/db/session.py's _SessionLocal), and start its live event
+    # stream immediately rather than waiting for the next process
+    # restart.
+    from shared.db.session import _SessionLocal as _sl
+    await register_adapter(_sl, adapter, ownership=payload.ownership)
+
+    task = asyncio.create_task(
+        adapter.start_event_stream(_bus.publish),
+        name=f"federation-adapter-{adapter.vendor}-{system_id[:8]}",
+    )
+    task.add_done_callback(_on_task_done)
+    _tasks.append(task)
+    _adapters.append(adapter)
+
     return {
-        "id": system_id,
-        "name": payload.name,
-        "vendor": payload.vendor,
-        "protocol": payload.protocol,
-        "ownership": payload.ownership,
-        "department_id": payload.department_id,
-        "status": "disconnected",
-        "camera_count": 0,
+        "id": system_id, "name": payload.name, "adapter_type": payload.adapter_type,
+        "status": "connected",
+        "message": "Connected. Cameras will populate within a few seconds and the system is now live.",
     }
 
 
