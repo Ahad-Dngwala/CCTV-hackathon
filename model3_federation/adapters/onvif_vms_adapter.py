@@ -91,7 +91,12 @@ class OnvifVMSAdapter(VMSAdapter):
             self._config["password"],
         )
         await self._cam.update_xaddrs()
-        self._media = await self._cam.create_media_service()
+        # create_media_service() (like create_ptz_service() etc.) is a
+        # synchronous factory that returns a bound service proxy -- it's
+        # the individual operations on that proxy (GetProfiles(),
+        # GetStreamUri(), ...) that are awaitable, not the factory call
+        # itself. Only awaited here previously by mistake.
+        self._media = self._cam.create_media_service()
         return self._cam
 
     async def connect(self) -> bool:
