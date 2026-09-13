@@ -39,7 +39,7 @@ from model3_federation.registration import register_adapter
 from model3_federation.adapters.police_vms_adapter import PoliceVMSAdapter
 from model3_federation.adapters.rto_vms_adapter import RTOVMSAdapter
 from model3_federation.adapters.municipal_vms_adapter import MunicipalVMSAdapter
-from model3_federation.schemas.models import FederatedEvent, WSMessage
+from model3_federation.schemas.models import FederatedEvent, VMSSystemCreate, VMSSystemUpdate, WSMessage
 
 logger = logging.getLogger("sentinel.federation.api")
 
@@ -289,6 +289,145 @@ def get_federated_systems(
             "events_per_min":           len(epm_bucket),
         })
     return result
+
+
+# ── Manual VMS onboarding (Finding 1) ─────────────────────────────────────
+#
+# The adapter-based self-registration above (register_adapter(), called
+# from start_federation_services() at startup) is the *other* way a
+# vms_systems row gets created, and stays exactly as it is — this is an
+# alternative path alongside it, not a replacement. It exists for VMS
+# integrations that don't have a Python VMSAdapter (adapters/base.py)
+# written for them yet, or never will (e.g. a private vendor who just
+# emails CSVs on request) — a dept_admin/operator can still record that
+# the system exists, who owns it, and which department it belongs to,
+# rather than every department needing code + a deploy before Sentinel
+# knows about their VMS at all.
+#
+# A system created here has no adapter behind it, so it's created with
+# status='disconnected' and camera_count=0 (not the 'connected' status
+# adapter self-registration uses) — GET /systems above shows it exactly
+# as that: registered, but not actually integrated yet. That's
+# deliberate, not a bug to hide: it's honest about what's actually
+# talking to Sentinel versus what's merely on file. It'll keep showing
+# disconnected forever unless something (a future adapter, or a manual
+# status update this plan doesn't add) changes it — for a read-only/
+# manual integration that's the correct permanent state, not a stale one.
+#
+# Same role gate as acknowledge_alert below: dept_admin or operator.
+
+@router.post("/systems", status_code=201)
+def create_system(
+    payload: VMSSystemCreate,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(require_role("dept_admin", "operator")),
+) -> dict[str, Any]:
+    """Manually register a VMS system that has no adapter (yet, or ever)."""
+    if payload.department_id is not None:
+        dept_row = db.execute(text(
+            "SELECT 1 FROM departments WHERE id = :id"
+        ), {"id": payload.department_id}).fetchone()
+        if dept_row is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"department_id {payload.department_id!r} does not exist",
+            )
+
+    system_id = str(uuid4())
+    db.execute(text(
+        """
+        INSERT INTO vms_systems (id, name, vendor, protocol, ownership, department_id, status, camera_count)
+        VALUES (:id, :name, :vendor, :protocol, :ownership, :dept, 'disconnected', 0)
+        """
+    ), {
+        "id": system_id,
+        "name": payload.name,
+        "vendor": payload.vendor,
+        "protocol": payload.protocol,
+        "ownership": payload.ownership,
+        "dept": payload.department_id,
+    })
+    db.commit()
+
+    return {
+        "id": system_id,
+        "name": payload.name,
+        "vendor": payload.vendor,
+        "protocol": payload.protocol,
+        "ownership": payload.ownership,
+        "department_id": payload.department_id,
+        "status": "disconnected",
+        "camera_count": 0,
+    }
+
+
+@router.patch("/systems/{system_id}")
+def update_system(
+    system_id: str,
+    payload: VMSSystemUpdate,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(require_role("dept_admin", "operator")),
+) -> dict[str, Any]:
+    """Edit name/vendor/department/ownership on an existing vms_systems row."""
+    exists = db.execute(text("SELECT 1 FROM vms_systems WHERE id = :id"), {"id": system_id}).fetchone()
+    if exists is None:
+        raise HTTPException(status_code=404, detail="System not found")
+
+    updates = payload.model_dump(exclude_unset=True)
+    if not updates:
+        return {"id": system_id, "updated_fields": []}
+
+    if updates.get("department_id") is not None:
+        dept_row = db.execute(text(
+            "SELECT 1 FROM departments WHERE id = :id"
+        ), {"id": updates["department_id"]}).fetchone()
+        if dept_row is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"department_id {updates['department_id']!r} does not exist",
+            )
+
+    set_clause = ", ".join(f"{col} = :{col}" for col in updates)
+    params = dict(updates)
+    params["id"] = system_id
+    db.execute(text(f"UPDATE vms_systems SET {set_clause} WHERE id = :id"), params)
+    db.commit()
+
+    return {"id": system_id, "updated_fields": list(updates.keys()), **updates}
+
+
+@router.delete("/systems/{system_id}")
+def delete_system(
+    system_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(require_role("dept_admin", "operator")),
+) -> dict[str, str]:
+    """
+    Delete a manually-onboarded (or adapter-registered) vms_systems row —
+    refused with 409 while it still has cameras, rather than silently
+    orphaning them: cameras.vms_system_id is ON DELETE SET NULL, so
+    without this check a delete here would quietly turn federated
+    cameras into what looks like main-grid ones instead of failing loudly.
+    """
+    exists = db.execute(text("SELECT 1 FROM vms_systems WHERE id = :id"), {"id": system_id}).fetchone()
+    if exists is None:
+        raise HTTPException(status_code=404, detail="System not found")
+
+    camera_count = db.execute(text(
+        "SELECT count(*) FROM cameras WHERE vms_system_id = :id"
+    ), {"id": system_id}).scalar()
+    if camera_count:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Cannot delete: {camera_count} camera(s) still reference this "
+                "system. Reassign or remove them first."
+            ),
+        )
+
+    db.execute(text("DELETE FROM vms_systems WHERE id = :id"), {"id": system_id})
+    db.commit()
+    return {"status": "deleted", "id": system_id}
 
 
 @router.get("/cameras")

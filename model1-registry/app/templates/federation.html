@@ -175,6 +175,39 @@
 /* ── Empty state ───────────────────────────────────────── */
 .empty-state { text-align: center; color: var(--col-muted); padding: 2rem; font-size: .85rem; }
 
+/* ── VMS Systems management panel (Finding 1) ─────────────── */
+.sys-table { width: 100%; border-collapse: collapse; font-size: .8rem; margin-bottom: 1.1rem; }
+.sys-table th {
+  text-align: left; padding: .4rem .5rem; color: var(--col-muted);
+  font-weight: 600; font-size: .68rem; text-transform: uppercase; letter-spacing: .05em;
+  border-bottom: 1px solid var(--col-border);
+}
+.sys-table td { padding: .5rem; border-bottom: 1px solid rgba(255,255,255,.05); vertical-align: middle; }
+.sys-table .sys-actions { display: flex; gap: .4rem; white-space: nowrap; }
+.sys-unresolved { color: #fcd34d; font-size: .72rem; cursor: help; }
+
+.sys-status-pill { font-size: .65rem; padding: .15rem .55rem; border-radius: 20px; font-weight: 600; white-space: nowrap; }
+.sys-status-pill--connected    { background: rgba(34,197,94,.18);  color: #86efac; }
+.sys-status-pill--disconnected { background: rgba(148,163,184,.18); color: #cbd5e1; }
+.sys-status-pill--unknown      { background: rgba(148,163,184,.12); color: #94a3b8; }
+
+.system-form { border-top: 1px solid var(--col-border); padding-top: .9rem; }
+.system-form h4 { font-size: .85rem; margin: 0 0 .65rem; font-weight: 600; }
+.system-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .55rem; margin-bottom: .65rem; }
+.system-form input, .system-form select {
+  background: rgba(255,255,255,.05); border: 1px solid var(--col-border); border-radius: 6px;
+  padding: .45rem .6rem; color: var(--col-text); font-size: .8rem; font-family: inherit;
+}
+.system-form-actions { display: flex; gap: .55rem; align-items: center; }
+.system-form-actions button {
+  font-size: .78rem; padding: .4rem .95rem; border-radius: 6px; cursor: pointer;
+  border: 1px solid rgba(255,255,255,.15); background: rgba(255,255,255,.08);
+  color: var(--col-text); font-weight: 500; transition: background .15s;
+}
+.system-form-actions button:hover { background: rgba(255,255,255,.14); }
+.system-form-actions button[type="submit"] { background: rgba(59,130,246,.28); border-color: rgba(59,130,246,.45); }
+.system-form-error { color: #fca5a5; font-size: .78rem; margin-top: .6rem; min-height: 1em; }
+
 /* ── Responsive ────────────────────────────────────────── */
 @media (max-width: 900px) {
   .topology-bar  { grid-template-columns: 1fr; }
@@ -260,6 +293,49 @@
   <!-- GIS Map -->
   <div class="map-panel">
     <div id="fed-map"></div>
+  </div>
+
+  <!-- VMS Systems management (Finding 1: manual onboarding, no adapter required) -->
+  <div class="panel" style="margin-top: 1rem;">
+    <div class="panel-header">
+      🗂️ VMS Systems
+      <span class="badge-count" id="systems-count">0</span>
+    </div>
+    <div class="panel-body" style="max-height: none;">
+      <table class="sys-table">
+        <thead>
+          <tr>
+            <th>Name</th><th>Vendor</th><th>Protocol</th><th>Ownership</th>
+            <th>Department</th><th>Status</th><th>Cameras</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="systems-tbody">
+          <tr><td colspan="8" class="empty-state">Loading…</td></tr>
+        </tbody>
+      </table>
+
+      <form class="system-form" id="system-form">
+        <h4 id="system-form-title">Register new system</h4>
+        <input type="hidden" id="sf-edit-id" value="">
+        <div class="system-form-grid">
+          <input type="text" id="sf-name" placeholder="System name" required>
+          <input type="text" id="sf-vendor" placeholder="Vendor (optional)">
+          <input type="text" id="sf-protocol" placeholder="Protocol (default: manual)">
+          <select id="sf-ownership">
+            <option value="government">Government</option>
+            <option value="private">Private</option>
+          </select>
+          <select id="sf-department">
+            <option value="">No department</option>
+          </select>
+        </div>
+        <div class="system-form-actions">
+          <button type="submit" id="sf-submit">Register system</button>
+          <button type="button" id="sf-cancel" style="display:none">Cancel edit</button>
+        </div>
+        <div class="system-form-error" id="sf-error"></div>
+      </form>
+    </div>
   </div>
 
 </div>
@@ -545,8 +621,159 @@ async function simulateBurst(systemId, btn) {
   }
 }
 
+// ── VMS Systems management (Finding 1) ─────────────────────────────
+let allDepartments = [];
+let currentSystems = [];
+
+function loadDepartments() {
+  fetch('/api/v1/departments')
+    .then(r => r.json())
+    .then(depts => {
+      allDepartments = depts;
+      const sel = document.getElementById('sf-department');
+      sel.innerHTML = '<option value="">No department</option>' +
+        depts.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+    })
+    .catch(() => {}); // dropdown just stays at "No department" if this fails
+}
+
+function loadSystems() {
+  fetch('/api/v3/systems')
+    .then(r => r.json())
+    .then(renderSystems)
+    .catch(err => {
+      document.getElementById('systems-tbody').innerHTML =
+        `<tr><td colspan="8" class="empty-state">Failed to load systems: ${err.message}</td></tr>`;
+    });
+}
+
+function renderSystems(systems) {
+  currentSystems = systems;
+  document.getElementById('systems-count').textContent = systems.length;
+  const tbody = document.getElementById('systems-tbody');
+
+  if (!systems.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No VMS systems registered.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = systems.map(s => {
+    const dept = s.department
+      ? s.department
+      : (s.unmatched_department_hint
+          ? `<span class="sys-unresolved" title="Hint '${s.unmatched_department_hint}' matched no department">⚠ unresolved</span>`
+          : '—');
+    return `
+      <tr>
+        <td>${s.name}</td>
+        <td>${s.vendor || '—'}</td>
+        <td>${s.protocol || '—'}</td>
+        <td>${s.ownership}</td>
+        <td>${dept}</td>
+        <td><span class="sys-status-pill sys-status-pill--${s.status}">${s.status}</span></td>
+        <td>${s.camera_count}</td>
+        <td class="sys-actions">
+          <button type="button" class="sim-btn" data-edit="${s.id}">Edit</button>
+          <button type="button" class="sim-btn" data-delete="${s.id}">Delete</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  // Event delegation would also work here, but this table is re-rendered
+  // wholesale on every load/mutation anyway (same pattern as
+  // addEventCard/addCorrCard above), so rebinding directly is simpler.
+  tbody.querySelectorAll('[data-edit]').forEach(btn => {
+    btn.addEventListener('click', () => startEditSystem(btn.dataset.edit));
+  });
+  tbody.querySelectorAll('[data-delete]').forEach(btn => {
+    btn.addEventListener('click', () => deleteSystem(btn.dataset.delete));
+  });
+}
+
+function startEditSystem(id) {
+  const s = currentSystems.find(x => x.id === id);
+  if (!s) return;
+  // GET /api/v3/systems returns the resolved department *name*, not its
+  // id -- look the id back up from the department list already loaded
+  // for the dropdown, so re-saving without touching this field doesn't
+  // clear it.
+  const dept = allDepartments.find(d => d.name === s.department);
+
+  document.getElementById('sf-edit-id').value   = s.id;
+  document.getElementById('sf-name').value      = s.name || '';
+  document.getElementById('sf-vendor').value    = s.vendor || '';
+  document.getElementById('sf-protocol').value  = s.protocol || '';
+  document.getElementById('sf-ownership').value = s.ownership || 'government';
+  document.getElementById('sf-department').value = dept ? dept.id : '';
+
+  document.getElementById('system-form-title').textContent = `Editing: ${s.name}`;
+  document.getElementById('sf-submit').textContent = 'Save changes';
+  document.getElementById('sf-cancel').style.display = '';
+  document.getElementById('sf-error').textContent = '';
+  document.getElementById('sf-name').focus();
+}
+
+function cancelEditSystem() {
+  document.getElementById('system-form').reset();
+  document.getElementById('sf-edit-id').value = '';
+  document.getElementById('system-form-title').textContent = 'Register new system';
+  document.getElementById('sf-submit').textContent = 'Register system';
+  document.getElementById('sf-cancel').style.display = 'none';
+  document.getElementById('sf-error').textContent = '';
+}
+
+function deleteSystem(id) {
+  const s = currentSystems.find(x => x.id === id);
+  if (!confirm(`Delete "${s ? s.name : id}"? This can't be undone.`)) return;
+
+  fetch(`/api/v3/systems/${id}`, { method: 'DELETE' })
+    .then(async res => {
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
+      loadSystems();
+    })
+    .catch(err => alert('Delete failed: ' + err.message));
+}
+
+document.getElementById('system-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const editId = document.getElementById('sf-edit-id').value;
+  const errorEl = document.getElementById('sf-error');
+  errorEl.textContent = '';
+
+  const body = {
+    name: document.getElementById('sf-name').value,
+    vendor: document.getElementById('sf-vendor').value || null,
+    ownership: document.getElementById('sf-ownership').value,
+    department_id: document.getElementById('sf-department').value || null,
+  };
+  const protocolVal = document.getElementById('sf-protocol').value;
+  if (protocolVal) body.protocol = protocolVal; // omitted -> server defaults to "manual"
+
+  const url = editId ? `/api/v3/systems/${editId}` : '/api/v3/systems';
+  const method = editId ? 'PATCH' : 'POST';
+
+  fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+    .then(async res => {
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      cancelEditSystem();
+      loadSystems();
+    })
+    .catch(err => { errorEl.textContent = err.message; });
+});
+
+document.getElementById('sf-cancel').addEventListener('click', cancelEditSystem);
+
 // ── Boot ──────────────────────────────────────────────────────────
 loadInitialData();
 connectWS();
+loadDepartments();
+loadSystems();
 </script>
 {% endblock %}
