@@ -207,6 +207,9 @@
 .system-form-actions button:hover { background: rgba(255,255,255,.14); }
 .system-form-actions button[type="submit"] { background: rgba(59,130,246,.28); border-color: rgba(59,130,246,.45); }
 .system-form-error { color: #fca5a5; font-size: .78rem; margin-top: .6rem; min-height: 1em; }
+.sf-field { display: flex; flex-direction: column; gap: .25rem; }
+.sf-field label { font-size: .72rem; color: var(--col-text-dim, #94a3b8); }
+#sf-test { background: rgba(148,163,184,.12); }
 
 /* ── Responsive ────────────────────────────────────────── */
 @media (max-width: 900px) {
@@ -320,7 +323,9 @@
         <div class="system-form-grid">
           <input type="text" id="sf-name" placeholder="System name" required>
           <input type="text" id="sf-vendor" placeholder="Vendor (optional)">
-          <input type="text" id="sf-protocol" placeholder="Protocol (default: manual)">
+          <select id="sf-adapter-type">
+            <option value="">Record only (no live connection)</option>
+          </select>
           <select id="sf-ownership">
             <option value="government">Government</option>
             <option value="private">Private</option>
@@ -329,11 +334,22 @@
             <option value="">No department</option>
           </select>
         </div>
+        <!-- Populated from GET /api/v3/adapter-types whenever sf-adapter-type
+             changes -- each adapter type declares its own fields (registry.py),
+             nothing about which fields to show is hardcoded here. Hidden
+             entirely (and sf-protocol shown instead) when "Record only" is
+             selected, since that path has no adapter and just wants a free-text
+             protocol note like it always did. -->
+        <div class="system-form-grid" id="sf-dynamic-fields"></div>
+        <input type="text" id="sf-protocol" placeholder="Protocol (default: manual)"
+               style="width: 100%; margin-bottom: .65rem;">
         <div class="system-form-actions">
+          <button type="button" id="sf-test" style="display:none">Test connection</button>
           <button type="submit" id="sf-submit">Register system</button>
           <button type="button" id="sf-cancel" style="display:none">Cancel edit</button>
         </div>
         <div class="system-form-error" id="sf-error"></div>
+        <div class="system-form-error" id="sf-test-result" style="color: #86efac;"></div>
       </form>
     </div>
   </div>
@@ -637,6 +653,99 @@ function loadDepartments() {
     .catch(() => {}); // dropdown just stays at "No department" if this fails
 }
 
+// ── Config-driven onboarding (generic connector framework) ─────────────
+// GET /api/v3/adapter-types is the whole reason this form doesn't have
+// Windy/ONVIF-specific markup anywhere: each type declares its own
+// display name and config fields (model3_federation/adapters/registry.py),
+// and this file just renders whatever comes back. Adding a new adapter
+// type server-side means it shows up here with zero template changes.
+let adapterTypes = [];
+
+function loadAdapterTypes() {
+  fetch('/api/v3/adapter-types')
+    .then(r => r.json())
+    .then(types => {
+      adapterTypes = types;
+      const sel = document.getElementById('sf-adapter-type');
+      sel.innerHTML = '<option value="">Record only (no live connection)</option>' +
+        types.map(t => `<option value="${t.adapter_type}">${t.display_name}</option>`).join('');
+    })
+    .catch(() => {}); // dropdown just stays at "Record only" if this fails
+}
+
+function renderDynamicFields(adapterTypeKey, prefill = {}) {
+  const container = document.getElementById('sf-dynamic-fields');
+  const protocolInput = document.getElementById('sf-protocol');
+  const testBtn = document.getElementById('sf-test');
+
+  if (!adapterTypeKey) {
+    container.innerHTML = '';
+    protocolInput.style.display = '';
+    testBtn.style.display = 'none';
+    return;
+  }
+
+  const type = adapterTypes.find(t => t.adapter_type === adapterTypeKey);
+  protocolInput.style.display = 'none'; // adapter_type replaces free-text protocol for these rows
+  testBtn.style.display = '';
+  if (!type) { container.innerHTML = ''; return; }
+
+  container.innerHTML = type.config_fields.map(f => `
+    <div class="sf-field">
+      <label for="sf-cfg-${f.name}">${f.label}${f.required ? ' *' : ''}</label>
+      <input
+        type="${f.type === 'url' ? 'text' : f.type}"
+        id="sf-cfg-${f.name}"
+        data-config-field="${f.name}"
+        placeholder="${f.help_text || ''}"
+        value="${prefill[f.name] ?? f.default ?? ''}"
+        ${f.required ? 'required' : ''}>
+    </div>
+  `).join('');
+}
+
+function collectDynamicConfig() {
+  const config = {};
+  document.querySelectorAll('#sf-dynamic-fields [data-config-field]').forEach(input => {
+    if (input.value !== '') config[input.dataset.configField] = input.value;
+  });
+  return config;
+}
+
+document.getElementById('sf-adapter-type').addEventListener('change', (e) => {
+  document.getElementById('sf-test-result').textContent = '';
+  renderDynamicFields(e.target.value);
+});
+
+document.getElementById('sf-test').addEventListener('click', () => {
+  const resultEl = document.getElementById('sf-test-result');
+  const errorEl = document.getElementById('sf-error');
+  const adapterType = document.getElementById('sf-adapter-type').value;
+  errorEl.textContent = '';
+  resultEl.style.color = '#94a3b8';
+  resultEl.textContent = 'Testing…';
+
+  fetch('/api/v3/systems/test-connection', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: document.getElementById('sf-name').value || 'Test',
+      adapter_type: adapterType,
+      config: collectDynamicConfig(),
+    }),
+  })
+    .then(async res => {
+      const data = await res.json();
+      if (!res.ok) throw new Error((data.detail && (data.detail.config_errors || data.detail).toString()) || `HTTP ${res.status}`);
+      resultEl.style.color = data.success ? '#86efac' : '#fca5a5';
+      resultEl.textContent = data.message +
+        (data.sample_cameras && data.sample_cameras.length
+          ? ' — e.g. ' + data.sample_cameras.map(c => c.name).join(', ')
+          : '');
+    })
+    .catch(err => { resultEl.style.color = '#fca5a5'; resultEl.textContent = err.message; });
+});
+
 function loadSystems() {
   fetch('/api/v3/systems')
     .then(r => r.json())
@@ -667,7 +776,7 @@ function renderSystems(systems) {
       <tr>
         <td>${s.name}</td>
         <td>${s.vendor || '—'}</td>
-        <td>${s.protocol || '—'}</td>
+        <td>${s.adapter_type ? '🔌 ' : ''}${s.protocol || '—'}</td>
         <td>${s.ownership}</td>
         <td>${dept}</td>
         <td><span class="sys-status-pill sys-status-pill--${s.status}">${s.status}</span></td>
@@ -707,20 +816,42 @@ function startEditSystem(id) {
   document.getElementById('sf-ownership').value = s.ownership || 'government';
   document.getElementById('sf-department').value = dept ? dept.id : '';
 
+  // PATCH /api/v3/systems doesn't (yet) support changing adapter_type or
+  // re-supplying config for a live connector -- only the record-level
+  // fields above. So editing a config-driven row shows its type as
+  // read-only context rather than letting the form pretend it can be
+  // reconfigured from here; use Delete + re-onboard for that instead.
+  const typeSel = document.getElementById('sf-adapter-type');
+  if (s.adapter_type) {
+    typeSel.innerHTML = `<option value="${s.adapter_type}">${s.adapter_type} (live — not editable here)</option>`;
+    typeSel.value = s.adapter_type;
+    typeSel.disabled = true;
+    renderDynamicFields(''); // hide dynamic fields + Test button, show protocol as read context
+  } else {
+    typeSel.disabled = false;
+    loadAdapterTypes();
+    renderDynamicFields('');
+  }
+
   document.getElementById('system-form-title').textContent = `Editing: ${s.name}`;
   document.getElementById('sf-submit').textContent = 'Save changes';
   document.getElementById('sf-cancel').style.display = '';
   document.getElementById('sf-error').textContent = '';
+  document.getElementById('sf-test-result').textContent = '';
   document.getElementById('sf-name').focus();
 }
 
 function cancelEditSystem() {
   document.getElementById('system-form').reset();
   document.getElementById('sf-edit-id').value = '';
+  document.getElementById('sf-adapter-type').disabled = false;
+  loadAdapterTypes();
+  renderDynamicFields('');
   document.getElementById('system-form-title').textContent = 'Register new system';
   document.getElementById('sf-submit').textContent = 'Register system';
   document.getElementById('sf-cancel').style.display = 'none';
   document.getElementById('sf-error').textContent = '';
+  document.getElementById('sf-test-result').textContent = '';
 }
 
 function deleteSystem(id) {
@@ -751,6 +882,15 @@ document.getElementById('system-form').addEventListener('submit', (e) => {
   const protocolVal = document.getElementById('sf-protocol').value;
   if (protocolVal) body.protocol = protocolVal; // omitted -> server defaults to "manual"
 
+  // adapter_type/config only apply to creating a new live connector --
+  // VMSSystemUpdate (PATCH) has no fields for either, see startEditSystem's
+  // note on why reconfiguring an existing one isn't done from this form.
+  const adapterType = document.getElementById('sf-adapter-type').value;
+  if (!editId && adapterType) {
+    body.adapter_type = adapterType;
+    body.config = collectDynamicConfig();
+  }
+
   const url = editId ? `/api/v3/systems/${editId}` : '/api/v3/systems';
   const method = editId ? 'PATCH' : 'POST';
 
@@ -761,7 +901,7 @@ document.getElementById('system-form').addEventListener('submit', (e) => {
   })
     .then(async res => {
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      if (!res.ok) throw new Error((data.detail && (data.detail.config_errors || data.detail).toString()) || `HTTP ${res.status}`);
       cancelEditSystem();
       loadSystems();
     })
@@ -774,6 +914,7 @@ document.getElementById('sf-cancel').addEventListener('click', cancelEditSystem)
 loadInitialData();
 connectWS();
 loadDepartments();
+loadAdapterTypes();
 loadSystems();
 </script>
 {% endblock %}
