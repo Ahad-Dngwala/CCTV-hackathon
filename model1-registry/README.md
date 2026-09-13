@@ -39,14 +39,14 @@ The test suite runs against a real Postgres + PostGIS database (`sentinel_test`)
 
 ### Zero-setup path
 
-If you already have Postgres 16 + PostGIS + pgvector running locally (or `docker compose up -d` — see `infra/README.md`), this is all you need:
+If you already have Postgres 16 + PostGIS + pgvector running locally, this is all you need:
 
 ```bash
 pip install -r requirements-dev.txt
 pytest
 ```
 
-`tests/conftest.py` now bootstraps the `sentinel` role and `sentinel` database itself the first time it notices they're missing (via `../scripts/bootstrap_local_db.sh`), the same way `docker compose up` gets them for free from the official Postgres image's `POSTGRES_USER`/`POSTGRES_DB` env vars (see `infra/docker-compose.yml` + `infra/Dockerfile.db`). It does **not** install Postgres itself — you still need a Postgres 16 server with the `postgis`, `pgcrypto`, and `vector` extensions available (`apt install postgresql postgresql-contrib postgresql-16-postgis-3 postgresql-16-pgvector` on Debian/Ubuntu; `brew install postgresql postgis pgvector` on macOS).
+By default the suite targets `127.0.0.1:5432` — a local, non-Docker Postgres install. `tests/conftest.py` now bootstraps the `sentinel` role and `sentinel` database itself the first time it notices they're missing (via `../scripts/bootstrap_local_db.sh`), the same way `docker compose up` gets them for free from the official Postgres image's `POSTGRES_USER`/`POSTGRES_DB` env vars (see `infra/docker-compose.yml` + `infra/Dockerfile.db`). It does **not** install Postgres itself — you still need a Postgres 16 server with the `postgis`, `pgcrypto`, and `vector` extensions available (`apt install postgresql postgresql-contrib postgresql-16-postgis-3 postgresql-16-pgvector` on Debian/Ubuntu; `brew install postgresql postgis pgvector` on macOS).
 
 If auto-bootstrap can't reach a Postgres superuser on your machine (uncommon setups, restricted permissions, Windows), run it yourself once and pytest picks it up from there:
 
@@ -55,6 +55,21 @@ bash scripts/bootstrap_local_db.sh
 ```
 
 That script only touches the `sentinel` role and the base `sentinel` database — it never creates `sentinel_test`. That one is dropped and rebuilt from `shared/db/{schema,triggers,seed}.sql` by `tests/conftest.py` itself, fresh, every test session (exactly what `docker-compose` does in production), so the fixtures always exercise the real seeded departments/districts/cameras rather than stale leftovers.
+
+### Testing against docker-compose's `db` instead of a local Postgres
+
+`infra/docker-compose.yml` exposes its `db` service on **host port `5433`**, not `5432` (`"5433:5432"` — the container's internal `5432` is mapped to `5433` on your machine specifically so it can run alongside a local Postgres install without colliding). `tests/conftest.py` defaults to `5432` for that reason, so pointing it at the Docker database instead of your local one is one env var:
+
+```bash
+cd infra
+$env:SECRET_KEY = "local-dev-only-not-secret"   # required by docker-compose.yml even though we're only starting `db` (PowerShell; use export on macOS/Linux)
+docker compose up -d db
+cd ..\model1-registry
+$env:TEST_DB_PORT = "5433"   # PowerShell; use `export TEST_DB_PORT=5433` on macOS/Linux, or `set TEST_DB_PORT=5433` in cmd.exe
+pytest
+```
+
+You do not need a local Postgres running at all for this path — `TEST_DB_HOST`, `TEST_DB_USER`, and `TEST_DB_PASSWORD` are also overridable the same way, in case you've changed any of those from their `docker-compose.yml` defaults.
 
 ### `psql` on PATH
 
@@ -69,22 +84,14 @@ pytest
 
 Postgres itself being installed isn't enough — `schema.sql` needs the `postgis`, `pgcrypto`, and `vector` (pgvector) extension binaries actually present on that server, and `pgcrypto` is the only one that ships with vanilla Postgres. If `pytest` fails partway through applying `schema.sql` with `extension "..." is not available`, the error message now tells you exactly which one and how to fix it — but the short version is:
 
-- **Easiest, especially on Windows** (pgvector requires compiling with Visual Studio's C++ build tools there): stop your local Postgres service and let Docker provide just the database instead — its image already bundles all three extensions:
-  ```powershell
-  cd infra
-  $env:SECRET_KEY = "local-dev-only-not-secret"   # required by docker-compose.yml even though we're only starting `db`
-  docker compose up -d db
-  cd ..\model1-registry
-  pytest
-  ```
-  `pytest` connects to `127.0.0.1:5432` regardless of whether that's your local Postgres or this container, so nothing else about the test setup changes.
+- **Easiest, especially on Windows** (pgvector requires compiling with Visual Studio's C++ build tools there): point the suite at docker-compose's `db` service instead — its image already bundles all three extensions. See "Testing against docker-compose's `db` instead of a local Postgres" above (`docker compose up -d db` + `TEST_DB_PORT=5433`); your local Postgres, if you have one, can keep running on `5432` the whole time since nothing shares a port.
 - **Installing extensions directly**: `postgis` and `pgvector` are one-line package installs on Linux/macOS (e.g. `apt install postgresql-16-postgis-3 postgresql-16-pgvector` on Debian/Ubuntu, `brew install postgis pgvector` on macOS) but need a full compile-from-source on Windows — see https://github.com/pgvector/pgvector#windows.
 
 ### If `pytest` seems to hang
 
 Every `psql` call the suite makes has a hard timeout, so a genuinely broken connection now fails loudly instead of hanging forever. If a run still looks stuck, it's almost always one of:
 
-- **A stale connection blocking `DROP DATABASE sentinel_test`** — from a previous run that was killed mid-test. `tests/conftest.py` now terminates other backends on `sentinel_test` before dropping it, so this shouldn't happen anymore, but if it does: `psql -U sentinel -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'sentinel_test';"`.
+- **A stale connection blocking `DROP DATABASE sentinel_test`** — from a previous run that was killed mid-test. `tests/conftest.py` now terminates other backends on `sentinel_test` before dropping it, so this shouldn't happen anymore, but if it does: `psql -U sentinel -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'sentinel_test';"` (add `-p 5433` if you're targeting docker-compose's `db` service rather than a local Postgres).
 - **No network access.** The app's background camera-catalogue poller (`app/main.py`'s `lifespan()`) makes a real HTTPS call to the live grid on every startup and retries with backoff on failure — normal in production, but a real problem for a `TestClient` started once per test in a sandboxed/offline environment. `tests/conftest.py` sets `DISABLE_CATALOGUE_POLL=true` before any app import specifically to skip this during tests; if you're running the app itself (not the test suite) with no network access, you'll still see this.
 - **A schema-less dev database.** model3_federation's federation-services startup (also in `lifespan()`) registers adapter cameras straight through `shared/db/session.py`'s module-level `_SessionLocal`, bypassing the `get_db` override this test suite relies on for isolation - it writes into whatever `settings.DATABASE_URL` points at (the dev `sentinel` database by default) rather than `sentinel_test`, and errors outright if that database hasn't had `shared/db/schema.sql` applied to it (`bootstrap_local_db.sh` only creates the role/database and extensions, not the schema). `tests/conftest.py` sets `DISABLE_FEDERATION_STARTUP=true` before any app import to skip this during tests; if you're running the app itself against a schema-less dev database, you'll still see this. `model3_federation/tests` covers `register_adapter()` and the correlation engine directly against `db_session` instead, so nothing is untested as a result.
 
