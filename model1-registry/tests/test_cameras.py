@@ -2,7 +2,7 @@ import uuid
 
 import pytest
 
-from conftest import unique_camera_name
+from tests.conftest import unique_camera_name
 
 
 def _department_id_by_name_fragment(client, fragment: str) -> str:

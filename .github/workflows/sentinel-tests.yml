@@ -1,14 +1,27 @@
 # AuditReport1.md finding 16: no CI existed at all - every merge into
 # main was going in with whatever the last person happened to run
-# locally, if anything. This runs the real model1-registry test suite
-# (tests/conftest.py's own real-Postgres-not-sqlite design, see its
-# docstring) on every push and pull request touching main.
+# locally, if anything. This runs the repository's full test suite --
+# model1-registry/tests/, model2_analytics/tests/, and
+# model3_federation/tests/ -- on every push and pull request touching
+# main, exactly as `pytest` run from the repo root does locally.
 #
-# AuditReport2.md finding 6 added a second job that runs
-# model2_analytics/tests/ the same way: its conftest.py re-exports
-# model1-registry's own DB/app fixtures (model2's routers are mounted
-# into model1's app object at runtime, so there's one app and one DB to
-# test against, not two) -- see that conftest.py's docstring for why.
+# This used to be two separate jobs (model1-registry, model2_analytics),
+# added by AuditReport2.md finding 6 when model2_analytics/tests/ was
+# introduced -- model3_federation/tests/ was never added as a third job,
+# so it silently had zero CI coverage. It's a single combined job now,
+# not a third copy-pasted job, because the three suites were never
+# actually independent to begin with: model2_analytics/tests/conftest.py
+# and model3_federation/tests/conftest.py both re-export
+# model1-registry/tests/conftest.py's fixtures (same FastAPI `app`
+# object, same Postgres database -- model2's and model3's routers are
+# mounted into model1's app at runtime, see model1-registry/app/main.py's
+# dynamic loader), so collecting and running all three together in one
+# `pytest` invocation from the repo root is what actually matches how
+# this app is structured, not an arbitrary convenience. Splitting them
+# into separate jobs would mean each job pays to install ALL THREE
+# components' dependencies anyway (importing `app.main` pulls in model2's
+# and model3's routers regardless of which suite you're running), for no
+# added parallelism benefit worth the duplication.
 #
 # Postgres + PostGIS + pgvector are installed directly on the runner via
 # apt rather than as a GitHub Actions "services:" container, because the
@@ -17,19 +30,13 @@
 # approach AuditReport1.md's own Section 6 confirmed works ("postgresql-
 # 16-postgis-3 3.4.2 and postgresql-16-pgvector 0.6.0 are both available
 # via plain Ubuntu apt"). scripts/bootstrap_local_db.sh then creates the
-# 'sentinel' role/database exactly as it would for a local contributor -
-# each suite's own conftest.py handles 'sentinel_test' itself, per session.
-#
-# actions/setup-python's built-in `cache: pip` caches pip's download/wheel
-# cache (not the venv itself) keyed on a hash of `cache-dependency-path` -
-# a hit skips re-downloading/re-building every wheel (torch-adjacent
-# packages aren't pulled in here, but psycopg2-binary, shapely, and
-# opencv-python-headless all have real build/extraction cost) and only
-# changes when the relevant requirements*.txt actually changes.
-# model2_analytics's requirements-dev.txt pulls in model1-registry's
-# requirements.txt too (`-r ../model1-registry/requirements.txt`, see
-# that file's own docstring on why the two must stay version-aligned),
-# so its cache key covers both paths for the same reason.
+# 'sentinel' role/database exactly as it would for a local contributor,
+# on the runner's default Postgres port (5432) -- tests/conftest.py's
+# TEST_DB_PORT defaults to 5432 too, so no override is needed here (that
+# variable exists for pointing a *local* dev machine at docker-compose's
+# `db` service on 5433 instead; this runner has no such container to
+# route around). Each suite's own conftest.py handles 'sentinel_test'
+# itself, per session.
 name: sentinel tests
 
 on:
@@ -39,7 +46,7 @@ on:
     branches: [main]
 
 jobs:
-  model1-registry:
+  test:
     runs-on: ubuntu-latest
 
     steps:
@@ -50,42 +57,28 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: model1-registry/requirements*.txt
-
-      - name: Install PostgreSQL 16 + PostGIS + pgvector
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            postgresql-16 postgresql-16-postgis-3 postgresql-16-pgvector
-          sudo systemctl start postgresql
-
-      - name: Bootstrap the local 'sentinel' role/database
-        run: bash scripts/bootstrap_local_db.sh
-
-      - name: Install Python dependencies
-        working-directory: model1-registry
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
-
-      - name: Run pytest
-        working-directory: model1-registry
-        run: pytest
-
-  model2_analytics:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
+          # actions/setup-python's built-in `cache: pip` caches pip's
+          # download/wheel cache (not the venv itself) keyed on a hash of
+          # every path listed here. All six requirements files are listed
+          # explicitly (not just the three requirements-dev.txt below)
+          # because each requirements-dev.txt pulls in others via `-r`
+          # (e.g. model2_analytics/requirements-dev.txt references
+          # ../model1-registry/requirements.txt), and the cache key needs
+          # to bust on a change to any file actually being installed, not
+          # just the ones passed directly to `pip install` -- a change to
+          # a `-r`'d file wouldn't otherwise be reflected in the hash. A
+          # cache hit skips re-downloading/re-building every wheel:
+          # psycopg2-binary, shapely, and opencv-python-headless all have
+          # real build/extraction cost, and model2's facenet-pytorch /
+          # ultralytics pull in torch/torchvision, which are the single
+          # most expensive thing this job installs.
           cache-dependency-path: |
-            model2_analytics/requirements*.txt
             model1-registry/requirements.txt
+            model1-registry/requirements-dev.txt
+            model2_analytics/requirements.txt
+            model2_analytics/requirements-dev.txt
+            model3_federation/requirements.txt
+            model3_federation/requirements-dev.txt
 
       - name: Install PostgreSQL 16 + PostGIS + pgvector
         run: |
@@ -97,12 +90,62 @@ jobs:
       - name: Bootstrap the local 'sentinel' role/database
         run: bash scripts/bootstrap_local_db.sh
 
-      - name: Install Python dependencies
-        working-directory: model2_analytics
+      - name: Install CPU-only torch
+        # This runner has no GPU, but facenet-pytorch and ultralytics
+        # (model2_analytics/requirements.txt) both depend on torch with no
+        # build variant specified, so pip's default index resolves the
+        # default CUDA-enabled build -- pulling in ~10 `nvidia-*` wheels
+        # (cublas, cudnn, cusolver, nccl, etc) purely to support GPU
+        # hardware this job will never have, at a cost of multiple GB of
+        # otherwise-pointless download on every run. Same fix as
+        # infra/Dockerfile: install the CPU-only build from PyTorch's own
+        # CPU wheel index FIRST, pinned to the version model2_analytics/
+        # requirements.txt's dependencies need, so pip sees it already
+        # installed at a matching version and skips the CUDA download when
+        # the next step resolves facenet-pytorch/ultralytics. If those
+        # pins change, re-check what torch version they need and update
+        # this to match, or this step's install goes unused.
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
+          pip install --index-url https://download.pytorch.org/whl/cpu \
+            torch==2.2.2 torchvision==0.17.2
 
-      - name: Run pytest
-        working-directory: model2_analytics
+      - name: Install Python dependencies (model1 + model2 + model3)
+        # One combined install, not three separate per-component installs,
+        # so pip resolves all three components' pins together in a single
+        # pass -- matching how they actually get imported together at test
+        # time (see the top-of-file comment) and how `infra/Dockerfile`
+        # installs them for the real app. Each requirements-dev.txt is
+        # test-only deps (pytest, httpx) layered on top of its component's
+        # own requirements.txt; model2_analytics/requirements-dev.txt and
+        # model3_federation/requirements-dev.txt additionally pull in
+        # model1-registry/requirements.txt themselves (see those files'
+        # own comments), so this one line ends up installing the exact
+        # union all three test suites need -- nothing model-specific is
+        # assumed or left out.
+        run: |
+          pip install \
+            -r model1-registry/requirements-dev.txt \
+            -r model2_analytics/requirements-dev.txt \
+            -r model3_federation/requirements-dev.txt
+
+      - name: Run pytest (repository-wide)
+        # No working-directory: runs from the repo root, exactly like the
+        # local `pytest` invocation this job is meant to match. There's no
+        # root-level pytest.ini, so pytest finds no inifile at all and
+        # falls back to its default discovery (python_files = test_*.py),
+        # which is what picks up all three tests/ directories. Only
+        # conftest.py resolves per-subtree in pytest (each of the three
+        # tests/conftest.py files applies to just its own directory, via
+        # pytest's normal ancestor-directory resolution) -- the three
+        # per-model pytest.ini files do NOT apply here the same way; only
+        # one inifile governs a whole session, and none is found from the
+        # repo root, so their `filterwarnings` entries are silently
+        # skipped for this run. That's expected, not a bug: it's exactly
+        # why the local 182-test run reported 13 warnings instead of
+        # zero -- those are the warnings each pytest.ini normally
+        # suppresses, showing up because this invocation doesn't use any
+        # of them. Nothing here weakens or skips a single test; it only
+        # means CI's console output is noisier than a per-component local
+        # run would be.
         run: pytest
