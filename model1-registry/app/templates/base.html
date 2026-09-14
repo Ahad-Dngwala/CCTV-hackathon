@@ -1,5 +1,13 @@
 <!DOCTYPE html>
-<html lang="en" x-data="{ mobileOpen: false }">
+<html lang="en" x-data="{
+    sidebarCollapsed: localStorage.getItem('sentinel_sidebar_collapsed') === 'true',
+    mobileOpen: false,
+    toggleSidebar() {
+        this.sidebarCollapsed = !this.sidebarCollapsed;
+        localStorage.setItem('sentinel_sidebar_collapsed', this.sidebarCollapsed);
+        setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 260);
+    }
+}" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -24,75 +32,32 @@
 </head>
 <body>
 
-    <!-- Navigation -->
+    <!-- Top Navigation Bar -->
     <nav class="nav" id="main-nav">
         <div class="nav-inner">
-            <a href="/" class="nav-brand" id="nav-brand">
-                <span class="nav-logo">🛡️</span>
-                <span class="nav-title">Sentinel</span>
-                <span class="nav-subtitle">Registry & GIS</span>
-            </a>
+            <div class="nav-left">
+                <!-- Sidebar Collapse / Expand Toggle Button -->
+                <button type="button" class="sidebar-toggle-btn" @click="toggleSidebar()" :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'" id="sidebar-toggle" aria-label="Toggle sidebar">
+                    <svg class="sidebar-toggle-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="3" y1="12" x2="21" y2="12"></line>
+                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                        <line x1="3" y1="18" x2="21" y2="18"></line>
+                    </svg>
+                </button>
 
-            <button class="nav-toggle" @click="mobileOpen = !mobileOpen" id="nav-toggle">
+                <a href="/" class="nav-brand" id="nav-brand">
+                    <span class="nav-logo">🛡️</span>
+                    <span class="nav-title">Sentinel</span>
+                    <span class="nav-subtitle">Registry & GIS</span>
+                </a>
+            </div>
+
+            <button class="nav-toggle" @click="mobileOpen = !mobileOpen" id="nav-toggle" aria-label="Toggle mobile menu">
                 <span></span><span></span><span></span>
             </button>
 
-            <div class="nav-links" :class="{ 'open': mobileOpen }">
-                <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}" id="nav-map">
-                    <span class="nav-link-icon">🗺️</span> Map
-                </a>
-                <a href="/live" class="nav-link {% if request.url.path == '/live' %}active{% endif %}" id="nav-live">
-                    <span class="nav-link-icon">📺</span> Live Feeds
-                </a>
-                <a href="/cameras" class="nav-link {% if '/cameras' in request.url.path %}active{% endif %}" id="nav-cameras">
-                    <span class="nav-link-icon">📷</span> Cameras
-                </a>
-                <a href="/departments" class="nav-link {% if request.url.path == '/departments' %}active{% endif %}" id="nav-departments">
-                    <span class="nav-link-icon">🏛️</span> Departments
-                </a>
-                <a href="/districts" class="nav-link {% if request.url.path == '/districts' %}active{% endif %}" id="nav-districts">
-                    <span class="nav-link-icon">📍</span> Districts
-                </a>
-                {% if user and user.role in ('dept_admin', 'operator') %}
-                <a href="/audit" class="nav-link {% if request.url.path == '/audit' %}active{% endif %}" id="nav-audit">
-                    <span class="nav-link-icon">📜</span> Audit Log
-                </a>
-                {% endif %}
-                <a href="/gap-analysis" class="nav-link {% if request.url.path == '/gap-analysis' %}active{% endif %}" id="nav-gap-analysis">
-                    <span class="nav-link-icon">📊</span> Gap Analysis
-                </a>
-
-                <div class="nav-divider"></div>
-
-                <a href="/detections" class="nav-link nav-link--secondary {% if request.url.path == '/detections' %}active{% endif %}" id="nav-detections">
-                    <span class="nav-link-icon">🔍</span> Detections
-                </a>
-                <a href="/recorded-detection" class="nav-link nav-link--secondary {% if request.url.path == '/recorded-detection' %}active{% endif %}" id="nav-recorded-detection">
-                    <span class="nav-link-icon">📼</span> Recorded
-                </a>
-                <a href="/watchlist" class="nav-link nav-link--secondary {% if request.url.path == '/watchlist' %}active{% endif %}" id="nav-watchlist">
-                    <span class="nav-link-icon">🚗</span> Vehicles
-                </a>
-                <a href="/watchlist/persons" class="nav-link nav-link--secondary {% if '/watchlist/persons' in request.url.path %}active{% endif %}" id="nav-person-watchlist">
-                    <span class="nav-link-icon">👤</span> Person Watchlist
-                </a>
-                <a href="/face-detection" class="nav-link nav-link--secondary {% if request.url.path == '/face-detection' %}active{% endif %}" id="nav-face-detection">
-                    <span class="nav-link-icon">🎯</span> Face Detection
-                </a>
-                <a href="/anpr" class="nav-link nav-link--secondary {% if request.url.path == '/anpr' %}active{% endif %}" id="nav-anpr">
-                    <span class="nav-link-icon">🚗</span> ANPR
-                </a>
-                <a href="/alerts" class="nav-link nav-link--secondary {% if request.url.path == '/alerts' %}active{% endif %}" id="nav-alerts">
-                    <span class="nav-link-icon">🚨</span> Alerts
-                </a>
-                <a href="/federation" class="nav-link nav-link--secondary {% if request.url.path == '/federation' %}active{% endif %}" id="nav-federation">
-                    <span class="nav-link-icon">🔗</span> Federation
-                </a>
-
-            </div>
-
             {% if user %}
-            <div class="nav-user" style="display: flex; align-items: center; gap: 0.65rem; margin-left: auto; flex-shrink: 0;">
+            <div class="nav-user">
                 <span class="badge badge--online" style="font-size: 0.78rem; font-weight: 600; white-space: nowrap;">
                     👤 {{ user.username }} ({{ user.role }})
                 </span>
@@ -114,13 +79,113 @@
     }
     </script>
 
-    <!-- Main Content -->
+    <!-- Mobile Backdrop -->
+    <div class="sidebar-backdrop" x-show="mobileOpen" @click="mobileOpen = false" x-transition.opacity></div>
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar" :class="{ 'collapsed': sidebarCollapsed, 'mobile-open': mobileOpen }" id="main-sidebar">
+        <div class="sidebar-nav">
+            <!-- Section 1: Registry & GIS -->
+            <div class="sidebar-section-title">Registry & GIS</div>
+            <a href="/" class="sidebar-link {% if request.url.path == '/' %}active{% endif %}" id="nav-map" data-tooltip="Map Dashboard">
+                <span class="sidebar-link-icon">🗺️</span>
+                <span class="sidebar-link-text">Map Dashboard</span>
+            </a>
+            <a href="/live" class="sidebar-link {% if request.url.path == '/live' %}active{% endif %}" id="nav-live" data-tooltip="Live Feeds">
+                <span class="sidebar-link-icon">📺</span>
+                <span class="sidebar-link-text">Live Feeds</span>
+            </a>
+            <a href="/cameras" class="sidebar-link {% if '/cameras' in request.url.path %}active{% endif %}" id="nav-cameras" data-tooltip="Cameras Registry">
+                <span class="sidebar-link-icon">📷</span>
+                <span class="sidebar-link-text">Cameras</span>
+            </a>
+            <a href="/departments" class="sidebar-link {% if request.url.path == '/departments' %}active{% endif %}" id="nav-departments" data-tooltip="Departments">
+                <span class="sidebar-link-icon">🏛️</span>
+                <span class="sidebar-link-text">Departments</span>
+            </a>
+            <a href="/districts" class="sidebar-link {% if request.url.path == '/districts' %}active{% endif %}" id="nav-districts" data-tooltip="Districts">
+                <span class="sidebar-link-icon">📍</span>
+                <span class="sidebar-link-text">Districts</span>
+            </a>
+            {% if user and user.role in ('dept_admin', 'operator') %}
+            <a href="/audit" class="sidebar-link {% if request.url.path == '/audit' %}active{% endif %}" id="nav-audit" data-tooltip="Audit Log">
+                <span class="sidebar-link-icon">📜</span>
+                <span class="sidebar-link-text">Audit Log</span>
+            </a>
+            {% endif %}
+            <a href="/gap-analysis" class="sidebar-link {% if request.url.path == '/gap-analysis' %}active{% endif %}" id="nav-gap-analysis" data-tooltip="Gap Analysis">
+                <span class="sidebar-link-icon">📊</span>
+                <span class="sidebar-link-text">Gap Analysis</span>
+            </a>
+
+            <div class="sidebar-divider"></div>
+
+            <!-- Section 2: AI & Analytics -->
+            <div class="sidebar-section-title">AI & Analytics</div>
+            <a href="/detections" class="sidebar-link {% if request.url.path == '/detections' %}active{% endif %}" id="nav-detections" data-tooltip="Vehicle Detections">
+                <span class="sidebar-link-icon">🔍</span>
+                <span class="sidebar-link-text">Detections</span>
+            </a>
+            <a href="/recorded-detection" class="sidebar-link {% if request.url.path == '/recorded-detection' %}active{% endif %}" id="nav-recorded-detection" data-tooltip="Recorded Video AI">
+                <span class="sidebar-link-icon">📼</span>
+                <span class="sidebar-link-text">Recorded AI</span>
+            </a>
+            <a href="/watchlist" class="sidebar-link {% if request.url.path == '/watchlist' %}active{% endif %}" id="nav-watchlist" data-tooltip="Vehicle Watchlist">
+                <span class="sidebar-link-icon">🚗</span>
+                <span class="sidebar-link-text">Vehicles</span>
+            </a>
+            <a href="/watchlist/persons" class="sidebar-link {% if '/watchlist/persons' in request.url.path %}active{% endif %}" id="nav-person-watchlist" data-tooltip="Person Watchlist">
+                <span class="sidebar-link-icon">👤</span>
+                <span class="sidebar-link-text">Person Watchlist</span>
+            </a>
+            <a href="/face-detection" class="sidebar-link {% if request.url.path == '/face-detection' %}active{% endif %}" id="nav-face-detection" data-tooltip="Face Surveillance">
+                <span class="sidebar-link-icon">🎯</span>
+                <span class="sidebar-link-text">Face Detection</span>
+            </a>
+            <a href="/anpr" class="sidebar-link {% if request.url.path == '/anpr' %}active{% endif %}" id="nav-anpr" data-tooltip="ANPR Pipeline">
+                <span class="sidebar-link-icon">🚘</span>
+                <span class="sidebar-link-text">ANPR</span>
+            </a>
+            <a href="/alerts" class="sidebar-link {% if request.url.path == '/alerts' %}active{% endif %}" id="nav-alerts" data-tooltip="Real-time Alerts">
+                <span class="sidebar-link-icon">🚨</span>
+                <span class="sidebar-link-text">Alerts Feed</span>
+            </a>
+
+            <div class="sidebar-divider"></div>
+
+            <!-- Section 3: Federation -->
+            <div class="sidebar-section-title">Federation</div>
+            <a href="/federation" class="sidebar-link {% if request.url.path == '/federation' %}active{% endif %}" id="nav-federation" data-tooltip="VMS Federation">
+                <span class="sidebar-link-icon">🔗</span>
+                <span class="sidebar-link-text">VMS Federation</span>
+            </a>
+        </div>
+
+        <!-- Sidebar Collapse / Expand Footer Button -->
+        <div class="sidebar-footer">
+            <button type="button" class="sidebar-footer-btn" @click="toggleSidebar()" id="sidebar-footer-toggle" :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'">
+                <span class="sidebar-footer-icon" x-text="sidebarCollapsed ? '▶' : '◀'">◀</span>
+                <span class="sidebar-footer-text" x-show="!sidebarCollapsed">Collapse</span>
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
     <main class="main-content" id="main-content">
         {% block content %}{% endblock %}
     </main>
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Leaflet 1.9.4 fix for Windows touchscreen / hybrid devices:
+        // When touch capability is detected on desktop/laptop Chrome/Edge, Leaflet turns on
+        // L.Browser.touch and binds touch events instead of mouse events on map dragging.
+        // Forcing L.Browser.touch = false on non-mobile devices restores native mouse drag & drop.
+        if (typeof L !== 'undefined' && L.Browser && !L.Browser.mobile) {
+            L.Browser.touch = false;
+        }
+    </script>
     <!-- Leaflet.markercluster JS -->
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <!-- HTMX -->

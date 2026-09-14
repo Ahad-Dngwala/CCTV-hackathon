@@ -33,7 +33,15 @@ function mapDashboard() {
             this.map = L.map('map', {
                 zoomControl: true,
                 attributionControl: true,
+                dragging: true,
+                tap: false,
             }).setView([22.3, 72.0], 7);
+
+            // Prevent clicks/drags on control panels from bubbling to map
+            document.querySelectorAll('.map-control-card, .map-stats').forEach(el => {
+                L.DomEvent.disableClickPropagation(el);
+                L.DomEvent.disableScrollPropagation(el);
+            });
 
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
