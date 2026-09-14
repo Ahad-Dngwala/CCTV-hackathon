@@ -101,6 +101,7 @@ async def _broadcast_job_event(job_id: str, payload: Dict):
 class JobControlRequest(BaseModel):
     job_id: str
     speed: Optional[str] = "1x"
+    anpr_rate: int = 5
 
 
 # ── 1. Cameras for Association ────────────────────────────────────
@@ -249,7 +250,8 @@ async def start_recorded_job(
         file_path=meta["saved_path"],
         camera_uuid=uuid.UUID(meta["camera_id"]),
         camera_name=meta["camera_name"],
-        speed=req.speed or "1x",
+        speed=req.speed,
+        anpr_rate=req.anpr_rate,
         event_callback=on_recorded_worker_event,
         db_session_factory=_get_db,
     )

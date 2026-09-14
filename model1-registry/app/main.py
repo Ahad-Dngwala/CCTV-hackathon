@@ -60,7 +60,6 @@ from model2_analytics.app.ingestion.catalogue import (  # noqa: E402
 )
 from model2_analytics.app.routers import (  # noqa: E402
     alerts as m2_alerts,
-    anpr as m2_anpr,
     detections as m2_detections,
     face_detection as m2_face_detection,
     grid as m2_grid,
@@ -258,7 +257,6 @@ app.include_router(federation_router)
 # ── Model 2 Routers ──────────────────────────────────────────────
 
 app.include_router(m2_alerts.router)
-app.include_router(m2_anpr.router)
 app.include_router(m2_detections.router)
 app.include_router(m2_face_detection.router)
 app.include_router(m2_grid.router)
