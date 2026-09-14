@@ -1,6 +1,6 @@
-# Sentinel - Gujarat CCTV Integration & GIS Platform
+# EyesOnGuj - Gujarat CCTV Integration & GIS Platform
 
-Sentinel is a unified CCTV management, registry, GIS mapping, and video analytics platform built for Gujarat's statewide surveillance network.
+EyesOnGuj is a unified CCTV management, registry, GIS mapping, and video analytics platform built for Gujarat's statewide surveillance network.
 
 ---
 
