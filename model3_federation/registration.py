@@ -162,20 +162,29 @@ def _do_upsert(session, adapter: VMSAdapter, cameras: Sequence[FederatedCamera],
         else:
             location_sql = "NULL"
 
+        rtsp_url = cam.stream_url if cam.stream_kind == "rtsp" else None
+        hls_url = cam.stream_url if cam.stream_kind == "hls" else None
+        is_live = bool(cam.stream_url)
+
         session.execute(text(
             f"""
             INSERT INTO cameras
               (name, source_grid_id, vms_system_id, department_id,
-               location, location_label, ownership, connectivity_status, is_active)
+               location, location_label, ownership, connectivity_status, is_active,
+               rtsp_url, hls_url, is_live)
             VALUES
               (:name, :ext, :sys, :dept,
-               {location_sql}, :label, :ownership, 'online', :active)
+               {location_sql}, :label, :ownership, 'online', :active,
+               :rtsp_url, :hls_url, :is_live)
             ON CONFLICT (vms_system_id, source_grid_id) DO UPDATE
             SET name                = :name,
                 location            = {location_sql},
                 location_label      = :label,
                 connectivity_status = 'online',
-                is_active           = :active
+                is_active           = :active,
+                rtsp_url            = :rtsp_url,
+                hls_url             = :hls_url,
+                is_live             = :is_live
             """
         ), {
             "sys": adapter.system_id,
@@ -187,6 +196,9 @@ def _do_upsert(session, adapter: VMSAdapter, cameras: Sequence[FederatedCamera],
             "label": cam.location_label,
             "ownership": ownership,
             "active": cam.is_active,
+            "rtsp_url": rtsp_url,
+            "hls_url": hls_url,
+            "is_live": is_live,
         })
 
 
