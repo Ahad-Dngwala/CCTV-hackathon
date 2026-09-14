@@ -11,7 +11,11 @@ actually true for a whole category of integrations, not just Windy.
 Windy is registered below as a PRESET (adapter_type="windy") of this
 same class with its field paths pre-filled — proving the generic path
 and the Windy-specific path are the same code, not two separate
-implementations.
+implementations. Field-verified end to end with a real Windy API key
+through the actual onboarding flow (POST /api/v3/systems/test-connection
+→ connect() → get_cameras()), not just the MockTransport unit tests in
+tests/test_rest_api_adapter.py — those cover the field-mapping logic,
+this confirms the live path it's mapping against.
 
 What this does NOT claim to solve: a REST API that needs OAuth,
 pagination beyond a single page, or a response shape that isn't

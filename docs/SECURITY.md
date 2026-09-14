@@ -146,6 +146,18 @@ already exist:
   from the login-specific limiter in §2. Not needed at 50-camera demo
   scale, and a natural extension point for whichever model ends up
   owning the public-facing edge as the platform grows.
+- **Encryption at rest for `vms_systems.config`** — Model 3's
+  config-driven VMS onboarding (`docs/model3/README.md` §4) stores
+  adapter credentials (a Windy API key, ONVIF host/username/password)
+  as plain `JSONB`, same as `migrations/002_vms_systems_adapter_config.sql`'s
+  own header already flags. That matches how RTSP credentials are
+  handled elsewhere in this codebase (`shared/adapters/factory.py`),
+  not a one-off gap specific to federation — but it's a real one:
+  before any of this holds a real department's credentials, `config`
+  needs application-layer encryption (Fernet, key from an env var or
+  secrets manager) or the secret itself needs to live in a proper
+  secrets manager with only a reference stored here, not a DB-level
+  "encrypted column" the app server can still read unencrypted anyway.
 
 ## 7. For Model 2 and Model 3
 

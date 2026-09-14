@@ -1,6 +1,6 @@
 # Platform — the shared app shell
 
-Model 1, Model 2, and (in progress) Model 3 all run as one FastAPI
+Model 1, Model 2, and Model 3 all run as one FastAPI
 process, not three services. That's a real architectural decision, not
 a shortcut: one process means one login session, one template engine,
 one static-file mount, and one deployment story on a single VPS instead

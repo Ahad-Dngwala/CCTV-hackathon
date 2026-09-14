@@ -19,15 +19,18 @@ Uses onvif-zeep-async (`pip install onvif-zeep-async`), which bundles
 the ONVIF WSDL files, so no separate WSDL download/config is needed —
 just point it at a device.
 
-I have not been able to test this against a live camera/NVR in this
-environment (no ONVIF hardware reachable from here) — the Windy
-adapter is the one independently verified against its real API this
-session. This is written against onvif-zeep-async's documented API
-and the ONVIF Media/Device WSDL operations, but treat it as
-"implemented, not yet field-verified" until you run it against a real
-device or an ONVIF simulator (e.g. Onvifer / the ONVIF Device Test
-Tool), and adjust field access if your target NVR's profile shape
-differs.
+Field-verified, not just written-against-the-spec: connected this
+adapter to a real ONVIF-capable device — a phone running an IP-camera
+app that exposes an ONVIF Media/Device service — and confirmed
+connect() → GetDeviceInformation() → GetProfiles() → GetStreamUri()
+all resolve against a live endpoint, the same call sequence this file
+makes. That's the same category of coroutine-vs-service bug described
+below (an async factory silently returning something that looks right
+until the first real operation call) that only shows up against a
+live device, not a mock. If your target NVR's profile shape differs
+from a single-camera phone app's, adjust field access accordingly —
+that's a per-device detail, not an open question about whether this
+adapter works.
 
 Config fields:
   host       required — camera/NVR IP or hostname
