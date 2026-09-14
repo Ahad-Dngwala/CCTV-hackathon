@@ -132,7 +132,7 @@ Owner: `model2_analytics`. Data model reference: `Project_Context.md` §4.
 | `GET /api/v1/recorded/status/{job_id}` | Query current job status, total frames, detections count, and processing FPS | ✅ |
 | `WS /ws/recorded/{job_id}` | Real-time WebSocket channel streaming `VIDEO_FRAME`, `FRAME_BOXES`, `NEW_DETECTION`, `JOB_PROGRESS` | ✅ |
 | `GET /face-detection` | Surveillance Video Face Detection & Watchlist Alerting Dashboard UI | ✅ |
-| `GET /api/v1/face-detection/active-jobs` | List all active and uploaded face analysis jobs | ✅ |
+| `GET /api/v1/face-detection/cameras` | List active cameras for footage location association | ✅ |
 | `POST /api/v1/face-detection/upload` | Upload surveillance footage (up to 2 GB) with OpenCV metadata probing | ✅ |
 | `POST /api/v1/face-detection/start` | Start isolated face detection & watchlist matching worker (1x, 2x, max speed) | ✅ |
 | `POST /api/v1/face-detection/pause` / `resume` / `stop` | Execution controls for face analysis worker | ✅ |
@@ -141,10 +141,14 @@ Owner: `model2_analytics`. Data model reference: `Project_Context.md` §4.
 | `GET /api/v1/face-detection/crops/{filename}` | Authenticated serving of detected face match crop thumbnails | ✅ |
 | `WS /api/v1/face-detection/ws/{job_id}` | Real-time WebSocket channel streaming `VIDEO_FRAME`, `FACE_BOXES`, `PERSON_MATCH`, `JOB_PROGRESS` | ✅ |
 | `GET /detection-image/{file_path}` | Authenticated serving of vehicle/plate cropped detection images | ✅ |
-| `GET /api/v1/detections` | List detections, filterable by camera/plate/time range | ✅ |
+| `GET /api/v1/detection/events` | Recent confirmed vehicle sightings (in-memory ring-buffer with DB fallback) | ✅ |
+| `GET /api/v1/detections` | Paginated detection history (`camera_tag`, `page`, `page_size`) | ✅ |
+| `GET /api/v1/detections/stats` | Real-time detection counters (`total_today`, `total_all_time`, `active_tracks`) | ✅ |
+| `GET /api/v1/anpr/health` | Health check for integrated ANPR pipeline (infra monitoring) | ✅ |
 | `GET /api/v1/vehicle-tracks/{plate_number}` | Full route reconstruction for a plate — **this is the Step 4 scored test** | 🚧 |
-| `GET /api/v1/alerts` | List alerts, filter by acknowledged/severity | 🚧 |
-| `POST /api/v1/alerts/{id}/acknowledge` | Ack an alert — writes `acknowledged_by`/`acknowledged_at` | 🚧 |
+| `GET /api/v1/alerts` | List alerts, filter by `severity`, `alert_type`, `acknowledged` | ✅ |
+| `GET /api/v1/alerts/stats` | Live alert counters: total, today, unacknowledged, and by severity | ✅ |
+| `PATCH /api/v1/alerts/{alert_id}/ack` | Acknowledge an alert — writes `acknowledged_by` and `acknowledged_at` | ✅ |
 | `WS /api/v1/ws/alerts` | Real-time alert push to dashboard on watchlist match | 🚧 |
 | `WS /ws/detections` | Real-time live RTSP camera vehicle detections and track stream | ✅ |
 
@@ -211,32 +215,112 @@ Returned on `GET` and `POST` endpoints:
 }
 ```
 
-### Detection object
+### Detection object (`detections` table in PostgreSQL)
 
+Database entity shape:
 ```json
 {
   "id": "uuid",
   "camera_id": "uuid",
   "timestamp": "datetime",
-  "detected_plate": "string",
-  "confidence": "float",
-  "cropped_image_path": "string",
-  "vehicle_track_id": "uuid | null"
+  "event_type": "vehicle_detection",
+  "detected_plate": "string | null",
+  "vehicle_type": "Car | Bus | Truck | Motorcycle | Auto Rickshaw | Mini Truck",
+  "confidence": 0.954,
+  "cropped_image_path": "/detection-image/{filename}.jpg",
+  "vehicle_track_id": "uuid | null",
+  "created_at": "datetime"
 }
 ```
 
-### Alert object
+Paginated API Response (`GET /api/v1/detections?camera_tag=cam04&page=1&page_size=20`):
+```json
+{
+  "status": "ok",
+  "total": 42,
+  "page": 1,
+  "page_size": 20,
+  "pages": 3,
+  "detections": [
+    {
+      "id": "uuid",
+      "camera_tag": "cam04",
+      "timestamp": "2026-09-14 18:32:05",
+      "detected_plate": "GJ01AB1234",
+      "confidence": 94.8,
+      "crop_path": "/detection-image/20260914_cam04_GJ01AB1234.jpg",
+      "camera_name": "SG Highway Junction",
+      "location_label": "SG Highway, Ahmedabad",
+      "vehicle_type": "Car",
+      "vehicle_track_id": "uuid"
+    }
+  ]
+}
+```
 
+### Alert object (`alerts` table in PostgreSQL)
+
+Database entity shape:
 ```json
 {
   "id": "uuid",
   "detection_id": "uuid",
   "watchlist_id": "uuid",
-  "alert_type": "string",
+  "alert_type": "vehicle_match",
   "severity": "low | medium | high | critical",
   "created_at": "datetime",
   "acknowledged_by": "uuid | null",
   "acknowledged_at": "datetime | null"
+}
+```
+
+API Response (`GET /api/v1/alerts?severity=critical&acknowledged=false`):
+```json
+{
+  "status": "ok",
+  "alerts": [
+    {
+      "id": "uuid",
+      "detection_id": "uuid",
+      "watchlist_id": "uuid",
+      "alert_type": "vehicle_match",
+      "severity": "critical",
+      "created_at": "2026-09-14T18:32:06.123456+00:00",
+      "acknowledged_by": null,
+      "acknowledged_at": null,
+      "detected_plate": "GJ01AB1234",
+      "camera_name": "SG Highway Junction",
+      "category": "stolen",
+      "plate_number_wl": "GJ01AB1234"
+    }
+  ]
+}
+```
+
+Alert Statistics Response (`GET /api/v1/alerts/stats`):
+```json
+{
+  "status": "ok",
+  "stats": {
+    "total": 15,
+    "today": 4,
+    "unacked": 2,
+    "by_severity": {
+      "critical": 1,
+      "high": 1,
+      "medium": 0,
+      "low": 0
+    }
+  }
+}
+```
+
+Alert Acknowledgment (`PATCH /api/v1/alerts/{alert_id}/ack`):
+```json
+{
+  "status": "ok",
+  "alert_id": "uuid",
+  "acknowledged": true
 }
 ```
 
