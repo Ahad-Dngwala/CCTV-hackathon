@@ -100,95 +100,109 @@ def _resolve_department_id(
     return str(rows[0][0])
 
 
+def _do_upsert(session, adapter: VMSAdapter, cameras: Sequence[FederatedCamera], ownership: str) -> None:
+    """The actual INSERT/UPSERT logic, against whatever session the
+    caller hands in. No open/commit/close here — that's the caller's
+    responsibility, so this can run either against a throwaway session
+    opened just for it (_upsert_system_and_cameras, the startup path)
+    or against a request's own already-open, already-transactional
+    Session (register_adapter_in_request, used by POST /systems so it
+    doesn't open a second, isolation-bypassing connection — see that
+    function's docstring for why that distinction actually matters)."""
+    from sqlalchemy import text
+
+    department_hint = cameras[0].department if cameras else None
+    department_id = _resolve_department_id(
+        session, department_hint, adapter.system_name
+    )
+
+    # `protocol` used to be hardcoded to the literal string
+    # 'simulated' here regardless of which adapter this was — true
+    # for the three demo adapters, false the moment a real adapter
+    # exists. Falls back to 'simulated' only for adapters that
+    # don't declare an adapter_type (the three demo ones), so
+    # nothing about their behavior changes.
+    protocol = getattr(adapter, "adapter_type", None) or "simulated"
+
+    session.execute(text(
+        """
+        INSERT INTO vms_systems
+          (id, name, vendor, protocol, adapter_type, config, ownership, department_id, department_hint, status, camera_count, last_heartbeat)
+        VALUES
+          (:id, :name, :vendor, :protocol, :adapter_type, :config, :ownership, :dept, :dept_hint, 'connected', :count, now())
+        ON CONFLICT (id) DO UPDATE
+        SET status          = 'connected',
+            protocol        = :protocol,
+            department_id   = COALESCE(vms_systems.department_id, EXCLUDED.department_id),
+            department_hint = EXCLUDED.department_hint,
+            camera_count    = :count,
+            last_heartbeat  = now()
+        """
+    ), {
+        "id": adapter.system_id,
+        "name": adapter.system_name,
+        "vendor": adapter.vendor,
+        "protocol": protocol,
+        # adapter_type/config are set on INSERT only (config-driven
+        # rows are created via POST /systems, which already writes
+        # these columns) — re-registration on reconnect shouldn't
+        # overwrite a row's own config with NULL for adapters that
+        # don't carry one (the three demo adapters).
+        "adapter_type": getattr(adapter, "adapter_type", None),
+        "config": None,
+        "ownership": ownership,
+        "dept": department_id,
+        "dept_hint": department_hint,
+        "count": len(cameras),
+    })
+
+    for cam in cameras:
+        if cam.lat is not None and cam.lng is not None:
+            location_sql = "ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::GEOGRAPHY"
+        else:
+            location_sql = "NULL"
+
+        session.execute(text(
+            f"""
+            INSERT INTO cameras
+              (name, source_grid_id, vms_system_id, department_id,
+               location, location_label, ownership, connectivity_status, is_active)
+            VALUES
+              (:name, :ext, :sys, :dept,
+               {location_sql}, :label, :ownership, 'online', :active)
+            ON CONFLICT (vms_system_id, source_grid_id) DO UPDATE
+            SET name                = :name,
+                location            = {location_sql},
+                location_label      = :label,
+                connectivity_status = 'online',
+                is_active           = :active
+            """
+        ), {
+            "sys": adapter.system_id,
+            "ext": cam.external_id,
+            "name": cam.name,
+            "dept": department_id,
+            "lat": cam.lat,
+            "lng": cam.lng,
+            "label": cam.location_label,
+            "ownership": ownership,
+            "active": cam.is_active,
+        })
+
+
 def _upsert_system_and_cameras(
     db_session_factory: Callable,
     adapter: VMSAdapter,
     cameras: Sequence[FederatedCamera],
     ownership: str,
 ) -> None:
-    """Synchronous DB work — run in a thread executor, same pattern as the correlation engine."""
-    from sqlalchemy import text
-
+    """Synchronous DB work — run in a thread executor, same pattern as
+    the correlation engine. Only for the startup path (register_adapter
+    below): opens its own session from a factory, so it must own that
+    session's whole lifecycle (commit/rollback/close) itself."""
     session = db_session_factory()
     try:
-        department_hint = cameras[0].department if cameras else None
-        department_id = _resolve_department_id(
-            session, department_hint, adapter.system_name
-        )
-
-        # `protocol` used to be hardcoded to the literal string
-        # 'simulated' here regardless of which adapter this was — true
-        # for the three demo adapters, false the moment a real adapter
-        # exists. Falls back to 'simulated' only for adapters that
-        # don't declare an adapter_type (the three demo ones), so
-        # nothing about their behavior changes.
-        protocol = getattr(adapter, "adapter_type", None) or "simulated"
-
-        session.execute(text(
-            """
-            INSERT INTO vms_systems
-              (id, name, vendor, protocol, adapter_type, config, ownership, department_id, department_hint, status, camera_count, last_heartbeat)
-            VALUES
-              (:id, :name, :vendor, :protocol, :adapter_type, :config, :ownership, :dept, :dept_hint, 'connected', :count, now())
-            ON CONFLICT (id) DO UPDATE
-            SET status          = 'connected',
-                protocol        = :protocol,
-                department_id   = COALESCE(vms_systems.department_id, EXCLUDED.department_id),
-                department_hint = EXCLUDED.department_hint,
-                camera_count    = :count,
-                last_heartbeat  = now()
-            """
-        ), {
-            "id": adapter.system_id,
-            "name": adapter.system_name,
-            "vendor": adapter.vendor,
-            "protocol": protocol,
-            # adapter_type/config are set on INSERT only (config-driven
-            # rows are created via POST /systems, which already writes
-            # these columns) — re-registration on reconnect shouldn't
-            # overwrite a row's own config with NULL for adapters that
-            # don't carry one (the three demo adapters).
-            "adapter_type": getattr(adapter, "adapter_type", None),
-            "config": None,
-            "ownership": ownership,
-            "dept": department_id,
-            "dept_hint": department_hint,
-            "count": len(cameras),
-        })
-
-        for cam in cameras:
-            if cam.lat is not None and cam.lng is not None:
-                location_sql = "ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::GEOGRAPHY"
-            else:
-                location_sql = "NULL"
-
-            session.execute(text(
-                f"""
-                INSERT INTO cameras
-                  (name, source_grid_id, vms_system_id, department_id,
-                   location, location_label, ownership, connectivity_status, is_active)
-                VALUES
-                  (:name, :ext, :sys, :dept,
-                   {location_sql}, :label, :ownership, 'online', :active)
-                ON CONFLICT (vms_system_id, source_grid_id) DO UPDATE
-                SET name                = :name,
-                    location            = {location_sql},
-                    location_label      = :label,
-                    connectivity_status = 'online',
-                    is_active           = :active
-                """
-            ), {
-                "sys": adapter.system_id,
-                "ext": cam.external_id,
-                "name": cam.name,
-                "dept": department_id,
-                "lat": cam.lat,
-                "lng": cam.lng,
-                "label": cam.location_label,
-                "ownership": ownership,
-                "active": cam.is_active,
-            })
-
+        _do_upsert(session, adapter, cameras, ownership)
         session.commit()
         logger.info(
             "Registered %s (%d cameras) into cameras/vms_systems.",
@@ -283,9 +297,47 @@ async def register_adapter(
     all government systems today; pass ownership="private" when a
     future adapter represents a private-vendor VMS instead (a mall or
     society's own system Sentinel has been given read access to).
+
+    Opens its own DB connection via db_session_factory and runs the
+    write in a thread executor — correct for the startup path (this
+    module's own load_dynamic_adapters, and api/router.py's
+    start_federation_services), where there is no existing request or
+    Session to reuse. NOT what POST /api/v3/systems should call — see
+    register_adapter_in_request below for why.
     """
     cameras = await adapter.get_cameras()
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(
         None, _upsert_system_and_cameras, db_session_factory, adapter, cameras, ownership
     )
+
+
+async def register_adapter_in_request(session, adapter: VMSAdapter, ownership: str = "government") -> None:
+    """
+    Same job as register_adapter(), but for POST /api/v3/systems, which
+    already has its own request-scoped Session (FastAPI's get_db,
+    tests' SAVEPOINT-wrapped one included) — NOT a startup call with no
+    session to reuse. Deliberately does NOT open a second connection
+    via db_session_factory/_SessionLocal:
+
+      * In tests, opening a fresh _SessionLocal() connection bypasses
+        the outer-transaction-plus-SAVEPOINT isolation conftest.py's
+        test_engine fixture relies on entirely, and connects to
+        whatever settings.DATABASE_URL happens to be (not necessarily
+        sentinel_test) — the exact hazard conftest.py's
+        DISABLE_FEDERATION_STARTUP comment already documents for the
+        startup path. This endpoint runs unconditionally on every
+        request, startup flag or not, so it needed its own fix rather
+        than inheriting that flag's protection.
+      * In production it would just be an unnecessary second
+        connection/transaction for work the request's own session can
+        do directly.
+
+    Runs synchronously on the request's own thread (no run_in_executor)
+    since a Session isn't safe to hand to another thread while the
+    request that owns it is still in progress — same tradeoff the rest
+    of this router's endpoints already make with their own sync
+    db.execute() calls.
+    """
+    cameras = await adapter.get_cameras()
+    _do_upsert(session, adapter, cameras, ownership)

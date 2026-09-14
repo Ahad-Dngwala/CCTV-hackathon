@@ -35,7 +35,7 @@ from shared.db.models import User as UserModel
 from shared.db.session import get_db
 from model3_federation.bus.event_bus import FederationEventBus
 from model3_federation.correlation.engine import CorrelationEngine
-from model3_federation.registration import register_adapter, load_dynamic_adapters
+from model3_federation.registration import register_adapter, register_adapter_in_request, load_dynamic_adapters
 from model3_federation.adapters.police_vms_adapter import PoliceVMSAdapter
 from model3_federation.adapters.rto_vms_adapter import RTOVMSAdapter
 from model3_federation.adapters.municipal_vms_adapter import MunicipalVMSAdapter
@@ -468,22 +468,42 @@ async def create_system(
             "message": "Saved, but could not connect. Edit and re-test — this will retry on next restart too.",
         }
 
-    # Connected: pull its real camera list now (same helper
-    # start_federation_services uses for the demo adapters — same
-    # session-factory convention as main.py's lifespan hook, see
-    # shared/db/session.py's _SessionLocal), and start its live event
-    # stream immediately rather than waiting for the next process
-    # restart.
-    from shared.db.session import _SessionLocal as _sl
-    await register_adapter(_sl, adapter, ownership=payload.ownership)
+    # Connected: pull its real camera list now and upsert into the
+    # SAME request session/transaction the INSERT above used (see
+    # register_adapter_in_request's docstring for why this must not
+    # open a second connection via _SessionLocal — it did originally,
+    # and that's exactly the isolation hazard conftest.py's
+    # DISABLE_FEDERATION_STARTUP comment warns about for the startup
+    # path; this endpoint has no such flag to protect it), then start
+    # its live event stream immediately rather than waiting for the
+    # next process restart.
+    await register_adapter_in_request(db, adapter, ownership=payload.ownership)
+    db.commit()
 
-    task = asyncio.create_task(
-        adapter.start_event_stream(_bus.publish),
-        name=f"federation-adapter-{adapter.vendor}-{system_id[:8]}",
-    )
-    task.add_done_callback(_on_task_done)
-    _tasks.append(task)
-    _adapters.append(adapter)
+    # _bus is only set once start_federation_services() has actually run
+    # (main.py's lifespan hook — skipped entirely when
+    # DISABLE_FEDERATION_STARTUP=true, which the test suite always sets,
+    # see model1-registry/tests/conftest.py). Camera registration above
+    # still happens either way; only the live event-stream task needs a
+    # running bus to publish into. Previously this unconditionally did
+    # `adapter.start_event_stream(_bus.publish)`, which is an
+    # AttributeError on None — caught by writing
+    # test_dynamic_onboarding_api.py, not by any manual check.
+    if _bus is not None:
+        task = asyncio.create_task(
+            adapter.start_event_stream(_bus.publish),
+            name=f"federation-adapter-{adapter.vendor}-{system_id[:8]}",
+        )
+        task.add_done_callback(_on_task_done)
+        _tasks.append(task)
+        _adapters.append(adapter)
+    else:
+        logger.warning(
+            "Federation event bus isn't running (federation startup disabled) — "
+            "%s was registered and its cameras saved, but its live event stream "
+            "was not started. It will start normally on the next full app startup.",
+            payload.name,
+        )
 
     return {
         "id": system_id, "name": payload.name, "adapter_type": payload.adapter_type,
