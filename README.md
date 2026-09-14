@@ -2,17 +2,6 @@
 
 Sentinel is a unified CCTV management, registry, GIS mapping, and video analytics platform built for Gujarat's statewide surveillance network.
 
-## 👋 New here? (judges & first-time reviewers)
-
-Fastest path to a running app:
-
-1. `cd infra`
-2. Create a `SECRET_KEY` (one command, see step 2 below) and save it as `infra/.env`.
-3. `docker compose up -d`
-4. Open `http://localhost:8000/login` and sign in with `operator1` / `password123`.
-
-That's the whole setup — no local Python install, no manual database steps. Full details in "Quick Start" right below. If something looks confusing or a step doesn't work as written, that's useful feedback in itself.
-
 ---
 
 ## 🚀 Quick Start (Running with Docker Compose)
@@ -29,16 +18,15 @@ The entire platform (PostgreSQL + PostGIS database and the FastAPI application) 
    cd infra
    ```
 
-2. **Set a `SECRET_KEY`** — `docker-compose.yml` refuses to start without one (it signs every login session, so there's no safe default baked in). One command creates `infra/.env` with a real random key (`docker-compose.yml` already defaults `DEBUG=false` on its own, so this is the only variable you need to set to get running):
+2. **Copy the env file and set a `SECRET_KEY`**:
    ```bash
-   # macOS/Linux
-   echo "SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))')" > .env
+   cp ../.env.example .env
    ```
-   ```powershell
-   # Windows PowerShell
-   "SECRET_KEY=$(python -c "import secrets; print(secrets.token_hex(32))")" | Out-File -Encoding ascii .env
+   Open `.env` and replace the `SECRET_KEY` line with a real random value, e.g.:
+   ```bash
+   python3 -c "import secrets; print(secrets.token_hex(32))"
    ```
-   (`../.env.example`, one directory up, documents every other override this file can hold — GRID_HOST, rate-limit tuning, DOMAIN for real HTTPS, etc. — none of the rest are required just to boot the app.)
+   `docker-compose.yml` refuses to start without a real `SECRET_KEY` (it signs every login session, so there is no safe default baked in). Everything else in `.env.example` already has a working default, so `SECRET_KEY` is the only line you have to touch.
 
 3. **Start the containers**:
    ```bash
@@ -82,7 +70,7 @@ The entire platform (PostgreSQL + PostGIS database and the FastAPI application) 
 
 ---
 
-## 🖥️ Running Locally Without Docker
+## 🖥️ Running Locally Without Docker (not recommended)
 
 Prefer running the app or tests directly on your machine instead of in containers? You need a local Postgres 16 install with the `postgis`, `pgcrypto`, and `vector` (pgvector) extensions available, then:
 
@@ -97,6 +85,27 @@ pytest   # also self-bootstraps the sentinel role/db if scripts/bootstrap_local_
 ```
 
 See `model1-registry/README.md`'s Testing section for details, including what to check if a run looks stuck.
+
+## 🧪 Running the Tests
+
+The test suite needs a real Postgres with `postgis` and `pgvector`, not sqlite. Installing those extensions yourself (especially pgvector, which needs a compiler on Windows) is the slow, error-prone way to get there. The fast way is to just reuse the same database container that `docker compose up -d` already builds for you:
+
+```bash
+cd infra
+docker compose up -d
+```
+
+Give it a few minutes on first run (pulling and building images, running the Postgres healthcheck). Then, from the repo root:
+
+```bash
+cd model1-registry
+pip install -r requirements-dev.txt
+TEST_DB_PORT=5433 pytest
+```
+
+`infra/docker-compose.yml` maps the `db` container's Postgres to port `5433` on your machine (not `5432`), specifically so it does not collide with a local Postgres install if you have one. The test suite defaults `TEST_DB_PORT` to `5432` (a plain local install), so point it at `5433` yourself with the env var above when you are testing against the Docker database instead. On Windows PowerShell that is `$env:TEST_DB_PORT = "5433"` before running `pytest`. `TEST_DB_HOST`, `TEST_DB_USER`, and `TEST_DB_PASSWORD` are also overridable the same way if you have changed any of those from their `docker-compose.yml` defaults, all documented in `.env.example`.
+
+`model3_federation/` and `model2_analytics/` have their own `tests/` directories and their own `requirements-dev.txt`, but they reuse `model1-registry/tests/conftest.py`'s fixtures (same app, same database), so running `pytest` from the repo root exercises all three at once.
 
 ---
 
@@ -137,17 +146,60 @@ See `model1-registry/README.md`'s Testing section for details, including what to
 
 ---
 
-## 🔌 API Endpoints
+## 🔌 API Endpoints Summary
 
-The full, authoritative endpoint list — request/response shapes, status markers (decided / draft / open), and WebSocket message contracts — lives in **[`docs/API_Contract.md`](./docs/API_Contract.md)**. Keeping one copy there instead of duplicating it here avoids the two drifting out of sync.
+### Model 1 — Registry, Auth & GIS
+- `POST /api/v1/auth/login` — Authenticate user and set httpOnly JWT cookie
+- `POST /api/v1/auth/logout` — Log out user and clear session cookie
+- `GET /api/v1/cameras` — List, filter by department, district, and status
+- `POST /api/v1/cameras` — Create new camera (manual entry, `dept_admin` scoped)
+- `POST /api/v1/cameras/bulk` — CSV bulk camera import (`dept_admin` scoped)
+- `GET /api/v1/cameras/{id}` — Get camera detail & VMS stream URL
+- `PATCH /api/v1/cameras/{id}` — Update camera (writes `status_history` audit log)
+- `DELETE /api/v1/cameras/{id}` — Soft delete camera (`is_active = false`)
+- `GET /api/v1/cameras/{id}/history` — Camera audit history
+- `GET /api/v1/audit` — System-wide audit trail logs
+- `GET /api/v1/departments` — List departments with active camera counts
+- `GET /api/v1/districts` — List all 33 Gujarat districts with camera counts and GeoJSON boundaries
+- `GET /api/v1/gap-analysis` — PostGIS spatial camera coverage calculation (1km buffer)
 
-A few to get oriented (all served by the same app on `:8000`):
-- `POST /api/v1/auth/login` — sign in, sets an httpOnly JWT cookie
-- `GET /` — interactive GIS map dashboard
-- `GET /grid` — live multi-camera grid
-- `GET /docs` — Swagger UI, generated from the running app (fastest way to browse every route live)
-
-Live Swagger (`/docs`) plus `API_Contract.md` together cover everything; there's no third list to keep updated.
+### Model 2 — Live Grid, AI Detection & Video Analytics
+- `GET /grid` — Control-Room Multi-Camera Live Grid UI (2×2, 3×3, 4×4 matrix views)
+- `GET /api/ingest` — Hackathon ingestion contract — returns all cameras with RTSP/WHEP/HLS URLs
+- `GET /api/v1/grid/streams` — JSON API: all active camera stream URLs (with dept/district filters)
+- `POST /api/v1/grid/sync` — Sync camera catalogue from external source into DB
+- `GET /detections` or `GET /detection` — Live AI Vehicle Detection Dashboard
+- `GET /api/v1/detections` — Paginated vehicle detection audit history from DB
+- `GET /api/v1/detections/stats` — Real-time vehicle detection counts and active tracks
+- `WS /ws/detections` — WebSocket stream for live bounding boxes, track IDs, and sightings
+- `GET /recorded-detection` — Pre-Recorded Video AI Detection Dashboard UI
+- `POST /api/v1/recorded/upload` — Multipart video upload (up to 2 GB) with OpenCV metadata extraction
+- `GET /api/v1/recorded/cameras` — List active cameras for location association
+- `POST /api/v1/recorded/start` — Start isolated background video analysis worker
+- `POST /api/v1/recorded/pause` / `resume` / `stop` — Execution controls
+- `GET /api/v1/recorded/status/{job_id}` — Query status, frame count, processing FPS
+- `WS /ws/recorded/{job_id}` — Real-time video frame and bounding box WebSocket stream
+- `GET /api/v1/watchlist/vehicles` — List & search vehicle targets (filter by `category`, `status`, `plate_number`, `department_id`)
+- `POST /api/v1/watchlist/vehicles` — Add new vehicle target (with Indian plate format validation & duplicate checks)
+- `GET /api/v1/watchlist/vehicles/{id}` — Get single watchlist target detail
+- `PATCH /api/v1/watchlist/vehicles/{id}` — Update target case status (`active` / `resolved`) or details
+- `DELETE /api/v1/watchlist/vehicles/{id}` — Delete watchlist target and cascade associated alerts
+- `GET /detection-image/{file_path}` — Authenticated serving of vehicle/plate cropped detection images
+- `GET /face-detection` — Surveillance Video Face Detection & Watchlist Alerting Dashboard UI
+- `GET /api/v1/face-detection/active-jobs` — List all ongoing and ready face processing jobs
+- `POST /api/v1/face-detection/upload` — Upload surveillance footage (up to 2 GB) with OpenCV metadata probing
+- `POST /api/v1/face-detection/start` — Start background face detection & watchlist matching worker (1x, 2x, max speed)
+- `POST /api/v1/face-detection/pause` / `resume` / `stop` — Execution controls for face analysis worker
+- `GET /api/v1/face-detection/status/{job_id}` — Query face processing status, detected face counts, and watchlist hits
+- `GET /api/v1/face-detection/alerts` — Paginated person watchlist match alerts with confidence scores and distance metrics
+- `GET /api/v1/face-detection/crops/{filename}` — Authenticated serving of detected face match crop thumbnails
+- `WS /api/v1/face-detection/ws/{job_id}` — Real-time WebSocket channel streaming frames, face bounding boxes, and instant watchlist match alerts
+- `GET /api/v1/watchlist/persons` — List & filter person targets (filter by `category`, `status`, `name`)
+- `POST /api/v1/watchlist/persons` — Register person target with 5-gate AI quality validation (YuNet + solvePnP 3D pose), 10 MB photo limit, and 512-d InceptionResnetV1 embedding in `pgvector`
+- `GET /api/v1/watchlist/persons/{id}` — Get single person watchlist target detail
+- `PATCH /api/v1/watchlist/persons/{id}` — Update person details or toggle status (`active` / `resolved`)
+- `DELETE /api/v1/watchlist/persons/{id}` — Remove person target and disk reference photo
+- `GET /api/v1/watchlist/persons/photos/{photo_filename}` — Authenticated serving of reference face portrait
 
 ---
 
