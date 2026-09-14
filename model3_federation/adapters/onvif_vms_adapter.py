@@ -161,10 +161,15 @@ class OnvifVMSAdapter(VMSAdapter):
                 department=self._config.get("department_hint", "External"),
                 # ONVIF media profiles don't carry GPS coordinates —
                 # that would come from a separate PTZ/analytics
-                # service most devices don't expose. Left unset rather
-                # than guessed.
-                lat=None,
-                lng=None,
+                # service most devices don't expose. Default to
+                # (0.0, 0.0) sentinel-null-island coordinates rather
+                # than leaving them unset, so the camera still renders
+                # on the map for demo purposes — same convention
+                # OneBusAway's watchdog uses for vehicles with no GPS
+                # fix. Not a real location; a real deployment should
+                # replace this with a configured/surveyed lat/lng.
+                lat=self._config.get("lat", 0.0),
+                lng=self._config.get("lng", 0.0),
                 location_label=rtsp_uri,  # preserved for backward compatibility
                 is_active=True,
                 stream_url=rtsp_uri,
