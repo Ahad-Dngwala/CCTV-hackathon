@@ -72,6 +72,8 @@ CREATE TABLE vms_systems (
                                                          -- IS NULL (see GET /api/v3/systems).
     status          TEXT NOT NULL DEFAULT 'unknown'
                     CHECK (status IN ('connected', 'disconnected', 'unknown')),
+    adapter_type    TEXT,
+    config          JSONB,
     camera_count    INT NOT NULL DEFAULT 0,
     last_heartbeat  TIMESTAMPTZ,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
