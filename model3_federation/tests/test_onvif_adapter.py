@@ -169,7 +169,7 @@ def test_get_cameras_maps_profiles_to_federated_cameras(fake_onvif_module):
     assert cameras[0].location_label == "rtsp://10.0.0.5:554/Streaming/Channels/101"
     assert cameras[0].stream_url == "rtsp://10.0.0.5:554/Streaming/Channels/101"
     assert cameras[0].stream_kind == "rtsp"
-    assert all(c.lat is None and c.lng is None for c in cameras)  # ONVIF media profiles carry no GPS
+    assert all(c.lat == 0.0 and c.lng == 0.0 for c in cameras)  # prototype sentinel; ONVIF profiles carry no GPS
     assert all(c.is_active is True for c in cameras)
     assert all(c.system_name == "Test NVR" for c in cameras)
 

@@ -145,7 +145,6 @@ Owner: `model2_analytics`. Data model reference: `Project_Context.md` §4.
 | `GET /api/v1/detections` | Paginated detection history (`camera_tag`, `page`, `page_size`) | ✅ |
 | `GET /api/v1/detections/stats` | Real-time detection counters (`total_today`, `total_all_time`, `active_tracks`) | ✅ |
 | `GET /api/v1/anpr/health` | Health check for integrated ANPR pipeline (infra monitoring) | ✅ |
-| `GET /api/v1/vehicle-tracks/{plate_number}` | Full route reconstruction for a plate — **this is the Step 4 scored test** | 🚧 |
 | `GET /api/v1/alerts` | List alerts, filter by `severity`, `alert_type`, `acknowledged` | ✅ |
 | `GET /api/v1/alerts/stats` | Live alert counters: total, today, unacknowledged, and by severity | ✅ |
 | `PATCH /api/v1/alerts/{alert_id}/ack` | Acknowledge an alert — writes `acknowledged_by` and `acknowledged_at` | ✅ |
