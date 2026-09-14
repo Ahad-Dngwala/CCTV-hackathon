@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session, joinedload
 
 from app.auth.dependencies import get_optional_current_user
+from app.config import settings
 from shared.db.models import Camera as CameraModel
 from shared.db.models import Department as DeptModel
 from shared.db.models import District as DistModel
@@ -517,5 +518,8 @@ def federation_page(
     return request.app.state.templates.TemplateResponse(
         request=request,
         name="federation.html",
-        context={"user": user},
+        context={
+            "user": user,
+            "carto_api_key": settings.CARTO_API_KEY,
+        },
     )

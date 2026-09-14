@@ -84,6 +84,7 @@ services:
       GRID_RTSP_USER: "${GRID_RTSP_USER:-}"
       GRID_RTSP_PASS: "${GRID_RTSP_PASS:-}"
       REDIS_URL: "${REDIS_URL:-redis://redis:6379}"
+      CARTO_API_KEY: "${CARTO_API_KEY:-}"
     # NOTE: the image now runs as a non-root `appuser` (uid 1000, see
     # infra/Dockerfile / AuditReport1.md finding 21). These bind mounts
     # replace the chowned in-image directories with whatever ownership

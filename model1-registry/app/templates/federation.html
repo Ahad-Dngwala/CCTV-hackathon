@@ -150,7 +150,10 @@
 
 /* ── GIS Map ───────────────────────────────────────────── */
 .map-panel { height: 340px; border-radius: 12px; overflow: hidden; border: 1px solid var(--col-border); }
-#fed-map   { height: 100%; width: 100%; }
+#fed-map   { height: 100%; width: 100%; background: #0b1120; }
+.dark-tiles {
+  filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
+}
 
 /* ── Status bar ────────────────────────────────────────── */
 .status-bar {
@@ -402,11 +405,30 @@ function updateEpm(systemId) {
 }
 
 // ── Leaflet map setup ─────────────────────────────────────────────
-const map = L.map('fed-map', { zoomControl: true, preferCanvas: true }).setView([22.9, 72.5], 7);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-  attribution: '© OpenStreetMap contributors, © CARTO',
-  maxZoom: 18,
-}).addTo(map);
+const map = L.map('fed-map', {
+  zoomControl: true,
+  preferCanvas: true,
+  dragging: true,
+  tap: false,
+}).setView([22.9, 72.5], 7);
+
+const cartoApiKey = ("{{ carto_api_key | default('', true) }}").trim();
+if (cartoApiKey) {
+  // Use authenticated CARTO dark raster tiles
+  L.tileLayer(`https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png?key=${encodeURIComponent(cartoApiKey)}`, {
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, © <a href="https://carto.com/attributions">CARTO</a>',
+    maxZoom: 18,
+    subdomains: 'abcd',
+  }).addTo(map);
+} else {
+  // Free fallback: OpenStreetMap raster tiles with dark mode CSS filter
+  // Prevents CARTO watermark / missing tile errors when no API key is provided
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19,
+    className: 'dark-tiles',
+  }).addTo(map);
+}
 
 // Track camera markers keyed by external_id
 const cameraMarkers = {};
