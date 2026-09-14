@@ -11,11 +11,12 @@ polished doc or quoting a shape externally.
 
 - **`app/main.py` imports `model3_federation.api.router` directly** —
   `router as federation_router`, plus `start_federation_services` /
-  `stop_federation_services`, called from `lifespan()`. Unlike Model 2,
-  this is a normal static import, not the runtime auto-loader — see
-  [docs/PLATFORM.md §1](../PLATFORM.md#1-why-this-code-lives-in-model1-registry)
-  for why the two models use different mounting strategies and what
-  that trade-off actually is.
+  `stop_federation_services`, called from `lifespan()`. A normal static
+  import — Model 2's routers now mount the same way (that used to be a
+  runtime auto-loader; see
+  [docs/PLATFORM.md §3](../PLATFORM.md#3-model-2s-router-mounting)),
+  so there's no longer a mounting-strategy difference between the two
+  worth documenting here.
 - **`start_federation_services(db_session_factory=..., redis_url=...)`**
   — registers each federation adapter's cameras into the shared DB and
   starts its event stream as an independent background task per
@@ -36,7 +37,16 @@ polished doc or quoting a shape externally.
   needs to attach a camera to a specific external VMS connection
   without Model 1 needing to know that connection exists.
 
-## Not yet true, don't assume
+- **`vms_systems.adapter_type` / `.config`** — new columns for
+  config-driven VMS onboarding (`registration.py`'s
+  `load_dynamic_adapters()`). `config` is `JSONB`, and its own schema
+  comment already flags it as **plaintext** — connection secrets in
+  here aren't encrypted at rest yet. Referenced migration file
+  (`migrations/002_vms_systems_adapter_config.sql`) doesn't exist in
+  the tree as of this note; find it (or confirm it's been folded
+  straight into `schema.sql`) before writing this up properly, and
+  flag the plaintext-secret caveat in `docs/SECURITY.md` §6/§7 once
+  confirmed rather than letting it sit as a schema comment only.
 
 - Model 1's registry API (`app/routers/cameras.py`) has no
   federation-aware filtering (e.g. "show me only cameras behind VMS

@@ -20,20 +20,12 @@ There's no fourth "platform" package — the app entrypoint
 page router (`app/routers/pages.py`) all live inside the Model 1
 package because Model 1 shipped first and the shell had to live
 somewhere. Every model that came after mounts into it rather than
-standing up its own app. Two different mounting strategies exist side
-by side, and the difference is worth understanding before touching
-either:
-
-- **Model 2** is mounted by **runtime auto-discovery** — `main.py`
-  globs every `.py` file in `model2_analytics/app/routers/` and loads
-  it dynamically. Model 2's code never has to be imported by name
-  anywhere in Model 1. (This is slated to be replaced with a normal
-  static import, matching Model 3 below — see §3.)
-- **Model 3** is mounted by an **ordinary import** —
-  `from model3_federation.api.router import router as federation_router,
-  start_federation_services, stop_federation_services`. It's a normal,
-  static dependency: Model 1's entrypoint imports Model 3's package
-  directly, by name, same as it imports its own routers.
+standing up its own app. Both Model 2 and Model 3 are mounted the same
+way — an ordinary, static import (`from model2_analytics.app.routers
+import alerts as m2_alerts, ...` / `from model3_federation.api.router
+import router as federation_router, ...`) — so a broken router file in
+either model fails app boot loudly and immediately, the same as a bug
+in Model 1's own code would.
 
 ## 2. Boot sequence (`main.py`'s `lifespan()`)
 
@@ -60,13 +52,20 @@ In order, on startup:
 6. On shutdown: cancel the poll task, stop the ingestion supervisor,
    `stop_federation_services()`.
 
-## 3. The Model 2 router auto-loader
+## 3. Model 2's router mounting
 
-`main.py`'s final block currently mounts Model 2's routers by loading
-every file in `model2_analytics/app/routers/` off disk at runtime
-(`importlib.util.spec_from_file_location`) rather than a normal package
-import — this is being replaced with a static import, at which point
-this section (and this line) goes away.
+Used to be a runtime auto-loader (globbing
+`model2_analytics/app/routers/*.py` off disk and importing each file by
+path) — that's gone now, replaced with a normal static import, same
+shape as Model 3's. One leftover from the old approach is still in
+`main.py` and worth knowing about if you're ever tracing a WebSocket
+bug in `/anpr`: `anpr.py`'s alert broadcaster looks up the detections
+module via `sys.modules["model2.routers.detections"]`, the key the old
+auto-loader used to register it under — `main.py` keeps that key
+aliased (`sys.modules.setdefault(...)`) to the real, statically
+imported module so the broadcaster still finds the same module
+instance that owns its WebSocket connection set, rather than a second,
+disconnected copy of it.
 
 ## 4. Templates, static files, and the detection-image exception
 

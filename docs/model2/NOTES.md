@@ -34,12 +34,12 @@ prose to publish as-is.
   `/watchlist` (`watchlist.html`), `/watchlist/persons`
   (`persons_watchlist.html`), `/face-detection` (`face_detection.html`),
   `/alerts` (`alerts.html`), `/anpr` (`anpr.html`).
-- **`app/main.py`'s router auto-loader** — the actual mechanism that
-  mounts `model2_analytics/app/routers/*.py` into this app at runtime.
-  It's slated for removal (replacing it with a static import, like
-  Model 3's) — see [docs/PLATFORM.md §3](../PLATFORM.md#3-the-model-2-router-auto-loader)
-  before touching it, and delete that doc section along with the code
-  once it's gone.
+- **`app/main.py`'s router mounting** — used to be runtime auto-discovery,
+  now a normal static import (same shape as Model 3's). One residual
+  shim from the old approach is still there: a `sys.modules` alias so
+  `anpr.py`'s WS alert broadcaster still finds the same `detections`
+  module instance it looked up under the old auto-loader's naming
+  scheme. See [docs/PLATFORM.md §3](../PLATFORM.md#3-model-2s-router-mounting).
 - **`app.state.frame_queue`** — created in `model1-registry/app/main.py`'s
   `lifespan()`, written to by Model 2's ingestion pipeline. Model 1
   never touches it; it's initialized in Model 1's file purely because

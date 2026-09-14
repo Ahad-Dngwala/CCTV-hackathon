@@ -21,7 +21,7 @@ concerns get their own documents on purpose, because they're bigger
 than any one model and will keep growing as Model 2/3 mature:
 
 - **[docs/PLATFORM.md](../PLATFORM.md)** — the shared FastAPI app shell
-  (boot sequence, routing, the Model 2 router auto-loader) that Model 1's
+  (boot sequence, routing, the shared login/RBAC plumbing) that Model 1's
   code happens to live inside.
 - **[docs/SECURITY.md](../SECURITY.md)** — auth, RBAC, audit trail, and
   the rest of the platform's cybersecurity posture, written cross-model
