@@ -5,6 +5,7 @@ These are the user-facing pages, separate from the /api/v1 JSON routers.
 """
 
 import uuid
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -46,8 +47,23 @@ def map_page(
 ):
     if not user:
         return RedirectResponse(url="/login", status_code=302)
+    # Cache-bust /static/js/map.js: browsers routinely serve a stale
+    # cached copy of a plain <script src="..."> with no query string
+    # across a normal reload (no explicit Cache-Control on the
+    # StaticFiles mount, so they fall back to heuristic freshness) --
+    # which looks exactly like "I pushed the fix but it's still not
+    # showing" even though the server is serving the new file. Keying
+    # the query string off the file's own mtime busts the cache
+    # automatically on every edit, no manual version bump needed.
+    map_js_path = Path(__file__).resolve().parent.parent / "static" / "js" / "map.js"
+    try:
+        map_js_version = int(map_js_path.stat().st_mtime)
+    except OSError:
+        map_js_version = 0
     return request.app.state.templates.TemplateResponse(
-        request=request, name="map.html", context={"user": user}
+        request=request,
+        name="map.html",
+        context={"user": user, "map_js_version": map_js_version},
     )
 
 
