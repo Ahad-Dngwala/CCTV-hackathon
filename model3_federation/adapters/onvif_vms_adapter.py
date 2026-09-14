@@ -155,8 +155,10 @@ class OnvifVMSAdapter(VMSAdapter):
                 # than guessed.
                 lat=None,
                 lng=None,
-                location_label=rtsp_uri,  # storing the resolved stream URI here so it's visible
+                location_label=rtsp_uri,  # preserved for backward compatibility
                 is_active=True,
+                stream_url=rtsp_uri,
+                stream_kind="rtsp" if rtsp_uri else None,
             ))
         return cameras
 
