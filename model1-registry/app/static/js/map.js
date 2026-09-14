@@ -300,9 +300,16 @@ function mapDashboard() {
                             <span class="popup-value">${cam.storage_type || '—'}${cam.retention_days ? ' · ' + cam.retention_days + 'd' : ''}</span>
                         </div>`;
 
-                if (cam.vms_url) {
+                // Manually-onboarded cameras carry their viewer link in
+                // vms_url, but federation-registered cameras (e.g. the
+                // ONVIF adapter, via model3_federation/registration.py)
+                // write it into rtsp_url/hls_url instead -- vms_url stays
+                // NULL for those rows. Check all three so the link shows
+                // up regardless of which onboarding path created the row.
+                const streamUrl = cam.vms_url || cam.rtsp_url || cam.hls_url;
+                if (streamUrl) {
                     popupHtml += `
-                        <a href="${cam.vms_url}" target="_blank" rel="noopener" class="popup-link">
+                        <a href="${escapeHtml(streamUrl)}" target="_blank" rel="noopener" class="popup-link">
                             🖥️ Open VMS Viewer
                         </a>`;
                 }
