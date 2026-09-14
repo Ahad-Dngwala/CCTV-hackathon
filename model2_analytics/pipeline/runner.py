@@ -22,6 +22,7 @@ from sqlalchemy import text
 from pipeline.detection.vehicle_detector import VehicleDetector
 from pipeline.detection.writer import DetectionWriter
 from pipeline.ingest import StreamIngestClient
+from pipeline.plate.anpr_service import get_plate_recognizer
 from pipeline.tracking.frame_tracker import InFrameTracker
 
 logger = logging.getLogger("sentinel.runner")
@@ -83,7 +84,11 @@ class CameraWorker:
 
         self.tracker  = InFrameTracker(camera_id=tag, min_confirmed_frames=3, iou_threshold=0.30)
         self.detector = VehicleDetector()
-        self.writer   = DetectionWriter()
+        _recognizer   = get_plate_recognizer()  # None if ANPR disabled
+        self.writer   = DetectionWriter(
+            plate_recognizer = _recognizer,
+            alert_callback   = event_callback,
+        )
 
         self._running        = False
         self._thread: Optional[threading.Thread] = None
@@ -172,17 +177,23 @@ class CameraWorker:
                     )
                     if self.event_callback:
                         self.event_callback({
-                            "type":             "NEW_DETECTION",
-                            "detection_id":     meta["detection_id"],
-                            "track_id":         event.track_id,
-                            "camera_tag":       self.tag,
-                            "camera_name":      self.name,
-                            "class_name":       event.class_name,
-                            "confidence":       round(event.confidence * 100, 1),
-                            "timestamp":        event.timestamp.strftime("%H:%M:%S"),
-                            "detected_plate":   meta.get("detected_plate"),
-                            "crop_path":        meta.get("crop_path"),
-                            "vehicle_track_id": meta.get("vehicle_track_id"),
+                            "type":              "NEW_DETECTION",
+                            "detection_id":      meta["detection_id"],
+                            "track_id":          event.track_id,
+                            "camera_tag":        self.tag,
+                            "camera_name":       self.name,
+                            "class_name":        event.class_name,
+                            "confidence":        round(event.confidence * 100, 1),
+                            "timestamp":         event.timestamp.strftime("%H:%M:%S"),
+                            "detected_plate":    meta.get("detected_plate"),
+                            "ocr_confidence":    meta.get("ocr_confidence"),
+                            "plate_confidence":  meta.get("plate_confidence"),
+                            "watchlist_match":   meta.get("watchlist_match", False),
+                            "alert_id":          meta.get("alert_id"),
+                            "anpr_provider":     meta.get("anpr_provider"),
+                            "crop_path":         meta.get("crop_path"),
+                            "plate_crop_path":   meta.get("plate_crop_path"),
+                            "vehicle_track_id":  meta.get("vehicle_track_id"),
                         })
             finally:
                 db.close()

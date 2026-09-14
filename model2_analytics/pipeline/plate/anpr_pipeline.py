@@ -196,7 +196,12 @@ class ANPRPipeline(PlateRecognizerInterface):
 
         return PlateResult(
             plate_text=best['plate_text'],
+            normalized_text=best['plate_text'],
             confidence=best['confidence'],
+            detection_confidence=best['plate_conf'],
+            bbox=None,
+            crop=None,
+            provider="anpr-pipeline",
         )
 
     # ── Batch mode for video processing ────────────────────────

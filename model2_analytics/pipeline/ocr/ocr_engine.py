@@ -26,6 +26,8 @@ logger.setLevel(logging.INFO)
 class OCRResult:
     plate_text: str      # normalized, uppercase, no spaces/hyphens
     confidence: float    # 0–1
+    sharpness: float = 0.0  # Laplacian variance of the crop (0.0 = not measured)
+    all_candidates: list = None  # optional extra reads; None = single read only
 
 
 # ── Character correction maps (Indian plate context) ──────────

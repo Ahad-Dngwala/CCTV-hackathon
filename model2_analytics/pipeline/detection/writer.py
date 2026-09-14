@@ -1,22 +1,43 @@
 """
-Phase 2 — Detection Writer
-===========================
-Persists one detection row to PostgreSQL per confirmed vehicle sighting.
-Also saves the crop image to static/crops/{detection_id}.jpg.
+Detection Writer
+=================
+Persists one detection record per confirmed vehicle sighting.
+Integrates real ANPR/OCR (via injected PlateRecognizerInterface),
+watchlist matching, and alert generation.
+
+Architecture
+------------
+DetectionWriter.persist_sighting()
+    ↓
+    AwirosPlateRecognizer.recognize()   → PlateResult | None
+    ↓
+    WatchlistMatcher.check_plate()      → WatchlistMatch | None
+    ↓
+    AlertService.create_alert()         → alert_id | None
+    ↓
+    INSERT detections row (extended ANPR columns)
+    ↓
+    Save vehicle crop + plate crop to detection-image/
+    ↓
+    Return metadata dict for WebSocket broadcast
+
+No fake plates. Never returns a fabricated plate value.
 """
+
+from __future__ import annotations
 
 import logging
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional
 
 import cv2
 import numpy as np
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from pipeline.plate.interface import PlateRecognizerInterface, PlateRecognizerStub
+from pipeline.plate.interface import PlateRecognizerInterface, PlateResult
 from pipeline.tracking.associator_interface import (
     TrackAssociatorInterface,
     TrackAssociatorStub,
@@ -26,7 +47,7 @@ from pipeline.tracking.frame_tracker import TrackedEvent
 logger = logging.getLogger("sentinel.writer")
 logger.setLevel(logging.INFO)
 
-# Crops saved in model2_analytics/detection-image
+# ── Detection image directory ────────────────────────────────────────
 _CROPS_CANDIDATES = [
     Path("/model2-analytics/detection-image"),
     Path("/app/model2_analytics/detection-image"),
@@ -36,121 +57,237 @@ CROPS_BASE = next((p for p in _CROPS_CANDIDATES if p.is_dir()), _CROPS_CANDIDATE
 CROPS_BASE.mkdir(parents=True, exist_ok=True)
 
 
+def _save_image(image, filename: str) -> Optional[str]:
+    """Save a BGR numpy image to CROPS_BASE. Returns web path or None."""
+    if image is None:
+        return None
+    try:
+        arr = image if isinstance(image, np.ndarray) else np.array(image)
+        if arr.size == 0:
+            return None
+        CROPS_BASE.mkdir(parents=True, exist_ok=True)
+        path = CROPS_BASE / filename
+        cv2.imwrite(str(path), arr, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+        return f"/detection-image/{filename}"
+    except Exception as e:
+        logger.warning(f"Could not save image {filename}: {e}")
+        return None
+
+
 class DetectionWriter:
     """
-    Writes exactly one detection record per TrackedEvent to PostgreSQL.
-    Uses stub plate recognizer and stub track associator by default.
-    Swap them out with real implementations without changing the writer.
+    Writes one detection record per TrackedEvent.
+
+    Parameters
+    ----------
+    plate_recognizer :
+        Real ANPR provider. Pass None only from tests that don't need ANPR.
+        Production code should always inject a real recognizer.
+    track_associator :
+        Cross-camera track linker (stub by default).
+    alert_callback :
+        Callable receiving the WS event dict for watchlist alerts.
+        Wired up by the runner/worker from the on_detection_event function.
     """
 
     def __init__(
         self,
         plate_recognizer: Optional[PlateRecognizerInterface] = None,
         track_associator: Optional[TrackAssociatorInterface] = None,
+        alert_callback: Optional[Callable[[Dict], None]] = None,
     ):
-        self.plate_recognizer = plate_recognizer or PlateRecognizerStub()
+        self.plate_recognizer = plate_recognizer  # None → ANPR disabled
         self.track_associator = track_associator or TrackAssociatorStub()
+        self.alert_callback   = alert_callback
 
+        # Lazy-load watchlist and alert services
+        self._matcher = None
+        self._alert_service = None
+
+    def _get_matcher(self):
+        if self._matcher is None:
+            from pipeline.events.watchlist_matcher import WatchlistMatcher
+            self._matcher = WatchlistMatcher()
+        return self._matcher
+
+    def _get_alert_service(self):
+        if self._alert_service is None:
+            from pipeline.events.alert_service import AlertService
+            self._alert_service = AlertService(
+                on_detection_event=self.alert_callback or (lambda _: None)
+            )
+        return self._alert_service
+
+    # ── Main entry point ─────────────────────────────────────────────
     def persist_sighting(
         self,
         db: Session,
         camera_uuid: uuid.UUID,
         event: TrackedEvent,
+        source_type: str = "live",
+        video_timestamp_ms: Optional[float] = None,
     ) -> Dict:
         """
-        1. Run plate OCR (generates formatted Indian plate).
-        2. Run track association (links global vehicle_track).
-        3. Save crop image to disk.
-        4. INSERT one row into detections table.
+        Persist one detection sighting.
 
-        Returns a dict with detection_id and other metadata for the WS broadcast.
+        Returns a metadata dict for WebSocket broadcast containing:
+        detection_id, detected_plate, normalized_plate, ocr_confidence,
+        plate_confidence, watchlist_match, alert_id, anpr_provider,
+        vehicle_track_id, crop_path, plate_crop_path.
         """
         detection_id = str(uuid.uuid4())
 
-        # ── Plate recognition ──────────────────────────────────────
-        plate_text: Optional[str] = None
-        if event.crop is not None:
-            plate_result = self.plate_recognizer.recognize(
-                frame=event.crop,
-                vehicle_bbox=event.bbox,
-            )
-            if plate_result:
-                plate_text = plate_result.plate_text
+        # ── 1. Plate recognition ────────────────────────────────────
+        plate_result: Optional[PlateResult] = None
+        plate_text:   Optional[str] = None
+        normalized:   Optional[str] = None
+        ocr_conf:     Optional[float] = None
+        plate_conf:   Optional[float] = None
+        provider:     Optional[str] = None
 
-        # ── Cross-camera track association ─────────────────────────
-        vehicle_track_id: Optional[str] = None
-        assoc = self.track_associator.associate(
-            camera_id    = event.camera_id,
-            timestamp    = event.timestamp,
-            vehicle_crop = event.crop,
-            plate        = plate_text,
-        )
-        if assoc:
-            vehicle_track_id = str(assoc)
+        if self.plate_recognizer is not None and event.crop is not None:
             try:
-                db.execute(
-                    text("""
-                        INSERT INTO vehicle_tracks (id, plate_number, vehicle_type, first_seen, last_seen)
-                        VALUES (:id, :plate, :vtype, :first_seen, :last_seen)
-                        ON CONFLICT (id) DO UPDATE
-                        SET last_seen = EXCLUDED.last_seen,
-                            plate_number = COALESCE(vehicle_tracks.plate_number, EXCLUDED.plate_number)
-                    """),
-                    {
-                        "id": vehicle_track_id,
-                        "plate": plate_text,
-                        "vtype": event.class_name,
-                        "first_seen": event.timestamp,
-                        "last_seen": event.timestamp,
-                    }
+                plate_result = self.plate_recognizer.recognize(
+                    frame        = event.crop,
+                    vehicle_bbox = event.bbox,
+                    timestamp_ms = video_timestamp_ms or event.pts_ms,
                 )
             except Exception as e:
-                logger.warning(f"Could not upsert vehicle_tracks: {e}")
+                logger.warning(f"[{event.camera_id}] ANPR recognize() error: {e}")
 
-        # ── Save crop image ────────────────────────────────────────
-        crop_path: Optional[str] = None
-        if event.crop is not None and event.crop.size > 0:
+        if plate_result is not None:
+            plate_text = plate_result.plate_text
+            normalized = plate_result.normalized_text or plate_result.plate_text
+            ocr_conf   = plate_result.confidence
+            plate_conf = plate_result.detection_confidence
+            provider   = plate_result.provider
+
+        # ── 2. Cross-camera track association ───────────────────────
+        vehicle_track_id: Optional[str] = None
+        try:
+            assoc = self.track_associator.associate(
+                camera_id    = event.camera_id,
+                timestamp    = event.timestamp,
+                vehicle_crop = event.crop,
+                plate        = normalized,
+            )
+            if assoc:
+                vehicle_track_id = str(assoc)
+                db.execute(
+                    text("""
+                        INSERT INTO vehicle_tracks
+                            (id, plate_number, vehicle_type, first_seen, last_seen)
+                        VALUES (:id, :plate, :vtype, :first_seen, :last_seen)
+                        ON CONFLICT (id) DO UPDATE
+                        SET last_seen    = EXCLUDED.last_seen,
+                            plate_number = COALESCE(
+                                vehicle_tracks.plate_number,
+                                EXCLUDED.plate_number
+                            )
+                    """),
+                    {
+                        "id":         vehicle_track_id,
+                        "plate":      normalized,
+                        "vtype":      event.class_name,
+                        "first_seen": event.timestamp,
+                        "last_seen":  event.timestamp,
+                    },
+                )
+        except Exception as e:
+            logger.warning(f"[{event.camera_id}] vehicle_tracks upsert failed: {e}")
+
+        # ── 3. Save vehicle crop image ───────────────────────────────
+        crop_path = None
+        if event.crop is not None:
+            crop_path = _save_image(event.crop, f"{detection_id}.jpg")
+
+        # ── 4. Save plate crop image (separate file) ─────────────────
+        plate_crop_path = None
+        if plate_result is not None and plate_result.crop is not None:
+            plate_crop_path = _save_image(
+                plate_result.crop, f"{detection_id}_plate.jpg"
+            )
+
+        # ── 5. Watchlist match ───────────────────────────────────────
+        watchlist_match = False
+        alert_id: Optional[str] = None
+
+        if normalized:
             try:
-                CROPS_BASE.mkdir(parents=True, exist_ok=True)
-                crop_file = CROPS_BASE / f"{detection_id}.jpg"
-                cv2.imwrite(str(crop_file), event.crop, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
-                crop_path = f"/detection-image/{detection_id}.jpg"
+                match = self._get_matcher().check_plate(db, normalized)
+                if match:
+                    watchlist_match = True
+                    alert_id = self._get_alert_service().create_alert(
+                        db           = db,
+                        detection_id = detection_id,
+                        match        = match,
+                        camera_name  = event.camera_id,
+                        plate_text   = normalized,
+                        vehicle_class = event.class_name,
+                        crop_path    = crop_path,
+                        confidence   = ocr_conf,
+                    )
             except Exception as e:
-                logger.warning(f"Could not save crop image: {e}")
+                logger.warning(f"[{event.camera_id}] Watchlist check error: {e}")
 
-        # ── DB INSERT ──────────────────────────────────────────────
+        # ── 6. DB INSERT ─────────────────────────────────────────────
         try:
             db.execute(
                 text("""
-                    INSERT INTO detections
-                        (id, camera_id, "timestamp", detected_plate,
-                         confidence, cropped_image_path, vehicle_track_id)
-                    VALUES
-                        (:id, :camera_id, :ts, :plate,
-                         :conf, :crop_path, :track_id)
+                    INSERT INTO detections (
+                        id, camera_id, "timestamp", event_type,
+                        detected_plate, vehicle_type, confidence,
+                        cropped_image_path, vehicle_track_id,
+                        ocr_confidence, plate_confidence,
+                        plate_crop_path, anpr_provider,
+                        source_type, video_timestamp_ms
+                    ) VALUES (
+                        :id, :camera_id, :ts, 'vehicle_detection',
+                        :plate, :vtype, :conf,
+                        :crop_path, :track_id,
+                        :ocr_conf, :plate_conf,
+                        :plate_crop_path, :provider,
+                        :source_type, :video_ts_ms
+                    )
                 """),
                 {
-                    "id":        detection_id,
-                    "camera_id": str(camera_uuid),
-                    "ts":        event.timestamp,
-                    "plate":     plate_text,
-                    "conf":      round(event.confidence, 4),
-                    "crop_path": crop_path,
-                    "track_id":  vehicle_track_id,
+                    "id":              detection_id,
+                    "camera_id":       str(camera_uuid),
+                    "ts":              event.timestamp,
+                    "plate":           normalized,
+                    "vtype":           event.class_name,
+                    "conf":            round(event.confidence, 4),
+                    "crop_path":       crop_path,
+                    "track_id":        vehicle_track_id,
+                    "ocr_conf":        round(ocr_conf, 4) if ocr_conf else None,
+                    "plate_conf":      round(plate_conf, 4) if plate_conf else None,
+                    "plate_crop_path": plate_crop_path,
+                    "provider":        provider,
+                    "source_type":     source_type,
+                    "video_ts_ms":     video_timestamp_ms,
                 },
             )
             db.commit()
             logger.info(
-                f"[{event.camera_id}] Persisted detection {detection_id} "
-                f"({event.class_name} conf={event.confidence:.2f})"
+                f"[{event.camera_id}] Persisted {detection_id} "
+                f"({event.class_name} conf={event.confidence:.2f} "
+                f"plate={normalized or '—'} "
+                f"watchlist={'YES' if watchlist_match else 'no'})"
             )
         except Exception as e:
             db.rollback()
             logger.error(f"[{event.camera_id}] DB insert failed: {e}")
 
         return {
-            "detection_id":    detection_id,
-            "detected_plate":  plate_text,
+            "detection_id":     detection_id,
+            "detected_plate":   normalized,
+            "plate_text_raw":   plate_text,
+            "ocr_confidence":   ocr_conf,
+            "plate_confidence": plate_conf,
+            "anpr_provider":    provider,
+            "watchlist_match":  watchlist_match,
+            "alert_id":         alert_id,
             "vehicle_track_id": vehicle_track_id,
-            "crop_path":       crop_path,
+            "crop_path":        crop_path,
+            "plate_crop_path":  plate_crop_path,
         }
