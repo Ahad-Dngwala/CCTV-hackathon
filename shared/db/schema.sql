@@ -72,8 +72,13 @@ CREATE TABLE vms_systems (
                                                          -- IS NULL (see GET /api/v3/systems).
     status          TEXT NOT NULL DEFAULT 'unknown'
                     CHECK (status IN ('connected', 'disconnected', 'unknown')),
-    adapter_type    TEXT,
-    config          JSONB,
+    adapter_type    TEXT,                              -- registry.py key (windy, rest_api, onvif, ...) for
+                                                         -- config-driven onboarding; NULL means this row has
+                                                         -- no live adapter behind it (see POST /api/v3/systems
+                                                         -- and load_dynamic_adapters() in registration.py).
+    config          JSONB,                             -- adapter-specific connection config. PLAINTEXT -- see
+                                                         -- migrations/002_vms_systems_adapter_config.sql's header
+                                                         -- for the security caveat before this holds real secrets.
     camera_count    INT NOT NULL DEFAULT 0,
     last_heartbeat  TIMESTAMPTZ,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()

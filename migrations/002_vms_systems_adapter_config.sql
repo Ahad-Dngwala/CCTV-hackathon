@@ -1,5 +1,12 @@
 -- migration: vms_systems config-driven onboarding
 -- --------------------------------------------------
+-- For an EXISTING database that predates this change. A fresh install
+-- (scripts/bootstrap_local_db.sh, or the test suite's session-scoped
+-- sentinel_test fixture) already gets these two columns straight from
+-- shared/db/schema.sql's vms_systems definition -- this file is only
+-- needed to bring an already-running database up to that same shape
+-- without dropping and recreating it.
+--
 -- Adds the two columns that let a VMS system be *reconnectable at
 -- runtime* instead of only ever a static, permanently-disconnected
 -- record: which adapter type built it, and what config it needs to
