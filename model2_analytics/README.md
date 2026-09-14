@@ -45,6 +45,7 @@ Full specification: `Project_Context.md` §4 and `HackathonPortal.md`.
   - **Frame Pacing**: `INFER_EVERY_N_FRAMES = 3` with tracker interpolation, maintaining real-time video sync without drifting on CPU.
   - **WebSocket Ping Leak Fix**: Ensured single active keepalive interval per client connection.
 - **REST & WebSocket Endpoints** (`app/routers/detections.py`):
+  - `GET /api/v1/detection/events` — Recent confirmed vehicle sightings (in-memory ring-buffer with DB fallback)
   - `GET /api/v1/detections` — Paginated database sightings log
   - `GET /api/v1/detections/stats` — Real-time detection counters and active track count
   - `WS /ws/detections` — Real-time stream for bounding boxes (`FRAME_BOXES`) and new sightings (`NEW_DETECTION`)
@@ -106,7 +107,7 @@ Full specification: `Project_Context.md` §4 and `HackathonPortal.md`.
   - Instant insertion into `person_alerts` table in PostgreSQL with cropped face thumbnails saved to disk.
   - Web Audio API tone alert and live alert audit feed in the UI.
 - **REST & WebSocket Endpoints** (`app/routers/face_detection.py`):
-  - `GET /api/v1/face-detection/active-jobs` — List all ongoing and ready face processing jobs
+  - `GET /api/v1/face-detection/cameras` — List active cameras for footage location association
   - `POST /api/v1/face-detection/upload` — Upload surveillance footage (.mp4, .avi, .mov, .mkv, .webm) with 2 GB limit
   - `POST /api/v1/face-detection/start` — Launch isolated face video worker
   - `POST /api/v1/face-detection/pause`, `/resume`, `/stop` — Real-time execution controls
@@ -114,6 +115,25 @@ Full specification: `Project_Context.md` §4 and `HackathonPortal.md`.
   - `GET /api/v1/face-detection/alerts` — Paginated person watchlist alerts with similarity scores and timestamps
   - `GET /api/v1/face-detection/crops/{filename}` — Authenticated serving of detected face match crop thumbnails
   - `WS /api/v1/face-detection/ws/{job_id}` — Real-time WebSocket channel streaming `VIDEO_FRAME`, `FACE_BOXES`, `PERSON_MATCH`, `JOB_PROGRESS`, and `JOB_DONE`
+
+### 7. Vehicle Watchlist Alerts API (`app/routers/alerts.py`)
+- **Automated Sighting Matching**: Correlates detected vehicle license plates against active `vehicles_watchlist` targets. When confirmed matches occur, alerts are persisted to the PostgreSQL `alerts` table.
+- **Enriched Records**: Alerts are enriched with camera names, locations, watchlist categories (`stolen`, `wanted`, `blacklisted`), and severity gradings (`low`, `medium`, `high`, `critical`).
+- **REST Endpoints** (`app/routers/alerts.py`):
+  - `GET /api/v1/alerts` — List and filter alerts (by `severity`, `alert_type`, and `acknowledged` status)
+  - `GET /api/v1/alerts/stats` — Live alert counts (total, today's count, unacknowledged count, and counts by severity)
+  - `PATCH /api/v1/alerts/{alert_id}/ack` — Acknowledge an alert, stamping `acknowledged_by` and `acknowledged_at`
+
+### 8. VMS Ingestion Layer & Stream Supervisor (`app/ingestion/`)
+- **Task 7 FramePacket Contract**: Decoupled ingestion architecture where `IngestionSupervisor` orchestrates `StreamWorker` threads for all live camera streams, placing decoded frames into the shared in-memory queue (`app.state.frame_queue`) consumed by analytics.
+- **Dynamic Catalogue Polling**: `CataloguePoller` periodically inspects `/api/ingest`, synchronizing camera catalogue state and stream attributes (`rtsp_url`, `whep_url`, `hls_url`, codec, resolution, FPS) into PostgreSQL and auto-registering active paths in MediaMTX.
+- **Network Resilience**: Enforces RTSP over TCP (`rtsp_transport;tcp`), exponential backoff reconnects (2s to 30s), and seamless recovery across stream loop points and scene-cut discontinuities.
+
+### 9. Integrated ANPR & License Plate Recognition (`pipeline/plate/`, `pipeline/ocr/`)
+- **Pipeline Integration**: License plate detection and OCR text extraction are directly integrated into the vehicle tracking workflow, eliminating the latency and overhead of standalone ANPR microservices.
+- **Format Normalization & Regex**: Automatic validation against standard Indian license plate patterns (e.g. `GJ01AB1234`, `DL3C1234`) and Bharat Series (`22BH1234AA`), eliminating OCR noise, spaces, and hyphens.
+- **Monitoring Health Endpoint** (`app/routers/anpr.py`):
+  - `GET /api/v1/anpr/health` — Retained health check endpoint confirming integrated ANPR service operational status.
 
 ---
 
@@ -198,23 +218,34 @@ for frame, pts_ms in client.read_frames():
 ```
 model2_analytics/
 ├── app/
+│   ├── ingestion/              # VMS Stream Ingestion & Supervisor
+│   │   ├── catalogue.py        # CataloguePoller & MediaMTX stream registration
+│   │   ├── supervisor.py       # IngestionSupervisor worker lifecycle management
+│   │   └── worker.py           # StreamWorker pulling RTSP TCP into frame_queue
 │   └── routers/
-│       ├── grid.py             # Live Grid API: /grid, /api/ingest, /api/v1/grid/streams
-│       ├── watchlist.py        # Vehicle Watchlist REST API: /api/v1/watchlist/vehicles
-│       ├── persons_watchlist.py# Person Watchlist & Face Recognition API: /api/v1/watchlist/persons
+│       ├── alerts.py           # Watchlist Alerts API: /api/v1/alerts, /stats, /{id}/ack
+│       ├── anpr.py             # Integrated ANPR health check: /api/v1/anpr/health
 │       ├── detections.py       # Live AI Detections REST & WebSocket API: /ws/detections
+│       ├── face_detection.py   # Surveillance Face Detection & Alerting API: /face-detection, /ws/{id}
+│       ├── grid.py             # Live Grid API: /grid, /api/ingest, /api/v1/grid/streams
+│       ├── persons_watchlist.py# Person Watchlist & Face Recognition API: /api/v1/watchlist/persons
 │       ├── recorded.py         # Pre-Recorded Vehicle Video Upload & Controls: /ws/recorded/{id}
-│       └── face_detection.py   # Surveillance Face Detection & Alerting API: /face-detection, /ws/{id}
+│       └── watchlist.py        # Vehicle Watchlist REST API: /api/v1/watchlist/vehicles
 ├── uploads/                    # Storage directory for user-uploaded video footage (.mp4, .avi, etc.)
 │   ├── persons/                # Storage for reference face portraits
 │   ├── videos/                 # Storage for uploaded surveillance video footage
 │   └── face_matches/           # Cropped facial match images for triggered person alerts
 ├── detection-image/            # Persisted cropped vehicle thumbnails for audit & ANPR
+├── weights/                    # AI Model weights & ONNX models
+│   ├── checkpoints/            # InceptionResnetV1 (VGGFace2 512-d) PyTorch checkpoint
+│   └── face_detection_yunet_2023mar.onnx # OpenCV YuNet face detection neural network
 └── pipeline/
     ├── ingest.py               # RTSP StreamIngestClient — optimized zero-latency frame reader
     ├── runner.py               # MultiStreamPipelineRunner & CameraWorker (RTSP threads)
     ├── video_worker.py         # PreRecordedVideoWorker — isolated on-demand video processor
+    ├── anpr_video_processor.py # Integrated ANPR video processor
     ├── detection/              # Indian traffic YOLOv8 model & DetectionWriter (DB persistence)
+    ├── events/                 # Alert generation & watchlist matching services
     ├── plate/                  # Plate recognizer interface & Indian plate format regex
     ├── ocr/                    # OCR engine & text extraction
     ├── tracking/               # InFrameTracker (IoU + proximity) & cross-camera associator
@@ -232,4 +263,7 @@ model2_analytics/
 4. **Isolated Pre-Recorded Pipeline**: On-demand video analysis running in separate threads with pause, resume, stop, and speed rate controls without affecting live camera streams.
 5. **Person Watchlist & Biometrics**: Automated 5-gate facial quality screening, 512-d vector embedding extraction, and pgvector cosine similarity matching.
 6. **Surveillance Face Matching & Alerting**: Real-time 2-layer decoupled face detection & HNSW cosine distance search with synchronized WebSocket video streaming and audio-visual alerts.
+7. **Vehicle Watchlist Alert System**: Real-time alerting pipeline triggering on target plate sightings with severity ratings and acknowledgment tracking.
+8. **Decoupled VMS Ingestion Layer**: Dedicated supervisor and worker threads feeding decoded `FramePacket` instances into shared queue pipelines with MediaMTX registration.
+9. **Native Integrated ANPR**: Direct license plate detection and OCR text normalization embedded within the primary vehicle detection engine.
 
