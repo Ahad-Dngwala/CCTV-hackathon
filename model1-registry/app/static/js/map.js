@@ -309,16 +309,29 @@ function mapDashboard() {
                         </div>`;
 
                 // Manually-onboarded cameras carry their viewer link in
-                // vms_url, but federation-registered cameras (e.g. the
-                // ONVIF adapter, via model3_federation/registration.py)
-                // write it into rtsp_url/hls_url instead -- vms_url stays
-                // NULL for those rows. Check all three so the link shows
-                // up regardless of which onboarding path created the row.
-                const streamUrl = cam.vms_url || cam.rtsp_url || cam.hls_url;
+                // vms_url; grid-catalogue cameras get a browser-openable
+                // https hls_url. Federation-registered cameras whose
+                // *only* link is rtsp_url (e.g. the ONVIF adapter) are
+                // different: a bare rtsp:// URI isn't something a
+                // browser can open in a tab (no scheme handler unless
+                // the OS has one registered), so route those through
+                // this app's own /{id}/live endpoint instead, which
+                // decodes the RTSP stream server-side and serves it as
+                // browser-playable MJPEG.
+                let streamUrl = null;
+                let streamLabel = "🖥️ Open VMS Viewer";
+                if (cam.vms_url) {
+                    streamUrl = cam.vms_url;
+                } else if (cam.hls_url) {
+                    streamUrl = cam.hls_url;
+                } else if (cam.rtsp_url) {
+                    streamUrl = `/api/v1/cameras/${cam.id}/live`;
+                    streamLabel = "🖥️ Open Live View";
+                }
                 if (streamUrl) {
                     popupHtml += `
                         <a href="${escapeHtml(streamUrl)}" target="_blank" rel="noopener" class="popup-link">
-                            🖥️ Open VMS Viewer
+                            ${streamLabel}
                         </a>`;
                 }
 
