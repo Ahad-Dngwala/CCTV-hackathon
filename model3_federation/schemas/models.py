@@ -15,7 +15,7 @@ Design notes:
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, field_validator
@@ -43,6 +43,8 @@ class FederatedCamera(BaseModel):
     lng: Optional[float] = None
     location_label: Optional[str] = None
     is_active: bool = True
+    stream_url: Optional[str] = None          # Playable RTSP or HLS stream URL (e.g. from ONVIF)
+    stream_kind: Optional[Literal["rtsp", "hls"]] = None  # "rtsp" | "hls"
 
 
 # ---------------------------------------------------------------------------

@@ -164,6 +164,8 @@ def test_get_cameras_maps_profiles_to_federated_cameras(fake_onvif_module):
     assert [c.external_id for c in cameras] == ["Profile_1", "Profile_2"]
     assert [c.name for c in cameras] == ["Main Stream", "Sub Stream"]
     assert cameras[0].location_label == "rtsp://10.0.0.5:554/Streaming/Channels/101"
+    assert cameras[0].stream_url == "rtsp://10.0.0.5:554/Streaming/Channels/101"
+    assert cameras[0].stream_kind == "rtsp"
     assert all(c.lat is None and c.lng is None for c in cameras)  # ONVIF media profiles carry no GPS
     assert all(c.is_active is True for c in cameras)
     assert all(c.system_name == "Test NVR" for c in cameras)
@@ -195,7 +197,11 @@ def test_get_cameras_continues_when_one_profiles_stream_uri_fails(fake_onvif_mod
 
     assert len(cameras) == 2
     assert cameras[0].location_label == "rtsp://10.0.0.5:554/ok"
+    assert cameras[0].stream_url == "rtsp://10.0.0.5:554/ok"
+    assert cameras[0].stream_kind == "rtsp"
     assert cameras[1].location_label is None
+    assert cameras[1].stream_url is None
+    assert cameras[1].stream_kind is None
 
 
 def test_get_cameras_returns_empty_when_get_profiles_fails(fake_onvif_module):
