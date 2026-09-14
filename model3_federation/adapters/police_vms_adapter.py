@@ -31,7 +31,7 @@ from typing import Awaitable, Callable
 from model3_federation.adapters.base import VMSAdapter
 from model3_federation.schemas.models import FederatedCamera, FederatedEvent
 
-# Stable UUID — registration.py upserts the federated_systems row with
+# Stable UUID — registration.py upserts the vms_systems row with
 # this id every time this adapter connects, so it must not change.
 _SYSTEM_ID = "a1000001-0000-0000-0000-000000000001"
 

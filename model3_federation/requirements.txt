@@ -2,3 +2,8 @@
 # Separate from model2_analytics/requirements.txt; only federation needs these.
 redis>=5.0.0,<6.0.0        # Redis pub/sub event bus
 aioredis>=2.0.0,<3.0.0    # async Redis client (used by event_bus.py)
+httpx>=0.27.0,<1.0.0       # rest_api_vms_adapter.py + windy preset (async HTTP client)
+onvif-zeep-async>=4.0.0    # onvif_vms_adapter.py — optional in practice (lazily imported,
+                            # only touched if someone actually onboards an adapter_type="onvif"
+                            # system) but listed as a hard dep for simplicity; split into an
+                            # extras_require group if you'd rather not ship it by default.

@@ -20,4 +20,15 @@ pydantic==2.9.0
 # is installed into the app container; pipeline/requirements.txt is for
 # offline training only). See AuditReport2.md finding 7.
 facenet-pytorch==2.6.0
-ultralytics>=8.2.0
+ultralytics==8.3.203
+# ANPR pipeline deps (plate detect + OCR). Used to be installed via a
+# second, separate `pip install ultralytics onnxruntime onnxocr` line in
+# infra/Dockerfile with no version pins at all -- that duplicated the
+# ultralytics install above (paying its full torch/torchvision download
+# twice) and left onnxruntime/onnxocr's versions invisible to anyone
+# reading requirements files, plus unpinned means a fresh build could
+# silently pick up a breaking release the night before a hackathon demo.
+# Pinned to current-latest-at-time-of-writing; if you've already
+# validated a different version locally, use that pin instead.
+onnxruntime==1.30.0
+onnxocr==3.1.0

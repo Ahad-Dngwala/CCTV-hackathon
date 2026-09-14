@@ -12,7 +12,7 @@ import logging
 import os
 import queue
 import sys
-import importlib.util as _ilu
+
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -58,7 +58,23 @@ from model2_analytics.app.ingestion.catalogue import (  # noqa: E402
     upsert_cameras_to_db,
     register_stream_in_mediamtx,
 )
+from model2_analytics.app.routers import (  # noqa: E402
+    alerts as m2_alerts,
+    anpr as m2_anpr,
+    detections as m2_detections,
+    face_detection as m2_face_detection,
+    grid as m2_grid,
+    persons_watchlist as m2_persons_watchlist,
+    recorded as m2_recorded,
+    watchlist as m2_watchlist,
+)
 from shared.db.session import init_engine  # noqa: E402
+
+# anpr.py's _broadcast_alert() looks up the detections module via
+# sys.modules["model2.routers.detections"] (the key the old auto-discovery
+# loop registered it under).  Keep that alias so the WS broadcast still
+# finds the *same* module instance that owns ACTIVE_WS / _loop.
+sys.modules.setdefault("model2.routers.detections", m2_detections)
 
 
 async def _sync_cameras(supervisor: IngestionSupervisor, cameras, mediamtx_api: str) -> None:
@@ -140,8 +156,29 @@ async def lifespan(app: FastAPI):
     # start_federation_services registers each adapter's cameras into the
     # DB and starts its event stream as its own background task, then
     # returns — it does not block startup waiting on them.
-    from shared.db.session import _SessionLocal as _sl
-    await start_federation_services(db_session_factory=_sl, redis_url=settings.REDIS_URL)
+    #
+    # That registration goes through db_session_factory directly (the
+    # module-level _SessionLocal, bound to settings.DATABASE_URL) instead
+    # of the get_db dependency, so it's invisible to the per-test
+    # SAVEPOINT/rollback session tests/conftest.py wires up via a get_db
+    # override - same class of problem as the catalogue poll above, just
+    # via a different DB path. In practice, every TestClient startup
+    # writes real vms_systems/cameras rows straight into whatever database
+    # settings.DATABASE_URL points at (the dev "sentinel" DB by default,
+    # per .env.example) outside any test's transaction - which errors
+    # outright if that database hasn't had shared/db/schema.sql applied to
+    # it (bootstrap_local_db.sh only creates the role/database and
+    # extensions, not the schema), and leaves real rows behind even when
+    # it hasn't errored. DISABLE_FEDERATION_STARTUP (set by
+    # tests/conftest.py, same mechanism as DISABLE_CATALOGUE_POLL above)
+    # skips this entirely during tests; unset (services run normally) for
+    # every real deployment. model3_federation/tests exercises
+    # register_adapter() and the correlation engine directly against the
+    # test session instead, so no coverage is lost by skipping this here.
+    disable_federation_startup = os.environ.get("DISABLE_FEDERATION_STARTUP", "false").lower() == "true"
+    if not disable_federation_startup:
+        from shared.db.session import _SessionLocal as _sl
+        await start_federation_services(db_session_factory=_sl, redis_url=settings.REDIS_URL)
 
     yield
 
@@ -152,6 +189,9 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
     supervisor.stop_all()
+    # Safe to call unconditionally even when disable_federation_startup
+    # skipped the start above - stop_federation_services() only cancels
+    # whatever is in _tasks, which stays [] if nothing was ever started.
     await stop_federation_services()
 
 
@@ -215,65 +255,13 @@ app.include_router(gap_analysis.router)
 app.include_router(pages.router)
 app.include_router(federation_router)
 
-# ── Model 2 Routers (auto-discovery) ─────────────────────────────
-#
-# This dynamically imports every *.py file in model2_analytics/app/routers/
-# by filesystem path (importlib.util.spec_from_file_location) rather than
-# a normal `from model2_analytics.app.routers import X` import, and mounts
-# whatever has a module-level `router` attribute. Flagged in
-# AuditReport1.md finding 17 as "fragile, worth documenting" rather than
-# a bug to fix outright - it works, but it's a non-obvious pattern with
-# real footguns for whoever touches it next:
-#
-#   * A syntax/import error in one Model-2 router file is swallowed (see
-#     the `except Exception` below) and only shows up as a printed
-#     "[model2] ERROR" line at startup - it does NOT fail the app boot,
-#     so a broken router silently just isn't there instead of crashing
-#     loudly. Check the startup logs if a Model-2 endpoint 404s
-#     unexpectedly.
-#   * Filenames starting with `_` are skipped on purpose (so e.g. a
-#     `_shared_helpers.py` living in this directory isn't mistaken for a
-#     router module) - this is a naming convention, not enforced by
-#     anything else in the codebase.
-#   * The two path candidates below exist because this file has to work
-#     both inside the Docker image (where Dockerfile COPYs model2_analytics/
-#     to /app/model2_analytics/) and from a local/bare `uvicorn` run (where
-#     it's a sibling directory of model1-registry/) - if you ever change
-#     that COPY path in infra/Dockerfile, update the matching candidate
-#     here too, or Model 2 endpoints will silently disappear in that
-#     environment.
-#   * Why not a normal package import, now that there's only one
-#     `model2_analytics/` package (AuditReport2.md finding 5 removed the
-#     old hyphenated-real / underscored-shim duplicate-package split -
-#     see model2_analytics/app/ingestion/__init__.py)? Because the
-#     reasons above (syntax errors shouldn't crash app boot, filename-
-#     based opt-out) are still true independent of that fix - this
-#     stays a deliberate design choice per AuditReport1.md finding 17,
-#     not a workaround for the duplication finding 5 has now closed.
-_M2_ROUTERS_DIR_CANDIDATES = [
-    Path("/model2-analytics/app/routers"),                              # Docker mount
-    Path("/app/model2_analytics/app/routers"),                          # Docker alternate
-    local_repo_root / "model2_analytics" / "app" / "routers",          # Local dev
-    local_repo_root / "model2-analytics" / "app" / "routers",          # Local dev alternate
-]
-_m2_routers_dir = next((p for p in _M2_ROUTERS_DIR_CANDIDATES if p.is_dir()), None)
+# ── Model 2 Routers ──────────────────────────────────────────────
 
-if _m2_routers_dir:
-    for _router_file in sorted(_m2_routers_dir.glob("*.py")):
-        if _router_file.name.startswith("_"):
-            continue
-        try:
-            _spec = _ilu.spec_from_file_location(
-                f"model2.routers.{_router_file.stem}", _router_file
-            )
-            _mod = _ilu.module_from_spec(_spec)
-            _spec.loader.exec_module(_mod)
-            if hasattr(_mod, "router"):
-                app.include_router(_mod.router)
-                print(f"[model2] mounted : {_router_file.name}")
-            else:
-                print(f"[model2] skipped  : {_router_file.name}  (no `router` attribute)")
-        except Exception as _exc:
-            print(f"[model2] ERROR    : {_router_file.name}  -> {_exc}")
-else:
-    print("[model2] routers directory not found - Model 2 endpoints unavailable.")
+app.include_router(m2_alerts.router)
+app.include_router(m2_anpr.router)
+app.include_router(m2_detections.router)
+app.include_router(m2_face_detection.router)
+app.include_router(m2_grid.router)
+app.include_router(m2_persons_watchlist.router)
+app.include_router(m2_recorded.router)
+app.include_router(m2_watchlist.router)

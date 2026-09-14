@@ -37,7 +37,7 @@ class VMSAdapter(ABC):
       - start_event_stream(callback) → run indefinitely, calling callback per event
       - system_name        → human label for this VMS
       - vendor             → vendor name (Milestone | Hikvision | Dahua | …)
-      - system_id          → the UUID string of the corresponding federated_systems row
+      - system_id          → the UUID string of the corresponding vms_systems row
     """
 
     # ── Abstract interface ─────────────────────────────────────
@@ -80,17 +80,17 @@ class VMSAdapter(ABC):
     @property
     @abstractmethod
     def vendor(self) -> str:
-        """Vendor name as stored in federated_systems.vendor."""
+        """Vendor name as stored in vms_systems.vendor."""
         ...
 
     @property
     @abstractmethod
     def system_id(self) -> str:
         """
-        The UUID string of the federated_systems DB row for this adapter.
+        The UUID string of the vms_systems DB row for this adapter.
         Must be stable across restarts (not regenerated per adapter
         instance) so that events keep resolving to the same
-        federated_systems row — registration.py upserts that row by
+        vms_systems row — registration.py upserts that row by
         this id every time the adapter connects.
         """
         ...
