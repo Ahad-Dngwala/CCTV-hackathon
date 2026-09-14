@@ -22,8 +22,9 @@ import numpy as np
 
 from pipeline.plate.interface import PlateRecognizerInterface, PlateResult
 from pipeline.plate.plate_detector import PlateDetector
-from pipeline.ocr.paddle_ocr_engine import PaddleOCREngine  # Using enhanced PaddleOCR
-from pipeline.ocr.ocr_engine import EasyOCREngine, OCRResult  # Fallback + type
+from pipeline.ocr.paddle_ocr_engine import PaddleOCREngine
+from pipeline.ocr.ocr_engine import EasyOCREngine, OCRResult
+from pipeline.config import OCR_ENGINE
 
 logger = logging.getLogger("sentinel.anpr")
 logger.setLevel(logging.INFO)
@@ -72,8 +73,14 @@ class ANPRPipeline(PlateRecognizerInterface):
         self.detector = plate_detector or PlateDetector(
             confidence_threshold=conf_threshold
         )
-        # Use PaddleOCR by default (with EasyOCR fallback built-in)
-        self.ocr = ocr_engine or PaddleOCREngine.get_instance()
+        if ocr_engine is not None:
+            self.ocr = ocr_engine
+        elif OCR_ENGINE == "easyocr":
+            self.ocr = EasyOCREngine.get_instance()
+            logger.info("ANPR using EasyOCR (config: OCR_ENGINE=easyocr)")
+        else:
+            self.ocr = PaddleOCREngine.get_instance()
+            logger.info("ANPR using PaddleOCR 3.x (config: OCR_ENGINE=paddle)")
 
     # ── Public API (implements PlateRecognizerInterface) ───────
     def recognize(
@@ -189,7 +196,12 @@ class ANPRPipeline(PlateRecognizerInterface):
 
         return PlateResult(
             plate_text=best['plate_text'],
+            normalized_text=best['plate_text'],
             confidence=best['confidence'],
+            detection_confidence=best['plate_conf'],
+            bbox=None,
+            crop=None,
+            provider="anpr-pipeline",
         )
 
     # ── Batch mode for video processing ────────────────────────

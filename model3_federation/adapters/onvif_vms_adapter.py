@@ -91,12 +91,19 @@ class OnvifVMSAdapter(VMSAdapter):
             self._config["password"],
         )
         await self._cam.update_xaddrs()
-        # create_media_service() (like create_ptz_service() etc.) is a
-        # synchronous factory that returns a bound service proxy -- it's
-        # the individual operations on that proxy (GetProfiles(),
-        # GetStreamUri(), ...) that are awaitable, not the factory call
-        # itself. Only awaited here previously by mistake.
-        self._media = self._cam.create_media_service()
+        # create_media_service() (like create_devicemgmt_service(),
+        # create_ptz_service(), etc.) is itself an async factory in
+        # onvif-zeep-async (confirmed against the installed
+        # onvif-zeep-async>=4.0.0 package: client.py defines it as
+        # `async def create_media_service(self) -> ONVIFService`) --
+        # not a synchronous call whose return value happens to have
+        # awaitable methods. Skipping the await here left `self._media`
+        # bound to the coroutine object itself, so the first real
+        # operation call (GetProfiles()) failed with
+        # "'coroutine' object has no attribute 'GetProfiles'" against
+        # live hardware even though the unit tests (which mocked the
+        # factory as synchronous) stayed green.
+        self._media = await self._cam.create_media_service()
         return self._cam
 
     async def connect(self) -> bool:
@@ -108,7 +115,10 @@ class OnvifVMSAdapter(VMSAdapter):
             return False
         try:
             await self._ensure_camera()
-            devicemgmt = self._cam.create_devicemgmt_service()
+            # Same async-factory shape as create_media_service() above --
+            # create_devicemgmt_service() must be awaited to get the
+            # actual service proxy back, not a coroutine.
+            devicemgmt = await self._cam.create_devicemgmt_service()
             info = await devicemgmt.GetDeviceInformation()
             self.log_info(
                 f"Connected: {getattr(info, 'Manufacturer', '?')} "
@@ -151,10 +161,15 @@ class OnvifVMSAdapter(VMSAdapter):
                 department=self._config.get("department_hint", "External"),
                 # ONVIF media profiles don't carry GPS coordinates —
                 # that would come from a separate PTZ/analytics
-                # service most devices don't expose. Left unset rather
-                # than guessed.
-                lat=None,
-                lng=None,
+                # service most devices don't expose. Default to
+                # (0.0, 0.0) sentinel-null-island coordinates rather
+                # than leaving them unset, so the camera still renders
+                # on the map for demo purposes — same convention
+                # OneBusAway's watchdog uses for vehicles with no GPS
+                # fix. Not a real location; a real deployment should
+                # replace this with a configured/surveyed lat/lng.
+                lat=self._config.get("lat", 0.0),
+                lng=self._config.get("lng", 0.0),
                 location_label=rtsp_uri,  # preserved for backward compatibility
                 is_active=True,
                 stream_url=rtsp_uri,

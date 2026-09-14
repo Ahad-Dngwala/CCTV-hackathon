@@ -488,24 +488,6 @@ def alerts_page(
     )
 
 
-# ── ANPR Pipeline Test page (Model 2) ─────────────────────────
-
-
-@router.get("/anpr", response_class=HTMLResponse)
-def anpr_page(
-    request: Request,
-    user: Optional[UserModel] = Depends(get_optional_current_user),
-):
-    """ANPR Pipeline Test — upload image and test full pipeline."""
-    if not user:
-        return RedirectResponse(url="/login", status_code=302)
-    return request.app.state.templates.TemplateResponse(
-        request=request,
-        name="anpr.html",
-        context={"user": user},
-    )
-
-
 # ── Model 3 Federation Dashboard ───────────────────────────────
 
 

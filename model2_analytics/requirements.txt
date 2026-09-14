@@ -32,3 +32,14 @@ ultralytics==8.3.203
 # validated a different version locally, use that pin instead.
 onnxruntime==1.30.0
 onnxocr==3.1.0
+# OCR benchmark winner (measured 2026-09-14 on 7 verified 4K crops from
+# varun_test_2160_30fps.mp4 — ocr_eval/new_video_benchmark_fixed.json):
+#   FastALPR end-to-end: 42.9% exact / 85.6% char accuracy (best measured)
+#   FastPlateOCR cct-s-v2 fallback: 0% exact / 57.9% char
+#   PP-OCRv5 ONNX: 28.6% exact / 80.0% char, ~4.4x slower than FastALPR
+#   EasyOCR: 0% exact. Do NOT remove these — without them the website's
+#   recorded-upload path (get_plate_recognizer → FastALPRProvider) silently
+#   disables ANPR and every upload reports 0 plates.
+fast-plate-ocr==1.1.0
+fast-alpr==0.4.0
+open-image-models==0.6.0

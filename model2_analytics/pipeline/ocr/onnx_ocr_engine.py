@@ -5,11 +5,37 @@ OnnxOCR Engine (uses PaddleOCR PP-OCRv5 models via ONNXRuntime)
 from __future__ import annotations
 
 import logging
+import os
 import re
 from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
+
+# ── Wire up nvidia CUDA/cuDNN DLLs (installed with paddlepaddle-gpu) ──
+# so onnxruntime-gpu can try CUDAExecutionProvider. If it still can't
+# load them (version mismatch), onnxruntime silently falls back to CPU.
+def _add_nvidia_dll_dirs():
+    try:
+        sp = os.path.join(os.path.dirname(os.__file__).replace("os.py", ""), "site-packages")
+        import sys
+        sp2 = next((p for p in sys.path if p.endswith("site-packages")), None)
+        base = sp2 if sp2 else sp
+        nb = os.path.join(base, "nvidia")
+        cands = [
+            os.path.join(nb, "cu13", "bin", "x86_64"),
+            os.path.join(nb, "cudnn", "bin"),
+        ]
+        for c in cands:
+            if os.path.isdir(c) and hasattr(os, "add_dll_directory"):
+                try:
+                    os.add_dll_directory(c)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+_add_nvidia_dll_dirs()
 
 logger = logging.getLogger("sentinel.onnx_ocr")
 logger.setLevel(logging.INFO)
@@ -48,14 +74,23 @@ class OnnxOCREngine:
     _instance = None
 
     @classmethod
-    def get_instance(cls, use_gpu: bool = False) -> "OnnxOCREngine":
+    def get_instance(cls, use_gpu: bool = None) -> "OnnxOCREngine":
         if cls._instance is None:
             cls._instance = OnnxOCREngine(use_gpu=use_gpu)
         return cls._instance
 
-    def __init__(self, use_gpu: bool = False):
-        self.use_gpu = use_gpu
+    def __init__(self, use_gpu: bool = None):
+        # Auto-detect GPU: prefer CUDA if onnxruntime-gpu can see it
+        if use_gpu is None:
+            try:
+                import onnxruntime as ort
+                self.use_gpu = "CUDAExecutionProvider" in ort.get_available_providers()
+            except Exception:
+                self.use_gpu = False
+        else:
+            self.use_gpu = use_gpu
         self._model = None
+        logger.info(f"OnnxOCREngine: use_gpu={self.use_gpu}")
 
     def _lazy_load(self):
         if self._model is None:
@@ -65,7 +100,14 @@ class OnnxOCREngine:
                 logger.info("OnnxOCR (PP-OCRv5) initialized")
             except Exception as e:
                 logger.error(f"OnnxOCR init failed: {e}")
-                raise
+                # Second try without GPU
+                try:
+                    from onnxocr.onnx_paddleocr import ONNXPaddleOcr
+                    self._model = ONNXPaddleOcr(use_angle_cls=True, use_gpu=False)
+                    logger.info("OnnxOCR (PP-OCRv5) initialized on CPU fallback")
+                except Exception as e2:
+                    logger.error(f"OnnxOCR CPU fallback failed: {e2}")
+                    raise
 
     @staticmethod
     def _preprocess(crop):

@@ -7,10 +7,14 @@ so it doesn't have to be installed unless this adapter type is
 actually used -- which also means it doesn't have to be installed to
 test the adapter's own logic. These tests inject a fake `onvif` module
 into sys.modules with a fake ONVIFCamera matching the real package's
-documented call shape (update_xaddrs() awaited, create_media_service()
-/ create_devicemgmt_service() are synchronous factories whose
-individual operations are what's awaitable -- see the fix in this same
-change: create_media_service() was incorrectly awaited before this).
+actual call shape: update_xaddrs(), create_media_service(), and
+create_devicemgmt_service() are all async factories (confirmed against
+the installed onvif-zeep-async package -- client.py defines all three
+as `async def`), not synchronous calls. An earlier version of this
+fixture modeled the two create_*_service() factories as synchronous,
+which let the adapter's corresponding missing-await bug pass this
+suite while still failing against real hardware; both the fixture and
+the adapter are fixed together in this change.
 
 This verifies the adapter's own mapping/error-handling logic against
 that documented shape. It does NOT verify the real onvif-zeep-async
@@ -63,10 +67,9 @@ class _FakeMedia:
 
 
 class _FakeONVIFCamera:
-    """Stand-in for onvif.ONVIFCamera. Constructor and update_xaddrs()
-    match the real package's documented signature; create_media_service()/
-    create_devicemgmt_service() are sync factories, same as the real
-    package (see the adapter fix this change also makes)."""
+    """Stand-in for onvif.ONVIFCamera. Constructor, update_xaddrs(),
+    create_media_service(), and create_devicemgmt_service() all match
+    the real package's async signatures."""
 
     instances = []  # so tests can assert on how the adapter constructed it
 
@@ -81,10 +84,10 @@ class _FakeONVIFCamera:
         if self._fail_update_xaddrs:
             raise ConnectionError("simulated: device unreachable")
 
-    def create_media_service(self):
+    async def create_media_service(self):
         return self._media
 
-    def create_devicemgmt_service(self):
+    async def create_devicemgmt_service(self):
         return self._devicemgmt
 
 
