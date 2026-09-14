@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 def _now_utc() -> datetime:
@@ -51,7 +51,7 @@ class FederatedCamera(BaseModel):
 
 class FederatedEvent(BaseModel):
     id: str = Field(default_factory=_new_id)
-    system_id: str                            # UUID of the federated_systems DB row
+    system_id: str                            # UUID of the vms_systems DB row
     system_name: str                          # e.g. "Gujarat Police VMS (Milestone)"
     vendor: str
     camera_external_id: str
@@ -112,7 +112,7 @@ class FederatedAlert(BaseModel):
 # ---------------------------------------------------------------------------
 
 class FederatedSystem(BaseModel):
-    id: str                                   # UUID from federated_systems table
+    id: str                                   # UUID from vms_systems table
     name: str
     vendor: str
     department: str
@@ -123,6 +123,57 @@ class FederatedSystem(BaseModel):
 
     class Config:
         json_encoders = {datetime: lambda v: v.isoformat()}
+
+
+# ---------------------------------------------------------------------------
+# VMS system manual-onboarding requests (Finding 1) — request bodies for
+# POST/PATCH /api/v3/systems. Unlike FederatedSystem above (a read model
+# for the API's own GET response), these are the *write* side: a
+# dept_admin/operator registering or editing a vms_systems row for an
+# integration that doesn't (yet, or ever) have a Python VMSAdapter.
+# ---------------------------------------------------------------------------
+
+def _validate_ownership(v: Optional[str]) -> Optional[str]:
+    if v is not None and v not in ("government", "private"):
+        raise ValueError("ownership must be 'government' or 'private'")
+    return v
+
+
+class VMSSystemCreate(BaseModel):
+    name: str
+    vendor: Optional[str] = None
+    # Integration mechanism, same free-text convention as
+    # vms_systems.protocol elsewhere (onvif, vendor-sdk, simulated, ...).
+    # "manual" is the sensible default here specifically: a system
+    # created through this endpoint has no adapter behind it (that's the
+    # point of this endpoint existing), so unless the caller knows the
+    # VMS actually speaks a real protocol, this is usually correct as-is.
+    protocol: str = "manual"
+    ownership: str = "government"
+    department_id: Optional[str] = None
+    # NEW: config-driven onboarding. When adapter_type is set, `config`
+    # must satisfy that type's CONFIG_FIELDS (see
+    # model3_federation/adapters/registry.py) and create_system() will
+    # actually try to connect before saving — this is what turns "add a
+    # VMS" from a record-only placeholder into a live source. Leave both
+    # unset for the old record-only behavior (unchanged).
+    adapter_type: Optional[str] = None
+    config: Optional[dict] = None
+
+    _validate_ownership = field_validator("ownership")(_validate_ownership)
+
+
+class VMSSystemUpdate(BaseModel):
+    """All fields optional — only ones actually present in the request
+    body are changed (the endpoint reads this with model_dump(exclude_unset=True),
+    so sending department_id: null explicitly clears it, while omitting
+    department_id entirely leaves it untouched)."""
+    name: Optional[str] = None
+    vendor: Optional[str] = None
+    ownership: Optional[str] = None
+    department_id: Optional[str] = None
+
+    _validate_ownership = field_validator("ownership")(_validate_ownership)
 
 
 # ---------------------------------------------------------------------------

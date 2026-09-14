@@ -49,6 +49,18 @@ for p in (str(MODEL1_ROOT), str(REPO_ROOT)):
 # network access (CI, sandboxes, offline dev).
 os.environ.setdefault("DISABLE_CATALOGUE_POLL", "true")
 
+# Same reasoning as above, for a different startup task: model3_federation's
+# start_federation_services() registers adapter cameras through shared/db/
+# session.py's module-level _SessionLocal directly, not through get_db, so
+# it sits outside this file's SAVEPOINT/rollback session entirely and writes
+# straight into whatever database settings.DATABASE_URL points at - which
+# errors outright unless that database happens to have shared/db/schema.sql
+# applied to it (bootstrap_local_db.sh's dev "sentinel" database does not).
+# Skipped during tests for the same reason DISABLE_CATALOGUE_POLL is;
+# model3_federation/tests exercises register_adapter() and the correlation
+# engine directly against db_session instead, so no coverage is lost.
+os.environ.setdefault("DISABLE_FEDERATION_STARTUP", "true")
+
 # test_streams.py::test_grid_frame_accessible_when_authenticated hits a real
 # endpoint (app/routers/streams.py) that genuinely tries to open the live
 # grid's RTSP feed via OpenCV/FFmpeg, fails (no real camera/credentials in a
@@ -62,9 +74,28 @@ os.environ.setdefault("DISABLE_CATALOGUE_POLL", "true")
 # what the endpoint does or suppress anything in production.
 os.environ.setdefault("OPENCV_FFMPEG_LOGLEVEL", "-8")  # AV_LOG_QUIET
 
-TEST_DB_URL = "postgresql://sentinel:sentinel_dev@127.0.0.1:5432/sentinel_test"
+TEST_DB_HOST = os.environ.get("TEST_DB_HOST", "127.0.0.1")
+# Defaults to 5432 (a local, non-Docker Postgres install) so nothing
+# changes for anyone already running tests that way. Set TEST_DB_PORT=5433
+# to point the whole suite at docker-compose's `db` service instead (see
+# infra/docker-compose.yml's `"5433:5432"` port mapping) - previously this
+# was hardcoded to 5432 everywhere below, so the Docker DB was completely
+# unreachable from pytest no matter what was running on 5433, and if a
+# local Postgres happened to also be listening on 5432 it would silently
+# get used instead (surfacing as 'extension "vector" is not available',
+# since a local install rarely has pgvector installed) - see model1-registry/
+# README.md's Testing section for the full docker-vs-local walkthrough.
+TEST_DB_PORT = os.environ.get("TEST_DB_PORT", "5432")
+TEST_DB_USER = os.environ.get("TEST_DB_USER", "sentinel")
+TEST_DB_PASSWORD = os.environ.get("TEST_DB_PASSWORD", "sentinel_dev")
+
+TEST_DB_URL = (
+    f"postgresql://{TEST_DB_USER}:{TEST_DB_PASSWORD}@{TEST_DB_HOST}:{TEST_DB_PORT}/sentinel_test"
+)
 TEST_DB_NAME = "sentinel_test"
-ADMIN_DB_URL = "postgresql://sentinel:sentinel_dev@127.0.0.1:5432/postgres"
+ADMIN_DB_URL = (
+    f"postgresql://{TEST_DB_USER}:{TEST_DB_PASSWORD}@{TEST_DB_HOST}:{TEST_DB_PORT}/postgres"
+)
 
 SEED_PASSWORD = "password123"  # matches README's documented demo accounts
 
@@ -150,7 +181,7 @@ def _psql_env() -> dict:
     this work wherever ``psql`` is already on PATH, on any OS.
     """
     env = os.environ.copy()
-    env["PGPASSWORD"] = "sentinel_dev"
+    env["PGPASSWORD"] = TEST_DB_PASSWORD
     return env
 
 
@@ -165,8 +196,8 @@ _PSQL_TIMEOUT_SECONDS = 30
 
 def _run_psql_command(database: str, sql: str) -> subprocess.CompletedProcess:
     return subprocess.run(
-        [_resolve_psql(), "-h", "127.0.0.1", "-U", "sentinel", "-d", database,
-         "-c", sql],
+        [_resolve_psql(), "-h", TEST_DB_HOST, "-p", TEST_DB_PORT, "-U", TEST_DB_USER,
+         "-d", database, "-c", sql],
         env=_psql_env(),
         capture_output=True, text=True,
         timeout=_PSQL_TIMEOUT_SECONDS,
@@ -177,8 +208,9 @@ def _run_psql(database: str, sql_file: Path) -> None:
     result = subprocess.run(
         [
             _resolve_psql(),
-            "-h", "127.0.0.1",
-            "-U", "sentinel",
+            "-h", TEST_DB_HOST,
+            "-p", TEST_DB_PORT,
+            "-U", TEST_DB_USER,
             "-d", database,
             "-v", "ON_ERROR_STOP=1",
             "-f", str(sql_file),
@@ -192,15 +224,15 @@ def _run_psql(database: str, sql_file: Path) -> None:
         hint = ""
         if 'extension "vector" is not available' in result.stderr:
             hint = (
-                "\n\nThis specific error means your local Postgres server is "
-                "missing the pgvector extension binary (schema.sql got through "
-                "postgis and pgcrypto fine, then hit this on the third "
-                "extension). Two fixes, easiest first:\n"
-                "  1. Skip installing pgvector locally: stop your local Postgres "
-                "service, then `cd infra && docker compose up -d db` (its image "
-                "already bundles postgis + pgcrypto + pgvector) and re-run "
-                "pytest - it connects to 127.0.0.1:5432 either way, so nothing "
-                "else changes.\n"
+                "\n\nThis specific error means the Postgres server at "
+                f"{TEST_DB_HOST}:{TEST_DB_PORT} is missing the pgvector "
+                "extension binary (schema.sql got through postgis and "
+                "pgcrypto fine, then hit this on the third extension). Two "
+                "fixes, easiest first:\n"
+                "  1. Point the suite at docker-compose's `db` service "
+                "instead, which already bundles postgis + pgcrypto + "
+                "pgvector: `cd infra && docker compose up -d db`, then set "
+                "TEST_DB_PORT=5433 and re-run pytest.\n"
                 "  2. Install pgvector for your local Postgres directly - see "
                 "https://github.com/pgvector/pgvector#installation "
                 "(Windows needs Visual Studio's C++ build tools; Linux/Mac is "
@@ -210,13 +242,15 @@ def _run_psql(database: str, sql_file: Path) -> None:
             )
         elif 'extension "postgis" is not available' in result.stderr:
             hint = (
-                "\n\nYour local Postgres server is missing the PostGIS "
+                "\n\nThe Postgres server at "
+                f"{TEST_DB_HOST}:{TEST_DB_PORT} is missing the PostGIS "
                 "extension binary. Either install it directly (e.g. "
                 "`postgresql-16-postgis-3` on Debian/Ubuntu, `postgis` via "
                 "Homebrew, or the PostGIS bundle in the Windows installer's "
-                "Application Stack Builder), or skip local installs entirely "
-                "with `cd infra && docker compose up -d db` (bundles it "
-                "already) and re-run pytest against 127.0.0.1:5432."
+                "Application Stack Builder), or point the suite at "
+                "docker-compose's `db` service instead (bundles it already): "
+                "`cd infra && docker compose up -d db`, then set "
+                "TEST_DB_PORT=5433 and re-run pytest."
             )
         raise RuntimeError(
             f"psql failed applying {sql_file.name} to {database}:\n"
@@ -230,8 +264,8 @@ def _sentinel_role_reachable() -> bool:
     pays for a bootstrap-script invocation."""
     try:
         result = subprocess.run(
-            [_resolve_psql(), "-h", "127.0.0.1", "-U", "sentinel", "-d", "postgres",
-             "-c", "SELECT 1;"],
+            [_resolve_psql(), "-h", TEST_DB_HOST, "-p", TEST_DB_PORT, "-U", TEST_DB_USER,
+             "-d", "postgres", "-c", "SELECT 1;"],
             env=_psql_env(),
             capture_output=True, text=True,
             timeout=10,
@@ -251,11 +285,19 @@ def _ensure_local_role_and_db() -> None:
     Dockerfile.db) - this mirrors that same zero-setup experience for
     people running tests directly on the host.
 
+    Skipped entirely when TEST_DB_PORT points somewhere other than the
+    default 5432 (i.e. at docker-compose's `db` service) - that database
+    is already bootstrapped by the official Postgres image on first boot,
+    and bootstrap_local_db.sh only knows how to set up a *local* install
+    anyway.
+
     Best-effort and non-fatal: bash-only (skipped on Windows, which
     doesn't have the sudo/su pattern the script relies on to become the
     Postgres admin anyway), and any failure here just falls through to
     the normal psql calls below, which raise their own clear error.
     """
+    if TEST_DB_PORT != "5432":
+        return
     if _sentinel_role_reachable():
         return
     if sys.platform == "win32" or not shutil.which("bash"):

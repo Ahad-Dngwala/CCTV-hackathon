@@ -248,6 +248,15 @@ class CorrelationEngine:
                         ), {"id": track_id})
 
             # ── 2d. Persist to detections ──────────────────────────
+            # CAST(:raw AS jsonb), not the shorter `:raw::jsonb` Postgres
+            # shorthand: SQLAlchemy's text() bind-parameter parser doesn't
+            # treat `raw` as a parameter at all when it's immediately
+            # followed by `::` with no space, silently leaving `:raw::jsonb`
+            # as unparsed literal text in the compiled SQL and failing
+            # with a bare Postgres syntax error - on every single call
+            # that reaches this line, deterministically, not just
+            # sometimes. CAST(... AS ...) is the SQL-standard equivalent
+            # and doesn't share that parsing ambiguity.
             detection_id = str(uuid.uuid4())
             session.execute(text(
                 """
@@ -258,7 +267,7 @@ class CorrelationEngine:
                 VALUES
                   (:id, :cam, :ts, :etype, :plate,
                    :vtype, :conf, :snap,
-                   :raw::jsonb, :src, :track)
+                   CAST(:raw AS jsonb), :src, :track)
                 """
             ), {
                 "id":    detection_id,
