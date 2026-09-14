@@ -1,0 +1,24 @@
+\begin{tikzpicture}[
+  font=\scriptsize,
+  flowstep/.style={draw, rounded corners=2pt, fill=teal2!10, draw=teal2, minimum height=0.75cm, text width=8.6cm, align=left, inner sep=5pt},
+  >=Stealth, thick
+]
+
+\node[flowstep, label=left:{\scriptsize\bfseries\color{navy}1}] (nA) at (0,7.5) {Deduplicate -- same plate + camera within a short window collapses to one event};
+\node[flowstep, label=left:{\scriptsize\bfseries\color{navy}2}] (nB) at (0,6.3) {Resolve camera -- unregistered camera events are logged and dropped, never inserted with a fabricated reference};
+\node[flowstep, label=left:{\scriptsize\bfseries\color{navy}3}] (nC) at (0,5.1) {Resolve or create vehicle track -- deterministic derivation shared with Model 2's own pipeline};
+\node[flowstep, label=left:{\scriptsize\bfseries\color{navy}4}] (nD) at (0,3.9) {Watchlist check -- run before the sighting is written, so a match is known at insert time};
+\node[flowstep, label=left:{\scriptsize\bfseries\color{navy}5}] (nE) at (0,2.7) {Persist sighting -- full audit trail, raw payload preserved};
+\node[flowstep, label=left:{\scriptsize\bfseries\color{navy}6}] (nF) at (0,1.5) {Alert on match -- write alert row, broadcast over WebSocket};
+\node[flowstep, label=left:{\scriptsize\bfseries\color{navy}7}] (nG) at (0,0.3) {Cross-system correlation -- same vehicle seen via a different VMS recently? Broadcast full camera sequence};
+\node[flowstep, label=left:{\scriptsize\bfseries\color{navy}8}] (nH) at (0,-0.9) {Broadcast event to every connected dashboard};
+
+\draw[->] (nA) -- (nB);
+\draw[->] (nB) -- (nC);
+\draw[->] (nC) -- (nD);
+\draw[->] (nD) -- (nE);
+\draw[->] (nE) -- (nF);
+\draw[->] (nF) -- (nG);
+\draw[->] (nG) -- (nH);
+
+\end{tikzpicture}

@@ -1,0 +1,45 @@
+\begin{tikzpicture}[
+  font=\scriptsize,
+  box/.style={draw, rounded corners=2pt, minimum height=0.9cm, text width=2.6cm, align=center, inner sep=3pt},
+  svc/.style={box, fill=teal2!12, draw=teal2},
+  edgeb/.style={box, fill=navy!8, draw=navy},
+  datab/.style={box, fill=amber!14, draw=amber},
+  >=Stealth, thick
+]
+
+\node[edgeb] (caddy) at (0,3.2) {Caddy -- TLS termination, ports 80/443};
+\node[svc] (app) at (0,1.6) {Application container (FastAPI, all 3 models)};
+
+\node[datab] (pg) at (-3.2,0) {PostgreSQL 16 + PostGIS + pgvector};
+\node[datab] (redis) at (0,0) {Redis event bus \& cache};
+\node[datab] (mtx) at (3.2,0) {MediaMTX -- RTSP $\to$ WebRTC / HLS bridge};
+
+\draw[->] (caddy) -- (app);
+\draw[<->] (app) -- (pg);
+\draw[<->] (app) -- (redis);
+\draw[<->] (app) -- (mtx);
+
+\begin{scope}[on background layer]
+\node[draw=midgray, dashed, rounded corners=4pt, fit=(caddy)(app)(pg)(redis)(mtx), inner sep=10pt,
+  label={[midgray,font=\scriptsize\bfseries]below:Single host -- current pilot deployment}] {};
+\end{scope}
+
+% future state, to the right
+\node[edgeb, text width=3.0cm] (lb) at (8.6,3.2) {Load balancer};
+\node[svc, text width=3.0cm] (app2) at (7.0,1.6) {App instance};
+\node[svc, text width=3.0cm] (app3) at (10.2,1.6) {App instance};
+\node[datab, text width=3.0cm] (pgc) at (8.6,0.2) {Central Postgres cluster};
+\node[edgeb, text width=3.0cm] (edge) at (8.6,-1.4) {Regional edge nodes (media relay near camera clusters)};
+
+\draw[->] (lb) -- (app2);
+\draw[->] (lb) -- (app3);
+\draw[<->] (app2) -- (pgc);
+\draw[<->] (app3) -- (pgc);
+\draw[<->] (pgc) -- (edge);
+
+\begin{scope}[on background layer]
+\node[draw=midgray, dashed, rounded corners=4pt, fit=(lb)(app2)(app3)(pgc)(edge), inner sep=10pt,
+  label={[midgray,font=\scriptsize\bfseries]below:Statewide target -- horizontally scaled}] {};
+\end{scope}
+
+\end{tikzpicture}

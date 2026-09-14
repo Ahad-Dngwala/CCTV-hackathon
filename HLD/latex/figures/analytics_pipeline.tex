@@ -1,0 +1,28 @@
+\begin{tikzpicture}[
+  font=\scriptsize,
+  box/.style={draw, rounded corners=2pt, minimum height=1.05cm, text width=2.0cm, align=center, inner sep=2.5pt},
+  stage/.style={box, fill=teal2!12, draw=teal2},
+  term/.style={box, fill=amber!14, draw=amber, text width=1.6cm},
+  discard/.style={box, fill=midgray!10, draw=midgray, text width=1.9cm},
+  >=Stealth, thick
+]
+
+\node[box, fill=navy!8, draw=navy] (frame) at (0,0) {Ingested frame};
+\node[stage] (det) at (2.55,0) {Vehicle detection};
+\node[stage] (trk) at (5.1,0) {In-frame tracking (IoU + EMA)};
+\node[stage] (anpr) at (7.65,0) {ANPR: crop, OCR, validate};
+\node[stage] (wl) at (10.2,0) {Watchlist check};
+\node[term] (alert) at (12.5,0.85) {Alert};
+\node[discard] (store) at (12.5,-0.85) {Metadata to PostgreSQL};
+
+\draw[->] (frame) -- (det);
+\draw[->] (det) -- (trk);
+\draw[->] (trk) -- (anpr);
+\draw[->] (anpr) -- (wl);
+\draw[->] (wl) -- (alert);
+\draw[->] (wl) -- (store);
+
+\node[discard, text width=2.3cm] (raw) at (2.55,-1.6) {Raw frame discarded after inference};
+\draw[->, dashed] (det) -- (raw);
+
+\end{tikzpicture}

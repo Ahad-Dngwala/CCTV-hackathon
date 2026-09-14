@@ -1,0 +1,55 @@
+\begin{tikzpicture}[
+  font=\scriptsize,
+  box/.style={draw, rounded corners=2pt, minimum height=0.85cm, text width=2.7cm, align=center, inner sep=3pt},
+  src/.style={box, fill=lightbg, draw=navy, thin},
+  ingest/.style={box, fill=teal2!12, draw=teal2},
+  coreb/.style={draw, rounded corners=2pt, fill=navy!7, draw=navy, minimum height=0.85cm, text width=3.5cm, align=center, inner sep=3pt},
+  data/.style={box, fill=amber!14, draw=amber, text width=4cm},
+  dashb/.style={box, fill=teal2!6, draw=navy, text width=5.9cm},
+  >=Stealth, thick
+]
+
+% ---- Row 0: sources ----
+\node[src] (s1) at (0,7.2)   {Departmental RTSP cameras / NVRs};
+\node[src] (s2) at (3.0,7.2) {ONVIF-compliant hardware};
+\node[src] (s3) at (6.0,7.2) {Vendor VMS (Milestone / HikCentral / Dahua-class)};
+\node[src] (s4) at (9.0,7.2) {Cloud \& public camera APIs};
+
+% ---- Row 1: ingestion paths ----
+\node[ingest] (m2) at (1.5,5.5) {Direct RTSP ingestion (Model 2)};
+\node[ingest] (m3) at (7.5,5.5) {Federation adapters (Model 3)};
+
+\draw[->] (s1) -- (m2);
+\draw[->] (s2) -- (m3);
+\draw[->] (s3) -- (m3);
+\draw[->] (s4) -- (m3);
+
+% ---- Row 2: application core ----
+\node[coreb] (c1) at (0.6,3.6)  {Registry \& GIS\\ (Model 1)};
+\node[coreb] (c2) at (4.5,3.6)  {Analytics \& Alerting Engine\\ (Model 2)};
+\node[coreb] (c3) at (8.4,3.6)  {Correlation Engine\\ (Model 3)};
+
+\begin{scope}[on background layer]
+\node[draw=navy, rounded corners=4pt, fill=navy!3, fit=(c1)(c2)(c3), inner sep=10pt, label={[navy,font=\scriptsize\bfseries]above:EyesOnGuj application core -- one FastAPI process}] (coreband) {};
+\end{scope}
+
+\draw[->] (m2) -- (c2);
+\draw[->] (m3) -- (c3);
+
+% ---- Row 3: data layer ----
+\node[data] (db) at (2.6,1.5) {PostgreSQL 16 + PostGIS + pgvector};
+\node[data] (redis) at (7.2,1.5) {Redis -- event bus \& cache};
+
+\draw[<->] (coreband.south) -- (db.north);
+\draw[<->] (coreband.south) -- (redis.north);
+
+% ---- Row 4: dashboards ----
+\node[dashb] (dash1) at (4.9,-0.5) {Operator dashboards: GIS map, live grid, watchlist \& alerts, federation console};
+
+\draw[->] (coreband.south) .. controls +(0,-1.6) and +(0,1.4) .. (dash1.north);
+
+% ---- Row 5: operators ----
+\node[src, fill=midgray!10, draw=midgray] (ops) at (4.9,-2.2) {Command-centre operators};
+\draw[->] (dash1) -- (ops);
+
+\end{tikzpicture}

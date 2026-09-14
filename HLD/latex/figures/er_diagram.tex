@@ -1,0 +1,35 @@
+\begin{tikzpicture}[
+  font=\scriptsize,
+  ent/.style={draw, rounded corners=2pt, fill=lightbg, draw=navy, minimum height=0.7cm, text width=2.4cm, align=center, inner sep=3pt},
+  core/.style={ent, fill=teal2!14, draw=teal2},
+  >=Stealth
+]
+
+\node[ent] (dept) at (0,4.2) {departments};
+\node[ent] (dist) at (0,2.8) {districts};
+\node[core] (cam) at (3.2,3.5) {cameras};
+\node[ent] (vms) at (6.4,3.5) {vms\_systems};
+
+\node[ent] (vwl) at (0,0.5) {vehicles\_watchlist};
+\node[core] (det) at (3.2,0.5) {detections};
+\node[ent] (trk) at (6.4,0.5) {vehicle\_tracks};
+
+\node[ent] (pwl) at (0,-1.5) {persons\_watchlist};
+\node[ent] (alert) at (3.2,-1.5) {alerts};
+\node[ent] (palert) at (6.4,-1.5) {person\_alerts};
+
+\node[ent] (hist) at (9.6,3.5) {status\_history};
+
+\draw (dept) -- (cam);
+\draw (dist) -- (cam);
+\draw (vms) -- (cam) node[midway, above, font=\tiny]{vms\_system\_id};
+\draw (cam.north) to[out=60, in=120] node[midway, above, font=\tiny]{trigger} (hist.north);
+\draw (cam) -- (det);
+\draw (det) -- (trk);
+\draw (vwl) -- (det) node[midway, above, font=\tiny]{plate match};
+\draw (det) -- (alert);
+\draw (vwl) -- (alert);
+\draw (pwl.south) to[out=-45, in=-135, looseness=0.8] (palert.south);
+\draw (det.east) -- ++(0.4,0) |- (palert.west);
+
+\end{tikzpicture}
