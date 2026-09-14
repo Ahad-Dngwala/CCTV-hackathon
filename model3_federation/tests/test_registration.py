@@ -32,6 +32,7 @@ Needs the same real Postgres sentinel_test setup as model1-registry/tests
 """
 
 import asyncio
+from typing import Optional
 
 from sqlalchemy import text
 
@@ -59,7 +60,8 @@ class FakeAdapter:
 
 
 def _camera(external_id: str, name: str, system_name: str, vendor: str,
-            department: str = "Police", lat: float = 23.03, lng: float = 72.58) -> FederatedCamera:
+            department: str = "Police", lat: float = 23.03, lng: float = 72.58,
+            stream_url: Optional[str] = None, stream_kind: Optional[str] = None) -> FederatedCamera:
     return FederatedCamera(
         external_id=external_id,
         name=name,
@@ -70,6 +72,8 @@ def _camera(external_id: str, name: str, system_name: str, vendor: str,
         lng=lng,
         location_label=f"{name} location",
         is_active=True,
+        stream_url=stream_url,
+        stream_kind=stream_kind,
     )
 
 
@@ -172,3 +176,93 @@ def test_register_adapter_sticky_department_id_not_overwritten(db_session):
         "SELECT department_id FROM vms_systems WHERE id = :id"
     ), {"id": system_id}).fetchone()[0]
     assert second_dept == first_dept
+
+
+def test_register_adapter_with_stream_url_sets_rtsp_and_is_live(db_session):
+    system_id = "aaaaaaaa-0000-0000-0000-000000000004"
+    stream_camera = _camera(
+        "EXT-ONVIF-1", "ONVIF Cam 1", "Test ONVIF VMS", "ONVIF",
+        stream_url="rtsp://192.168.1.100:554/live/ch0",
+        stream_kind="rtsp",
+    )
+    adapter = FakeAdapter(
+        system_id=system_id,
+        system_name="Test ONVIF VMS",
+        vendor="ONVIF",
+        cameras=[stream_camera],
+    )
+    _run(register_adapter(lambda: db_session, adapter))
+
+    cam_row = db_session.execute(text(
+        "SELECT name, rtsp_url, hls_url, is_live "
+        "FROM cameras WHERE vms_system_id = :id AND source_grid_id = 'EXT-ONVIF-1'"
+    ), {"id": system_id}).fetchone()
+
+    assert cam_row is not None
+    assert cam_row[0] == "ONVIF Cam 1"
+    assert cam_row[1] == "rtsp://192.168.1.100:554/live/ch0"
+    assert cam_row[2] is None
+    assert cam_row[3] is True
+
+
+def test_register_adapter_without_stream_keeps_rtsp_null_and_is_live_false(db_session):
+    system_id = "aaaaaaaa-0000-0000-0000-000000000005"
+    simulated_camera = _camera(
+        "EXT-SIM-1", "Simulated Cam 1", "Test Simulated VMS", "Simulated",
+        stream_url=None,
+        stream_kind=None,
+    )
+    adapter = FakeAdapter(
+        system_id=system_id,
+        system_name="Test Simulated VMS",
+        vendor="Simulated",
+        cameras=[simulated_camera],
+    )
+    _run(register_adapter(lambda: db_session, adapter))
+
+    cam_row = db_session.execute(text(
+        "SELECT name, rtsp_url, hls_url, is_live "
+        "FROM cameras WHERE vms_system_id = :id AND source_grid_id = 'EXT-SIM-1'"
+    ), {"id": system_id}).fetchone()
+
+    assert cam_row is not None
+    assert cam_row[0] == "Simulated Cam 1"
+    assert cam_row[1] is None
+    assert cam_row[2] is None
+    assert cam_row[3] is False
+
+
+def test_register_adapter_updates_stream_url_on_conflict(db_session):
+    system_id = "aaaaaaaa-0000-0000-0000-000000000006"
+    cam_v1 = _camera(
+        "EXT-UPD-1", "Camera V1", "Test Dynamic VMS", "ONVIF",
+        stream_url=None,
+        stream_kind=None,
+    )
+    adapter = FakeAdapter(
+        system_id=system_id,
+        system_name="Test Dynamic VMS",
+        vendor="ONVIF",
+        cameras=[cam_v1],
+    )
+    _run(register_adapter(lambda: db_session, adapter))
+
+    # Second registration adds stream_url
+    cam_v2 = _camera(
+        "EXT-UPD-1", "Camera V2 Updated", "Test Dynamic VMS", "ONVIF",
+        stream_url="rtsp://10.10.10.10:8554/stream1",
+        stream_kind="rtsp",
+    )
+    adapter._cameras = [cam_v2]
+    _run(register_adapter(lambda: db_session, adapter))
+
+    cam_rows = db_session.execute(text(
+        "SELECT name, rtsp_url, is_live "
+        "FROM cameras WHERE vms_system_id = :id AND source_grid_id = 'EXT-UPD-1'"
+    ), {"id": system_id}).fetchall()
+
+    assert len(cam_rows) == 1, "upsert created duplicate row instead of updating"
+    assert cam_rows[0][0] == "Camera V2 Updated"
+    assert cam_rows[0][1] == "rtsp://10.10.10.10:8554/stream1"
+    assert cam_rows[0][2] is True
+
