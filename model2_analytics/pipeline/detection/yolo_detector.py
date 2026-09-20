@@ -114,8 +114,13 @@ class VehicleDetector:
                     cls_id = int(cls_ids[i])
                     conf = float(confs[i])
 
-                    # Map class ID to name
-                    class_name = VEHICLE_CLASSES.get(cls_id, f"class_{cls_id}")
+                    # Map class ID to name directly from the model, then normalize
+                    raw_name = self.model.names.get(cls_id, "unknown").lower()
+                    if "bus" in raw_name: class_name = "bus"
+                    elif "truck" in raw_name: class_name = "truck"
+                    elif "car" in raw_name: class_name = "car"
+                    elif "motorcycle" in raw_name or "bike" in raw_name: class_name = "motorcycle"
+                    else: continue
 
                     detections.append({
                         "bbox": [float(x1), float(y1), float(x2), float(y2)],

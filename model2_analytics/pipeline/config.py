@@ -21,7 +21,7 @@ FUSION_DIR = PIPELINE_DIR / "fusion"
 EVENTS_DIR = PIPELINE_DIR / "events"
 
 # ── Weights (configurable via env var; default: repo-root/weights) ──────────
-WEIGHTS_DIR = Path(os.getenv("MODEL2_WEIGHTS_DIR", str(REPO_ROOT / "weights"))).expanduser()
+WEIGHTS_DIR = Path(os.getenv("MODEL2_WEIGHTS_DIR", str(REPO_ROOT.parent / "weights"))).expanduser()
 YOLO26M_PRETRAINED = "yolo26m.pt"  # Official Ultralytics checkpoint
 FINETUNED_WEIGHTS = WEIGHTS_DIR / "yolo26m_vehicles_best.pt"
 
@@ -42,25 +42,12 @@ IOU_THRESHOLD = 0.45
 IMG_SIZE = 640
 MAX_DETECTIONS = 300
 
-# ── Vehicle class mapping for vehicles-q0x2v ─────────────────────
-# Dataset has 12 classes (IDs 1-12 in COCO format, 0-11 in YOLO format)
-# ClassLabel names: ['vehicles', 'big bus', 'big truck', 'bus-l-', 'bus-s-',
-#   'car', 'mid truck', 'small bus', 'small truck', 'truck-l-', 'truck-m-',
-#   'truck-s-', 'truck-xl-']
-# Note: class 0 ('vehicles') is not used in actual data, so we map 1-12 → 0-11
+# Standard COCO vehicle classes (used by pretrained yolo26m.pt)
 VEHICLE_CLASSES = {
-    0: "big bus",
-    1: "big truck",
-    2: "bus-l-",
-    3: "bus-s-",
-    4: "car",
-    5: "mid truck",
-    6: "small bus",
-    7: "small truck",
-    8: "truck-l-",
-    9: "truck-m-",
-    10: "truck-s-",
-    11: "truck-xl-",
+    2: "car",
+    3: "motorcycle",
+    5: "bus",
+    7: "truck",
 }
 NUM_CLASSES = 12
 # Original dataset class IDs (1-12) to YOLO class IDs (0-11)
@@ -95,11 +82,11 @@ LEARNING_RATE = 0.001
 PATIENCE = 10  # early stopping patience
 
 # ── OCR settings ───────────────────────────────────────────────
-# Primary OCR engine: "paddle" (PaddleOCR 3.x + EasyOCR fallback) or "easyocr".
-# "paddle" recommended: PaddleOCR 3.x reads angled/distorted plates far better.
-# NOTE: onnxcr / PaddleOCR-default-mkldnn were evaluated and rejected —
-# see ocr_eval/ comparison (PaddleOCR needs enable_mkldnn=False on Win/CPU).
-OCR_ENGINE = "paddle"
+# Primary OCR engine: "parseq" (Fine-Tuned Indian PARSeq Vision Transformer).
+# Benchmarked winner: 85.5% exact match, 97.5% char accuracy, 86.7% two-row accuracy.
+# Fallback: "fastalpr", "awiros", "paddle".
+ANPR_PROVIDER = os.getenv("ANPR_PROVIDER", "parseq")
+OCR_ENGINE = os.getenv("OCR_ENGINE", "parseq")
 
 # ── Per-class confidence thresholds for vehicle detection ─────────────────
 # Applied AFTER YOLO's predict() (which only takes one global conf arg).
@@ -113,9 +100,9 @@ PER_CLASS_CONF_THRESHOLDS = {
     "Motorcycle": 0.12,
     "Bicycle": 0.10,
     "Auto Rickshaw": 0.12,
-    "Car": 0.35,
-    "Bus": 0.35,
-    "Truck": 0.35,
+    "Car": 0.10,
+    "Bus": 0.10,
+    "Truck": 0.10,
     "Mini-Truck": 0.30,
 }
 

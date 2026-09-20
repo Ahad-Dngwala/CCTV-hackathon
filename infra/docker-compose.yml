@@ -100,6 +100,7 @@ services:
       - ../model1-registry/app:/app/app
       - ../model2_analytics:/app/model2_analytics
       - ../shared:/app/shared
+      - ../weights:/app/weights
       - ../model3_federation:/app/model3_federation
 
   redis:

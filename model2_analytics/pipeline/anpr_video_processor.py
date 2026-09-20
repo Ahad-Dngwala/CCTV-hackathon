@@ -7,14 +7,53 @@ End-to-end tracked ANPR pipeline:
           + associate plates with vehicle tracks via overlap
           + re-project plate box between detection frames
           -> OCR (PaddleOCR 3.x + EasyOCR fallback)
-          -> temporal aggregation (confidence-weighted majority vote)
+          -> temporal aggregation (sharpness-gated character-position vote)
           -> evidence log (JSON) + annotated video
+
+CHANGES vs. the previous version (all in the resolver + a few plumbing
+spots needed to feed it — nothing about detection/tracking touched):
+
+  1. PlateRead now carries `sharpness` (Laplacian variance of the crop
+     that produced it), populated at the two call sites where OCR runs
+     (_associate_plate and the reprojected-frame path in _process_frame).
+
+  2. _resolve_plate is replaced by _resolve_plate_v2:
+       - whole-string majority voting -> character-position voting.
+         The old version treated "MW4498" and "NW4498" as two totally
+         unrelated strings competing for votes. Position voting treats
+         each of the 10 characters independently, so a systematic error
+         confined to ONE position (e.g. only position 4 flips M->N)
+         only costs that one position, not the whole string's votes.
+       - reads are gated by sharpness before voting whenever enough
+         sharp reads exist. This is the actual fix for the "10 wrong,
+         confident, blurry reads outvote 4 correct sharp reads" failure
+         mode: majority voting assumes independent errors, but a blur-
+         induced character confusion is a CORRELATED error that repeats
+         identically across many frames. More repeats of a correlated
+         error is not more evidence. Filtering by sharpness first means
+         you're voting only among reads where that correlated error
+         mode is less likely to have triggered at all.
+       - a single very-high-confidence read (>= high_conf) still short-
+         circuits immediately, same behavior as before.
+       - if too few reads survive the sharpness filter, falls back to
+         voting on the FULL unfiltered set rather than failing outright
+         — never worse than the old behavior, only better when the
+         filter has enough survivors to work with.
+
+  3. SHARPNESS_FLOOR is NOT hardcoded to a made-up number. It defaults
+     to None (no filtering, i.e. old behavior) until you've measured
+     your own crops' sharpness distribution — see TESTING.md for the
+     exact one-command way to derive it from evidence.json. Running
+     with SHARPNESS_FLOOR=None still gets you the character-position
+     voting improvement, which alone should help independent of the
+     sharpness question.
 
 Run:
     python model2_analytics/pipeline/anpr_video_processor.py
         --video "Test Input/sample_2.mp4"
         --output "output/anpr_tracked.mp4"
         [--frames N] [--stride 1] [--plate-interval 5]
+        [--sharpness-floor 60.0]
         [--db-url postgresql://...]
 """
 from __future__ import annotations
@@ -25,12 +64,12 @@ import logging
 import os
 import sys
 import time
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import cv2
-import numpy as np
 
 _PROJECT = Path(__file__).resolve().parents[1]
 if str(_PROJECT) not in sys.path:
@@ -38,9 +77,10 @@ if str(_PROJECT) not in sys.path:
 
 from pipeline.detection.anpr_vehicle_detector import AnprVehicleDetector
 from pipeline.plate.plate_detector import PlateDetector
-from pipeline.ocr.onnx_ocr_engine import OnnxOCREngine, OCRResult
+from pipeline.plate.anpr_service import get_plate_recognizer
+from pipeline.ocr.paddle_ocr_engine import PaddleOCREngine, OCRResult
 from pipeline.tracking.byte_tracker import ByteTracker
-from pipeline.config import VEHICLE_DETECTION_IMGSZ, PER_CLASS_CONF_THRESHOLDS
+from pipeline.config import PER_CLASS_CONF_THRESHOLDS, VEHICLE_DETECTION_IMGSZ
 
 logger = logging.getLogger("sentinel.anpr_tracked")
 logger.setLevel(logging.INFO)
@@ -53,7 +93,7 @@ class PlateRead:
     text: str
     confidence: float
     frame_idx: int
-    crop_area: int = 0  # pixel area of OCR crop at time of read (px²); larger = closer/clearer
+    sharpness: float = 0.0
 
 
 @dataclass
@@ -64,6 +104,8 @@ class TrackState:
     plate_reads: List[PlateRead] = field(default_factory=list)
     resolved_text: Optional[str] = None
     resolved_conf: float = 0.0
+    resolution_method: str = "unresolved"   # "high_conf" | "position_vote_sharp" | "position_vote_all"
+    ambiguous_positions: List[int] = field(default_factory=list)  # positions with a close 2nd place
     rel_offset: Optional[Tuple[float, float, float, float]] = None
     best_crop_path: Optional[str] = None
     best_score: float = 0.0
@@ -71,175 +113,95 @@ class TrackState:
     best_frame: int = 0
     first_seen: int = 0
     last_seen: int = 0
-    max_crop_area: int = 0  # max plate crop area seen for this track (for normalization)
-    class_history: List[Tuple[int, str, float]] = field(default_factory=list)  # (frame, class_name, conf) per frame — raw post-detect sequence
-    bbox_areas: List[float] = field(default_factory=list)  # bbox area per frame — for GEOMETRIC_AREA_RANGES calibration
 
 
-def _sharpness(crop):
+def _sharpness(crop) -> float:
     """Laplacian variance -- higher = sharper."""
+    if crop is None or crop.size == 0:
+        return 0.0
     gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY) if len(crop.shape) == 3 else crop
     return float(cv2.Laplacian(gray, cv2.CV_64F).var())
 
 
-def _normalize(text):
+def _normalize(text: str) -> str:
     return text.upper().replace(" ", "").replace("-", "").replace(".", "")
 
 
-def _align_reads(reads: list, align_from: str = "start") -> list:
+def _resolve_plate_v2(
+    ts: TrackState,
+    min_reads: int = 3,
+    high_conf: float = 0.99,
+    sharpness_floor: Optional[float] = None,
+    min_sharp_reads: int = 3,
+):
     """
-    Align reads by padding shorter ones with None.
-    align_from="start" → left-align (pad right)
-    align_from="end" → right-align (pad left)
-    """
-    if not reads:
-        return []
-    texts = [_normalize(r.text) for r in reads]
-    max_len = max(len(t) for t in texts)
-    aligned = []
-    for t in texts:
-        if align_from == "start":
-            padded = t.ljust(max_len, "\x00")
-        else:
-            padded = t.rjust(max_len, "\x00")
-        aligned.append(padded)
-    return aligned
+    Sharpness-gated character-position vote.
 
+    Step 1: any single near-certain read short-circuits (unchanged from
+            the old behavior).
+    Step 2: if sharpness_floor is set and enough reads clear it, vote
+            ONLY among those reads. Otherwise vote among all reads.
+    Step 3: vote per character position (not whole-string), confidence-
+            weighted. Track positions with a close top-2 (within 15% of
+            each other's weight) as "ambiguous_positions" so the UI can
+            flag "MW4498 or MN4498 — verify" instead of asserting one
+            confidently when the evidence genuinely doesn't decide it.
 
-def _position_vote(reads: list, align_from: str = "start",
-                   max_crop_area: int = 0, verbose_pos: int = -1) -> tuple:
-    """
-    Character-position voting weighted by (ocr_confidence * normalised_crop_area * recency).
-
-    Three compounding signals per read:
-      - ocr_confidence:  how confident the OCR engine was on this crop
-      - norm_area:       crop_area / max_crop_area  (larger crop = closer vehicle = clearer)
-      - recency:         [0.5, 1.0] linear ramp from oldest to newest read in this track
-
-    All three signals agree for late/close reads, making them dominate over many
-    early/small/distant reads — the confirmed fix for the N-vs-M failure on Track 7.
-
-    verbose_pos: if >= 0, emit INFO log for that position showing per-char weighted scores.
-    Returns (candidate_string, avg_consensus).
-    """
-    if not reads:
-        return "", 0.0
-    aligned = _align_reads(reads, align_from)
-    if not aligned:
-        return "", 0.0
-    max_len = len(aligned[0])
-    result_chars = []
-    total_consensus = 0.0
-    positions_voted = 0
-
-    # Normalisation denominator: max crop area seen for this track (passed in).
-    # Fall back to the max among the current read set if caller didn't provide.
-    norm_denom = max_crop_area if max_crop_area > 0 else max((r.crop_area for r in reads), default=1)
-    if norm_denom == 0:
-        norm_denom = 1
-
-    n_reads = len(reads)
-
-    for pos in range(max_len):
-        char_scores = {}
-        for i, padded in enumerate(aligned):
-            ch = padded[pos]
-            if ch == "\x00":
-                continue
-            conf = reads[i].confidence
-            # Normalise crop area to [0, 1] relative to the largest crop seen for this track
-            norm_area = reads[i].crop_area / norm_denom if reads[i].crop_area > 0 else 0.1
-            # Recency factor [0.5, 1.0]: later reads (vehicle closer) count more.
-            # Combined with area-weighting, both signals reinforce each other for close reads.
-            recency = 0.5 + 0.5 * (i / (n_reads - 1)) if n_reads > 1 else 1.0
-            # Combined weight
-            weight = conf * norm_area * recency
-            char_scores[ch] = char_scores.get(ch, 0.0) + weight
-
-        if not char_scores:
-            continue
-
-        best_char = max(char_scores, key=lambda k: char_scores[k])
-        total_score = sum(char_scores.values())
-        consensus = char_scores[best_char] / total_score if total_score > 0 else 0.0
-
-        # Verbose vote trace for requested position (e.g. position 4 for Track 7 M-vs-N)
-        if pos == verbose_pos:
-            sorted_scores = sorted(char_scores.items(), key=lambda x: -x[1])
-            logger.info(
-                f"[VOTE TRACE] pos={pos} align={align_from} winner='{best_char}' "
-                f"consensus={consensus:.3f} | "
-                + ", ".join(f"'{c}':{s:.4f}" for c, s in sorted_scores)
-            )
-
-        result_chars.append(best_char)
-        total_consensus += consensus
-        positions_voted += 1
-
-    candidate = "".join(result_chars)
-    avg_consensus = total_consensus / positions_voted if positions_voted > 0 else 0.0
-    return candidate, avg_consensus
-
-
-def _resolve_plate(ts: TrackState, min_reads: int = 3, soft_min_reads: int = 2, soft_conf: float = 0.85):
-    """
-    Character-position voting for plate resolution.
-
-    Each character-position vote is weighted by (ocr_confidence * normalised_crop_area)
-    so reads from larger (closer) plate crops outweigh reads from small/distant crops.
-
-    Resolution paths:
-    1. Single read >= 0.99 confidence → immediate resolve
-    2. >= min_reads total reads → character-position voting with alignment
-    3. >= soft_min_reads AND any read >= soft_conf → soft resolution (lower confidence threshold)
-    4. Otherwise → not enough data
+    This does NOT invent a sharpness threshold for you. sharpness_floor
+    defaults to None (behaves like plain position-voting over all reads)
+    until you measure your own crops -- see TESTING.md.
     """
     if not ts.plate_reads:
         return
 
-    # Path 1: High-confidence single read
     for r in ts.plate_reads:
-        if r.confidence >= 0.99:
+        if r.confidence >= high_conf:
             ts.resolved_text = _normalize(r.text)
             ts.resolved_conf = r.confidence
+            ts.resolution_method = "high_conf"
             return
 
-    total = len(ts.plate_reads)
-    if total < soft_min_reads:
+    reads = ts.plate_reads
+    method = "position_vote_all"
+    if sharpness_floor is not None:
+        sharp = [r for r in reads if r.sharpness >= sharpness_floor]
+        if len(sharp) >= min_sharp_reads:
+            reads = sharp
+            method = "position_vote_sharp"
+
+    if len(reads) < min_reads:
         return
 
-    # Path 2: Character-position voting with crop-size weighting
-    if total >= min_reads:
-        candidates = []
-        # Emit vote trace at position 4 (the confirmed M-vs-N battleground on Track 7)
-        for align_from in ["start", "end"]:
-            candidate, consensus = _position_vote(
-                ts.plate_reads, align_from,
-                max_crop_area=ts.max_crop_area,
-                verbose_pos=4,  # trace position 4 so we can verify M wins
-            )
-            if candidate and len(candidate) >= 6:
-                candidates.append((candidate, consensus, align_from))
+    # Character-position voting, confidence-weighted.
+    positions: Dict[int, Counter] = {}
+    for r in reads:
+        t = _normalize(r.text)
+        for i, ch in enumerate(t):
+            positions.setdefault(i, Counter())
+            positions[i][ch] += r.confidence
 
-        if candidates:
-            best = max(candidates, key=lambda c: c[1])
-            candidate, consensus, align_from = best
-            ts.resolved_text = candidate
-            ts.resolved_conf = consensus
-            logger.info(
-                f"[RESOLVED] Track {ts.track_id}: '{candidate}' consensus={consensus:.3f} "
-                f"via {align_from}-align, {total} reads, max_crop_area={ts.max_crop_area}"
-            )
-            return
+    if not positions:
+        return
 
-    # Path 3: Soft resolution — fewer reads but high confidence
-    # Only if at least one read has confidence >= soft_conf
-    has_high_conf = any(r.confidence >= soft_conf for r in ts.plate_reads)
-    if has_high_conf and total >= soft_min_reads:
-        # Use the highest-confidence read as-is (no voting, too few reads)
-        best_read = max(ts.plate_reads, key=lambda r: r.confidence)
-        ts.resolved_text = _normalize(best_read.text)
-        ts.resolved_conf = best_read.confidence * 0.8  # Penalize for low read count
+    length = max(positions.keys()) + 1
+    resolved_chars = []
+    ambiguous = []
+    for i in range(length):
+        counter = positions.get(i)
+        if not counter:
+            resolved_chars.append("?")
+            continue
+        ranked = counter.most_common(2)
+        resolved_chars.append(ranked[0][0])
+        if len(ranked) > 1:
+            top_w, second_w = ranked[0][1], ranked[1][1]
+            if top_w > 0 and (top_w - second_w) / top_w < 0.15:
+                ambiguous.append(i)
+
+    ts.resolved_text = "".join(resolved_chars)
+    ts.resolved_conf = sum(r.confidence for r in reads) / len(reads)
+    ts.resolution_method = method
+    ts.ambiguous_positions = ambiguous
 
 
 class ANPRTrackedProcessor:
@@ -255,6 +217,7 @@ class ANPRTrackedProcessor:
         db_url: Optional[str] = None,
         camera_id: str = "cam01",
         evidence_dir: Optional[str] = None,
+        sharpness_floor: Optional[float] = None,
     ):
         self.video_path = video_path
         self.output_path = output_path
@@ -266,6 +229,7 @@ class ANPRTrackedProcessor:
         self.db_url = db_url
         self.camera_id = camera_id
         self.evidence_dir = evidence_dir or str(Path(output_path).parent / "anpr_evidence")
+        self.sharpness_floor = sharpness_floor
         self.vehicle_detector = None
         self.plate_detector = None
         self.ocr_engine = None
@@ -280,13 +244,12 @@ class ANPRTrackedProcessor:
             per_class_thresholds=PER_CLASS_CONF_THRESHOLDS,
         )
         self.plate_detector = PlateDetector(confidence_threshold=self.conf_plate)
-        self.ocr_engine = OnnxOCREngine.get_instance()
+        self.ocr_engine = get_plate_recognizer() or PaddleOCREngine.get_instance()
         self.tracker = ByteTracker(high_thresh=0.10)
         os.makedirs(self.evidence_dir, exist_ok=True)
         os.makedirs(str(Path(self.output_path).parent), exist_ok=True)
         if self.db_url:
             logger.info("DB watchlist wiring requested (--db-url)")
-
 
     def _process_frame(self, frame, frame_idx):
         annotated = frame.copy()
@@ -298,9 +261,11 @@ class ANPRTrackedProcessor:
         ]
         tracks = self.tracker.update(det_dicts)
 
-        # Plate detection on FULL FRAME — now every frame since GPU is fast enough.
-        # Previous plate_interval=5 caused short tracks to never accumulate enough reads.
-        frame_plates = self.plate_detector.detect(frame)
+        # Plate detection on FULL FRAME every N frames.
+        # The plate detector works on full-frame input; upscaling a small
+        # vehicle crop distorts aspect ratio and yields zero detections.
+        do_detect = frame_idx % self.plate_interval == 0
+        frame_plates = self.plate_detector.detect(frame) if do_detect else []
 
         for trk in tracks:
             tid = trk["track_id"]
@@ -310,10 +275,7 @@ class ANPRTrackedProcessor:
                     color=tuple(int(c) for c in trk["color"]), first_seen=frame_idx)
             ts = self.track_states[tid]
             ts.last_seen = frame_idx
-            ts.vehicle_class = trk["class_name"]
-            # Diagnosis capture: raw per-frame class sequence + bbox area
-            ts.class_history.append((frame_idx, trk["class_name"], trk["confidence"]))
-            ts.bbox_areas.append(float((trk["bbox"][2] - trk["bbox"][0]) * (trk["bbox"][3] - trk["bbox"][1])))
+            ts.vehicle_class = trk["class_name"]  # refresh from rolling class vote every frame
             vbbox = trk["bbox"]
             vx1, vy1, vx2, vy2 = (int(c) for c in vbbox)
             vw, vh = vx2 - vx1, vy2 - vy1
@@ -322,31 +284,23 @@ class ANPRTrackedProcessor:
                 continue
 
             plate_bbox, ocr_result, crop, plate_conf = None, None, None, 0.0
-            plate_bbox, ocr_result, crop, plate_conf = self._associate_plate(
-                frame, vbbox, ts, frame_plates)
+            if do_detect:
+                plate_bbox, ocr_result, crop, plate_conf = self._associate_plate(
+                    frame, vbbox, ts, frame_plates)
+            else:
+                plate_bbox = self._reproject_plate(ts, vx1, vy1, vw, vh)
+                if plate_bbox:
+                    crop = self._crop_plate(frame, plate_bbox)
+                    if crop is not None and crop.size > 0:
+                        ocr_result = self.ocr_engine.read_plate(crop)
 
             if ocr_result and ocr_result.plate_text:
-                # Compute plate crop area from the plate_bbox returned by _associate_plate.
-                # plate_bbox is (bx1, by1, bx2, by2) in original frame coordinates.
-                if plate_bbox is not None:
-                    bx1, by1, bx2, by2 = plate_bbox
-                    pad = max(3, int((bx2 - bx1) * 0.15))
-                    fh, fw = frame.shape[:2]
-                    pcrop_h = max(0, min(fh, by2 + pad) - max(0, by1 - pad))
-                    pcrop_w = max(0, min(fw, bx2 + pad) - max(0, bx1 - pad))
-                    area = pcrop_h * pcrop_w
-                else:
-                    area = 0
+                read_sharpness = getattr(ocr_result, "sharpness", 0.0) or _sharpness(crop)
                 ts.plate_reads.append(
-                    PlateRead(ocr_result.plate_text, ocr_result.confidence, frame_idx, area))
-                # Track max crop area for this track (used to normalise voting weight)
-                if area > ts.max_crop_area:
-                    ts.max_crop_area = area
-                _resolve_plate(ts)
-                vehicle_crop = frame[max(0, vy1):vy2, max(0, vx1):vx2]
-                self._update_best_frame(ts, vehicle_crop, ocr_result.confidence,
-                                        plate_conf, frame_idx,
-                                        plate_crop=crop, ocr_text=ocr_result.plate_text)
+                    PlateRead(ocr_result.plate_text, ocr_result.confidence,
+                               frame_idx, read_sharpness))
+                _resolve_plate_v2(ts, sharpness_floor=self.sharpness_floor)
+                self._update_best_frame(ts, crop, ocr_result.confidence, plate_conf, frame_idx)
 
             self._draw(annotated, trk, ts, plate_bbox)
 
@@ -388,7 +342,6 @@ class ANPRTrackedProcessor:
         ocr_result = self.ocr_engine.read_plate(pcrop) if pcrop.size > 0 else None
         return plate_bbox, ocr_result, pcrop, best.confidence
 
-
     def _reproject_plate(self, ts, vx1, vy1, vw, vh):
         if ts.rel_offset is None:
             return None
@@ -405,7 +358,7 @@ class ANPRTrackedProcessor:
             return None
         return frame[y1:y2, x1:x2]
 
-    def _update_best_frame(self, ts, crop, ocr_conf, plate_conf, frame_idx, plate_crop=None, ocr_text=None):
+    def _update_best_frame(self, ts, crop, ocr_conf, plate_conf, frame_idx):
         if crop is None or crop.size == 0:
             return
         score = ocr_conf * max(plate_conf, 0.01)
@@ -414,27 +367,7 @@ class ANPRTrackedProcessor:
             ts.best_score = score
             ts.best_sharpness = sh
             fname = f"track{ts.track_id}_best.jpg"
-            # Judge-presentable composite: vehicle crop with bounding box +
-            # OCR reading overlaid, and the plate crop (2x zoom) appended
-            # underneath so a single image tells the whole story.
-            vis = crop.copy()
-            cv2.rectangle(vis, (0, 0), (vis.shape[1] - 1, vis.shape[0] - 1), ts.color, 3)
-            hdr = f"ID:{ts.track_id} {ts.vehicle_class}  f{frame_idx}"
-            ocr_line = f"OCR: {ocr_text if ocr_text else '-'} ({ocr_conf:.2f})"
-            cv2.rectangle(vis, (0, 0), (vis.shape[1], 58), (0, 0, 0), -1)
-            cv2.putText(vis, hdr, (6, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-            cv2.putText(vis, ocr_line, (6, 48), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-            panels = [vis]
-            if plate_crop is not None and plate_crop.size > 0:
-                pz = cv2.resize(plate_crop, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
-                maxw = max(vis.shape[1], pz.shape[1])
-                pz = cv2.copyMakeBorder(pz, 0, 0, 0, max(0, maxw - pz.shape[1]),
-                                        cv2.BORDER_CONSTANT, value=(30, 30, 30))
-                vis = cv2.copyMakeBorder(vis, 0, 0, 0, max(0, maxw - vis.shape[1]),
-                                         cv2.BORDER_CONSTANT, value=(30, 30, 30))
-                panels = [vis, pz]
-            composite = np.vstack(panels)
-            cv2.imwrite(os.path.join(self.evidence_dir, fname), composite)
+            cv2.imwrite(os.path.join(self.evidence_dir, fname), crop)
             ts.best_crop_path = fname
             ts.best_frame = frame_idx
 
@@ -444,28 +377,13 @@ class ANPRTrackedProcessor:
         cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
         label = f"ID:{ts.track_id} {ts.vehicle_class}"
         if ts.resolved_text:
-            label += f" [{ts.resolved_text}]"
+            marker = "?" if ts.ambiguous_positions else ""
+            label += f" [{ts.resolved_text}{marker}]"
         cv2.putText(frame, label, (x1, max(24, y1 - 6)),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
         if plate_bbox:
             px1, py1, px2, py2 = (int(c) for c in plate_bbox)
             cv2.rectangle(frame, (px1, py1), (px2, py2), (0, 255, 255), 1)
-            # Plate text label near the plate box: resolved text only, or a
-            # stable "reading..." while aggregation is in progress (no
-            # single-frame guesses, so the overlay doesn't flicker garbage).
-            if ts.resolved_text:
-                ptxt = ts.resolved_text
-                pcolor = (0, 255, 255)
-            elif ts.plate_reads:
-                ptxt = "reading..."
-                pcolor = (200, 200, 200)
-            else:
-                ptxt = None
-            if ptxt:
-                py = py1 - 8 if py1 - 8 > 20 else py2 + 22
-                cv2.putText(frame, ptxt, (px1, py),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, pcolor, 2)
-
 
     def run(self):
         self._init_models()
@@ -505,38 +423,7 @@ class ANPRTrackedProcessor:
 
     def _write_evidence(self, elapsed, inf_fps, total_frames, fps):
         records = []
-        all_tracks = []
-
-        # ── Car->Bus diagnosis dump ────────────────────────────────
-        # For every track that ended up labeled "Bus", print the raw
-        # per-frame class/conf sequence and avg bbox area so we can
-        # compare against GEOMETRIC_AREA_RANGES.
         for tid, ts in sorted(self.track_states.items()):
-            if ts.vehicle_class != "Bus":
-                continue
-            avg_area = (sum(ts.bbox_areas) / len(ts.bbox_areas)) if ts.bbox_areas else 0.0
-            seq = " | ".join(f"f{f}:{c[:2]}{int(cf*100)}" for f, c, cf in ts.class_history[:40])
-            logger.info(
-                f"[BUS-DIAG] track {tid}: avg_bbox_area={avg_area:.0f} "
-                f"(Car range 8000-50000, Bus range 30000-200000) "
-                f"frames={len(ts.class_history)} "
-                f"seq={seq}"
-            )
-        for tid, ts in sorted(self.track_states.items()):
-            # ALL confirmed tracks (Issue 5) — enables recall measurement
-            all_tracks.append({
-                "track_id": tid,
-                "vehicle_class": ts.vehicle_class,
-                "resolved_plate": ts.resolved_text,
-                "first_seen_frame": ts.first_seen,
-                "last_seen_frame": ts.last_seen,
-                "dur_frames": ts.last_seen - ts.first_seen + 1,
-                "plate_attempted": len(ts.plate_reads) > 0,
-                "readings_count": len(ts.plate_reads),
-                "avg_bbox_area": round(sum(ts.bbox_areas) / len(ts.bbox_areas), 1) if ts.bbox_areas else 0.0,
-                "class_history": [[f, c, round(cf, 3)] for f, c, cf in ts.class_history],
-            })
-            # Detail records only for tracks with plate reads
             if not ts.plate_reads:
                 continue
             rec = {
@@ -544,6 +431,8 @@ class ANPRTrackedProcessor:
                 "vehicle_class": ts.vehicle_class,
                 "plate_text": ts.resolved_text,
                 "ocr_confidence": round(ts.resolved_conf, 4),
+                "resolution_method": ts.resolution_method,
+                "ambiguous_positions": ts.ambiguous_positions,
                 "first_seen_frame": ts.first_seen,
                 "last_seen_frame": ts.last_seen,
                 "first_seen_time_s": round(ts.first_seen / fps, 2),
@@ -552,8 +441,8 @@ class ANPRTrackedProcessor:
                 "best_crop_path": os.path.join(self.evidence_dir, ts.best_crop_path) if ts.best_crop_path else None,
                 "best_frame": getattr(ts, "best_frame", None),
                 "readings_count": len(ts.plate_reads),
-                "all_reads": [{"text": r.text, "conf": round(r.confidence, 4), "frame": r.frame_idx,
-                              "crop_area": r.crop_area}
+                "all_reads": [{"text": r.text, "conf": round(r.confidence, 4),
+                               "frame": r.frame_idx, "sharpness": round(r.sharpness, 2)}
                               for r in ts.plate_reads],
             }
             records.append(rec)
@@ -565,17 +454,13 @@ class ANPRTrackedProcessor:
             "total_frames": total_frames,
             "processing_time_s": round(elapsed, 2),
             "inference_fps": round(inf_fps, 2),
-            "total_tracks_detected": len(all_tracks),
-            "tracks_with_plate_reads": len(records),
-            "resolved_tracks": sum(1 for r in records if r.get("plate_text")),
-            "all_tracks": all_tracks,
-            "track_details": records,
+            "sharpness_floor_used": self.sharpness_floor,
+            "tracks": records,
         }
         epath = os.path.join(self.evidence_dir, "evidence.json")
         with open(epath, "w") as f:
             json.dump(evidence, f, indent=2)
         logger.info(f"Evidence written: {epath}")
-
 
     def _check_watchlist(self, ts):
         try:
@@ -604,6 +489,12 @@ def main():
                         help="Plate detection every N frames; re-project between")
     parser.add_argument("--conf-vehicle", type=float, default=0.10)
     parser.add_argument("--conf-plate", type=float, default=0.40)
+    parser.add_argument("--sharpness-floor", type=float, default=None,
+                        help="Min Laplacian variance for a read to count in "
+                             "voting when enough reads clear it. Leave unset "
+                             "until you've measured your own crops (see "
+                             "TESTING.md) -- an unvalidated guess here can "
+                             "hurt as easily as help.")
     parser.add_argument("--db-url", default=None, help="PostgreSQL URL for watchlist")
     parser.add_argument("--camera-id", default="cam01")
     args = parser.parse_args()
@@ -613,7 +504,7 @@ def main():
         process_stride=args.stride, max_frames=args.frames,
         conf_vehicle=args.conf_vehicle, conf_plate=args.conf_plate,
         plate_interval=args.plate_interval, db_url=args.db_url,
-        camera_id=args.camera_id,
+        camera_id=args.camera_id, sharpness_floor=args.sharpness_floor,
     )
     out = proc.run()
     print(f"\nAnnotated video: {out}")

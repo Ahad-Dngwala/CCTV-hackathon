@@ -233,9 +233,10 @@
     <div class="rec-hdr">
         <div>
             <h1>📼 Pre-Recorded Video AI Detection</h1>
-            <p>Upload surveillance footage, associate location, and process vehicle tracking with high-performance YOLOv8 &amp; OCR</p>
+            <p>Upload surveillance footage, associate location, and process vehicle tracking with high-performance YOLOv8 &amp; Fine-Tuned Indian PARSeq OCR</p>
         </div>
         <div class="hdr-pills">
+            <span class="pill" style="border-color:rgba(16,185,129,.35);"><span style="color:#34d399;">⚡ OCR Model:</span> <span class="v" style="color:#6ee7b7;">Fine-Tuned Indian PARSeq</span></span>
             <span class="pill"><span class="ws-dot" id="wsDot"></span><span id="wsLbl">Standby</span></span>
             <span class="pill">Speed: <span class="v" id="lblSpeed">1x</span></span>
             <span class="pill">Rate: <span class="v" id="lblFps">0.0 FPS</span></span>
@@ -327,7 +328,11 @@
                         <button id="btnStop" class="btn-act btn-stop" onclick="stopProcessing()" disabled>⏹ Stop</button>
                     </div>
                     <div style="display:flex; align-items:center; gap:.75rem;">
-                        <span style="font-size:.78rem; color:#94a3b8; font-weight:600;">Processing Rate:</span>
+                        <span style="font-size:.78rem; color:#94a3b8; font-weight:600;">ANPR Rate (FPS):</span>
+                        <input type="range" id="anprRate" min="1" max="25" value="5" style="width: 80px;" oninput="document.getElementById('anprRateVal').textContent = this.value">
+                        <span id="anprRateVal" style="font-size:.75rem; color:#38bdf8; font-weight:700; min-width:1rem;">5</span>
+                        
+                        <span style="font-size:.78rem; color:#94a3b8; font-weight:600; margin-left:1rem;">Processing Rate:</span>
                         <div class="speed-grp">
                             <button class="btn-spd active" id="spd-1x" onclick="setSpeed('1x')">1x</button>
                             <button class="btn-spd" id="spd-2x" onclick="setSpeed('2x')">2x</button>
@@ -604,10 +609,11 @@ async function startProcessing() {
     if (!currentJobId) return;
 
     try {
+        const anprRate = parseInt(document.getElementById('anprRate').value, 10);
         const resp = await fetch('/api/v1/recorded/start', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ job_id: currentJobId, speed: selectedSpeed }),
+            body: JSON.stringify({ job_id: currentJobId, speed: selectedSpeed, anpr_rate: anprRate }),
         });
         if (!resp.ok) throw new Error('Start failed');
 
@@ -704,6 +710,9 @@ function handleWsMessage(msg) {
         case 'NEW_DETECTION':
             handleNewDetection(msg.data);
             break;
+        case 'SIGHTING_AGGREGATED':
+            handleSightingAggregated(msg.data);
+            break;
         case 'JOB_PROGRESS':
             handleJobProgress(msg.data);
             break;
@@ -782,15 +791,21 @@ function handleNewDetection(d) {
     else if (cname.includes('bus')) { counts.bus++; document.getElementById('cntBus').textContent = counts.bus; }
     else if (cname.includes('bike') || cname.includes('cycle') || cname.includes('motorcycle')) { counts.bike++; document.getElementById('cntBike').textContent = counts.bike; }
 
+    const plate      = d.detected_plate;
+    const isAlert    = !!(d.watchlist_match || d.alert_id);
+    const ocrConf    = d.ocr_confidence  != null ? Math.round(d.ocr_confidence * 100) : null;
+    const platConf   = d.plate_confidence != null ? Math.round(d.plate_confidence * 100) : null;
+    const readCount  = d.read_count || null;
+
     // Add card to real-time feed
-    const feed = document.getElementById('feedList');
+    const feed  = document.getElementById('feedList');
     const empty = document.getElementById('feedEmpty');
     if (empty) empty.style.display = 'none';
 
     const card = document.createElement('div');
-    card.className = 'rec-ec';
+    card.className = 'rec-ec' + (isAlert ? ' rec-ec--alert' : '');
     const badgeCls = BADGE_MAP[cname] || 'b-vehicle';
-    const emoji = EMOJI_MAP[cname] || '🚘';
+    const emoji    = EMOJI_MAP[cname] || '\ud83d\ude98';
 
     card.innerHTML = `
         <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -798,9 +813,13 @@ function handleNewDetection(d) {
             <span style="font-family:monospace; font-size:.72rem; color:#64748b;">${d.timestamp}</span>
         </div>
         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:.35rem; font-size:.76rem; color:#94a3b8;">
-            <span>Plate: <strong style="color:#38bdf8;">${d.detected_plate || '—'}</strong></span>
+            ${plate
+                ? `<span style="font-family:monospace;font-weight:700;color:${isAlert ? '#f87171' : '#38bdf8'};">🪪 ${plate}</span>`
+                : '<span style="color:#475569;font-style:italic;">Scanning plate…</span>'}
             <span>Conf: <strong style="color:#34d399;">${d.confidence}%</strong></span>
         </div>
+        ${isAlert ? '<div style="font-size:.7rem;font-weight:700;color:#f87171;margin-top:.25rem;">\ud83d\udea8 WATCHLIST MATCH</div>' : ''}
+        ${ocrConf != null ? `<div style="font-size:.68rem;color:#64748b;margin-top:.2rem;display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;">OCR <strong style="color:#34d399;">${ocrConf}%</strong> ·  Det <strong style="color:#a78bfa;">${platConf ?? '—'}%</strong>${readCount ? ' · ' + readCount + ' reads' : ''} ${d.anpr_provider ? `<span style="font-size:.62rem;color:#38bdf8;background:rgba(56,189,248,.12);padding:1px 4px;border-radius:2px;">${d.anpr_provider.replace('_', ' ')}</span>` : ''}</div>` : ''}
     `;
     feed.insertBefore(card, feed.firstChild);
     while (feed.children.length > 40) feed.removeChild(feed.lastChild);
@@ -809,33 +828,80 @@ function handleNewDetection(d) {
     prependAuditRow(d);
 }
 
+function handleSightingAggregated(d) {
+    // Find matching row in audit table and annotate it with final confirmed read_count
+    const ptsLabel = d.first_seen_ms != null ? ` @ ${(d.first_seen_ms / 1000).toFixed(1)}s` : '';
+    const msg = `\u2713 Confirmed: ${d.plate || '—'} (${d.read_count} reads${ptsLabel})`;
+    const feed = document.getElementById('feedList');
+    const pill = document.createElement('div');
+    pill.style.cssText = 'font-size:.7rem;color:#34d399;padding:.2rem .55rem;font-weight:600;border-left:2px solid #34d399;margin:.1rem 0;';
+    pill.textContent = msg;
+    feed.insertBefore(pill, feed.firstChild);
+    while (feed.children.length > 40) feed.removeChild(feed.lastChild);
+}
+
 function prependAuditRow(d) {
     const tbody = document.getElementById('auditTableBody');
     if (tbody.children.length === 1 && tbody.children[0].children.length === 1) {
         tbody.innerHTML = '';
     }
 
-    const cname = (d.class_name || '').toLowerCase();
-    const badgeCls = BADGE_MAP[cname] || 'b-vehicle';
-    const emoji = EMOJI_MAP[cname] || '🚘';
+    const cname       = (d.class_name || '').toLowerCase();
+    const badgeCls    = BADGE_MAP[cname] || 'b-vehicle';
+    const emoji       = EMOJI_MAP[cname] || '\ud83d\ude98';
+    const plate       = d.detected_plate;
+    const isAlert     = !!(d.watchlist_match || d.alert_id);
+    const ocrConf     = d.ocr_confidence  != null ? Math.round(d.ocr_confidence * 100) + '%' : null;
+    const platConf    = d.plate_confidence != null ? Math.round(d.plate_confidence * 100) + '%' : null;
+    const readCount   = d.read_count || null;
 
     const tr = document.createElement('tr');
     tr.style.background = 'rgba(56,189,248,.08)';
     setTimeout(() => tr.style.background = 'transparent', 2000);
 
     const cropImg = d.crop_path
-        ? `<img src="${d.crop_path}" onclick="openCropModal('${d.crop_path}', '${d.class_name} — ${d.detected_plate}')" style="width:48px;height:48px;border-radius:6px;object-fit:cover;cursor:pointer;border:1px solid rgba(255,255,255,.15);display:block;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
-           <div style="display:none;width:48px;height:48px;border-radius:6px;background:#1e293b;align-items:center;justify-content:center;font-size:1.2rem;">🚘</div>`
-        : `<div style="width:48px;height:48px;border-radius:6px;background:#1e293b;display:flex;align-items:center;justify-content:center;font-size:1.2rem;">🚘</div>`;
+        ? `<img src="${d.crop_path}" onclick="openCropModal('${d.crop_path}', '${d.class_name} \u2014 ${plate || 'Vehicle'}')" style="width:48px;height:48px;border-radius:6px;object-fit:cover;cursor:pointer;border:1px solid rgba(255,255,255,.15);display:block;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+           <div style="display:none;width:48px;height:48px;border-radius:6px;background:#1e293b;align-items:center;justify-content:center;font-size:1.2rem;">\ud83d\ude98</div>`
+        : `<div style="width:48px;height:48px;border-radius:6px;background:#1e293b;display:flex;align-items:center;justify-content:center;font-size:1.2rem;">\ud83d\ude98</div>`;
+
+    const plateCropThumb = d.plate_crop_path
+        ? `<img src="${d.plate_crop_path}" onclick="openCropModal('${d.plate_crop_path}', 'Plate: ${plate}')" loading="lazy"
+                style="width:64px;height:20px;object-fit:cover;border-radius:3px;border:1px solid rgba(14,165,233,.3);cursor:pointer;display:block;margin-top:3px;" onerror="this.style.display='none'">`
+        : '';
+
+    const plateHtml = plate
+        ? `<span style="display:inline-block; padding:.2rem .55rem; background:${isAlert ? 'rgba(239,68,68,.15)' : '#1e293b'};
+                  border:1px solid ${isAlert ? 'rgba(239,68,68,.45)' : 'rgba(255,255,255,.18)'};
+                  border-radius:4px; font-family:monospace; font-weight:700; letter-spacing:1px;
+                  color:${isAlert ? '#f87171' : '#38bdf8'};">🪪 ${plate}</span>${plateCropThumb}`
+        : '<span style="color:#475569;font-size:.78rem;">No plate read</span>';
+
+    const prov = d.anpr_provider ? `<span style="font-size:.64rem;color:#38bdf8;background:rgba(56,189,248,.12);padding:1px 4px;border-radius:3px;border:1px solid rgba(56,189,248,.25);width:fit-content;">${d.anpr_provider.replace('_', ' ').toUpperCase()}</span>` : '';
+    const ocrHtml = (ocrConf || platConf || prov)
+        ? `${ocrConf ? `<span style="font-size:.7rem;color:#64748b;">OCR <strong style="color:#34d399;">${ocrConf}</strong></span>` : ''}
+           ${platConf ? `<span style="font-size:.7rem;color:#64748b;">Det <strong style="color:#a78bfa;">${platConf}</strong></span>` : ''}
+           ${readCount ? `<span style="font-size:.68rem;color:#475569;">${readCount} reads</span>` : ''}
+           ${prov}`
+        : '<span style="color:#475569;font-size:.73rem;">—</span>';
+
+    const wlHtml = isAlert
+        ? '<span style="background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:#f87171;font-size:.7rem;font-weight:700;padding:.15rem .45rem;border-radius:5px;">\ud83d\udea8 MATCH</span>'
+        : '<span style="color:#334155;font-size:.73rem;">\u2014</span>';
+
+    const ptsHtml = d.pts_ms != null
+        ? `<span style="font-family:monospace;font-size:.72rem;color:#64748b;">${(d.pts_ms/1000).toFixed(1)}s</span>`
+        : '';
 
     tr.innerHTML = `
-        <td>${cropImg}</td>
-        <td style="font-family:monospace; color:#94a3b8; font-size:.8rem;">${d.timestamp}</td>
-        <td><span style="font-weight:600; color:#f1f5f9;">${d.camera_name || 'Recorded Video'}</span></td>
-        <td><span class="badge-v ${badgeCls}">${emoji} ${d.class_name}</span></td>
-        <td><span style="display:inline-block; padding:.2rem .55rem; background:#1e293b; border:1px solid rgba(255,255,255,.18); border-radius:4px; font-family:monospace; font-weight:700; letter-spacing:1px; color:#38bdf8;">${d.detected_plate || '—'}</span></td>
-        <td style="font-family:monospace; font-size:.75rem; color:#94a3b8;">${d.vehicle_track_id ? d.vehicle_track_id.substring(0,8) + '…' : '—'}</td>
-        <td><span style="color:#34d399; font-weight:700;">${d.confidence}%</span></td>
+        <td style="padding:.65rem .85rem;">${cropImg}</td>
+        <td style="padding:.65rem .85rem; font-family:monospace; color:#94a3b8; font-size:.78rem;">${d.timestamp}${ptsHtml ? '<br>' + ptsHtml : ''}</td>
+        <td style="padding:.65rem .85rem;"><span style="font-weight:600; color:#f1f5f9;">${d.camera_name || 'Recorded'}</span></td>
+        <td style="padding:.65rem .85rem;"><span class="badge-v ${badgeCls}">${emoji} ${d.class_name}</span></td>
+        <td style="padding:.65rem .85rem;">${plateHtml}</td>
+        <td style="padding:.65rem .85rem; display:flex; flex-direction:column; gap:.2rem;">${ocrHtml}</td>
+        <td style="padding:.65rem .85rem;">${wlHtml}</td>
+        <td style="padding:.65rem .85rem; font-family:monospace; font-size:.73rem; color:#94a3b8;">${d.vehicle_track_id ? d.vehicle_track_id.substring(0,8) + '\u2026' : '\u2014'}</td>
+        <td style="padding:.65rem .85rem;"><span style="color:#34d399; font-weight:700;">${d.confidence}%</span></td>
     `;
     tbody.insertBefore(tr, tbody.firstChild);
     while (tbody.children.length > 50) tbody.removeChild(tbody.lastChild);

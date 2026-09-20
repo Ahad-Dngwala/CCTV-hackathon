@@ -254,8 +254,10 @@
                             <th style="padding:.85rem 1rem;">Camera</th>
                             <th style="padding:.85rem 1rem;">Vehicle Class</th>
                             <th style="padding:.85rem 1rem;">License Plate</th>
+                            <th style="padding:.85rem 1rem;">OCR / Det Conf</th>
+                            <th style="padding:.85rem 1rem;">Watchlist</th>
                             <th style="padding:.85rem 1rem;">Global Track ID</th>
-                            <th style="padding:.85rem 1rem;">Confidence</th>
+                            <th style="padding:.85rem 1rem;">Det Conf</th>
                         </tr>
                     </thead>
                     <tbody id="reportBody">
@@ -531,14 +533,21 @@ function renderEvent(d, prepend = true) {
     if (d.camera_tag === 'cam04') { cnt04++; eCam04.textContent = cnt04; }
     else { cnt22++; eCam22.textContent = cnt22; }
 
-    const cls   = (d.class_name || 'vehicle').toLowerCase();
-    const badge = BADGE_MAP[cls] || 'b-vehicle';
-    const emoji = EMOJI_MAP[cls] || '🚘';
-    const cam   = d.camera_tag === 'cam04' ? '📍 Cam 04 — Paldi' : '📍 Cam 22 — BK Mervada';
-    const isAlert = !!d.alert;
+    const cls       = (d.class_name || 'vehicle').toLowerCase();
+    const badge     = BADGE_MAP[cls] || 'b-vehicle';
+    const emoji     = EMOJI_MAP[cls] || '🚘';
+    const cam       = d.camera_tag === 'cam04' ? '📍 Cam 04 — Paldi' : '📍 Cam 22 — BK Mervada';
+    const isAlert   = !!(d.watchlist_match || d.alert);
+    const plate     = d.detected_plate;
+    const ocrConf   = d.ocr_confidence  != null ? Math.round(d.ocr_confidence * 100) : null;
+    const platConf  = d.plate_confidence != null ? Math.round(d.plate_confidence * 100) : null;
+    const provider  = d.anpr_provider;
+    const platCrop  = d.plate_crop_path;
 
     const card = document.createElement('div');
     card.className = 'ec' + (isAlert ? ' ec--alert' : '');
+
+    // Build using DOM methods for XSS safety
     card.innerHTML = `
         <div class="ec-r1">
             <span class="ec-badge ${badge}">${emoji} ${d.class_name || 'Vehicle'} #${d.track_id || ''}</span>
@@ -550,12 +559,36 @@ function renderEvent(d, prepend = true) {
         <div class="ec-conf">Confidence: <strong>${d.confidence ?? '—'}%</strong>
             ${isAlert ? '<span style="color:#f87171;font-size:.7rem;margin-left:.5rem;font-weight:700;">🚨 WATCHLIST</span>' : ''}
         </div>
+        ${plate ? `
+        <div style="margin-top:.4rem; display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;">
+            <span style="background:rgba(14,165,233,.15); border:1px solid rgba(14,165,233,.4);
+                         color:#38bdf8; font-family:monospace; font-size:.8rem; font-weight:800;
+                         letter-spacing:.08em; padding:.18rem .55rem; border-radius:6px;
+                         ${isAlert ? 'background:rgba(239,68,68,.2); border-color:rgba(239,68,68,.55); color:#f87171;' : ''}">
+                🪪 ${plate}
+            </span>
+            ${ocrConf != null ? `<span style="font-size:.68rem; color:#64748b;">OCR&nbsp;<strong style="color:#34d399;">${ocrConf}%</strong></span>` : ''}
+            ${platConf != null ? `<span style="font-size:.68rem; color:#64748b;">Det&nbsp;<strong style="color:#a78bfa;">${platConf}%</strong></span>` : ''}
+            ${provider ? `<span style="font-size:.65rem; color:#475569; font-style:italic;">${provider}</span>` : ''}
+        </div>` : `
+        <div style="margin-top:.35rem; font-size:.7rem; color:#475569; font-style:italic;">
+            Scanning plate…
+        </div>`}
+        ${platCrop ? `
+        <div style="margin-top:.4rem;">
+            <img src="${platCrop}" loading="lazy" alt="plate crop"
+                 style="max-width:100%; height:28px; object-fit:cover; border-radius:4px;
+                        border:1px solid rgba(14,165,233,.3); cursor:pointer;"
+                 onclick="showCropModal('${platCrop}', '${plate || 'Plate'}')" />
+        </div>` : ''}
     `;
+
     if (prepend) evtsList.insertBefore(card, evtsList.firstChild);
     else evtsList.appendChild(card);
 
     while (evtsList.children.length > 60) evtsList.removeChild(evtsList.lastChild);
 }
+
 
 function clearFeed() {
     while (evtsList.firstChild) evtsList.removeChild(evtsList.firstChild);
@@ -698,22 +731,51 @@ function createReportRow(d) {
     tr.onmouseenter = () => tr.style.background = 'rgba(255,255,255,.03)';
     tr.onmouseleave = () => tr.style.background = 'transparent';
 
+    const isWatchlisted = !!(d.watchlist_match || d.alert_id);
+
     const cropImg = d.crop_path
         ? `<img src="${d.crop_path}" onclick="openCropModal('${d.crop_path}', '${d.vehicle_type || 'Vehicle'} — ${d.detected_plate}')" style="width:48px;height:48px;border-radius:6px;object-fit:cover;cursor:pointer;border:1px solid rgba(255,255,255,.15);display:block;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
            <div style="display:none;width:48px;height:48px;border-radius:6px;background:#1e293b;align-items:center;justify-content:center;font-size:1.2rem;">🚘</div>`
         : `<div style="width:48px;height:48px;border-radius:6px;background:#1e293b;display:flex;align-items:center;justify-content:center;font-size:1.2rem;">🚘</div>`;
+
+    const plateCropThumb = d.plate_crop_path
+        ? `<img src="${d.plate_crop_path}" onclick="openCropModal('${d.plate_crop_path}', 'Plate: ${d.detected_plate}')" loading="lazy"
+                style="width:64px;height:20px;object-fit:cover;border-radius:3px;border:1px solid rgba(14,165,233,.3);cursor:pointer;display:block;margin-top:3px;" onerror="this.style.display='none'">`
+        : '';
 
     const vtype = d.vehicle_type || d.class_name || 'Vehicle';
     const cls = vtype.toLowerCase();
     const badge = BADGE_MAP[cls] || 'b-vehicle';
     const emoji = EMOJI_MAP[cls] || '🚘';
 
+    const ocrConf  = d.ocr_confidence  != null ? Math.round(d.ocr_confidence * 100) + '%' : null;
+    const platConf = d.plate_confidence != null ? Math.round(d.plate_confidence * 100) + '%' : null;
+
+    const plateHtml = d.detected_plate && d.detected_plate !== '—'
+        ? `<span style="display:inline-block; padding:.2rem .55rem; background:${isWatchlisted ? 'rgba(239,68,68,.15)' : '#1e293b'};
+                  border:1px solid ${isWatchlisted ? 'rgba(239,68,68,.45)' : 'rgba(255,255,255,.18)'};
+                  border-radius:4px; font-family:monospace; font-weight:700; letter-spacing:1px;
+                  color:${isWatchlisted ? '#f87171' : '#38bdf8'};">🪪 ${d.detected_plate}</span>
+           ${plateCropThumb}`
+        : '<span style="color:#475569;font-size:.78rem;">No plate read</span>';
+
+    const ocrHtml = (ocrConf || platConf)
+        ? `${ocrConf ? `<span style="font-size:.73rem;color:#64748b;">OCR <strong style="color:#34d399;">${ocrConf}</strong></span>` : ''}
+           ${platConf ? `<span style="font-size:.73rem;color:#64748b;">Det <strong style="color:#a78bfa;">${platConf}</strong></span>` : ''}`
+        : '<span style="color:#475569;font-size:.73rem;">—</span>';
+
+    const wlHtml = isWatchlisted
+        ? '<span style="background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:#f87171;font-size:.7rem;font-weight:700;padding:.15rem .45rem;border-radius:5px;">🚨 MATCH</span>'
+        : '<span style="color:#334155;font-size:.73rem;">—</span>';
+
     tr.innerHTML = `
         <td style="padding:.75rem 1rem;">${cropImg}</td>
         <td style="padding:.75rem 1rem; font-family:monospace; color:#94a3b8; font-size:.8rem;">${d.timestamp}</td>
         <td style="padding:.75rem 1rem;"><span style="font-weight:600; color:#f1f5f9;">${d.camera_tag === 'cam04' ? '📷 Cam 04' : '📷 Cam 22'}</span><br><span style="font-size:.73rem; color:#64748b;">${d.camera_name || ''}</span></td>
         <td style="padding:.75rem 1rem;"><span class="ec-badge ${badge}">${emoji} ${vtype}</span></td>
-        <td style="padding:.75rem 1rem;"><span style="display:inline-block; padding:.2rem .55rem; background:#1e293b; border:1px solid rgba(255,255,255,.18); border-radius:4px; font-family:monospace; font-weight:700; letter-spacing:1px; color:#38bdf8;">${d.detected_plate || '—'}</span></td>
+        <td style="padding:.75rem 1rem;">${plateHtml}</td>
+        <td style="padding:.75rem 1rem; display:flex; flex-direction:column; gap:.25rem;">${ocrHtml}</td>
+        <td style="padding:.75rem 1rem;">${wlHtml}</td>
         <td style="padding:.75rem 1rem; font-family:monospace; font-size:.75rem; color:#94a3b8;">${d.vehicle_track_id && d.vehicle_track_id !== '—' ? d.vehicle_track_id.substring(0, 8) + '…' : '—'}</td>
         <td style="padding:.75rem 1rem;"><span style="color:#34d399; font-weight:700;">${d.confidence}%</span></td>
     `;

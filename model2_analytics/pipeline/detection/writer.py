@@ -291,3 +291,81 @@ class DetectionWriter:
             "crop_path":        crop_path,
             "plate_crop_path":  plate_crop_path,
         }
+
+    def update_sighting_plate(
+        self,
+        db: Session,
+        detection_id: str,
+        plate_result: object,
+        camera_uuid: uuid.UUID,
+        camera_name: str,
+        vehicle_class: str,
+    ):
+        """Update an existing detection record when a new best plate read is obtained."""
+        if not plate_result or not detection_id:
+            return
+
+        normalized = getattr(plate_result, "normalized_text", None) or getattr(plate_result, "plate_text", None)
+        plate_text = getattr(plate_result, "plate_text", "")
+        ocr_conf = getattr(plate_result, "confidence", 0.0)
+        plate_conf = getattr(plate_result, "detection_confidence", None)
+        provider = getattr(plate_result, "provider", "indian_parseq")
+        crop = getattr(plate_result, "crop", None)
+
+        plate_crop_path = None
+        if crop is not None and getattr(crop, "size", 0) > 0:
+            import cv2
+            fname = f"plate_{detection_id}.jpg"
+            dest_dir = Path(__file__).resolve().parents[2] / "detection-image"
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            cv2.imwrite(str(dest_dir / fname), crop)
+            plate_crop_path = f"/detection-image/{fname}"
+
+        # Check watchlist
+        watchlist_match = False
+        alert_id = None
+        if normalized:
+            try:
+                matcher = self._get_matcher()
+                matched, entry = matcher.match(normalized)
+                if matched and entry:
+                    watchlist_match = True
+                    alert_service = self._get_alert_service()
+                    alert_id = alert_service.raise_alert(
+                        db=db,
+                        camera_uuid=camera_uuid,
+                        detection_id=detection_id,
+                        plate_number=normalized,
+                        vehicle_type=vehicle_class,
+                        camera_name=camera_name,
+                        crop_path=plate_crop_path,
+                        watchlist_id=entry.get("id"),
+                    )
+            except Exception as e:
+                logger.warning(f"Watchlist check on update failed: {e}")
+
+        try:
+            db.execute(
+                text("""
+                    UPDATE detections SET
+                        detected_plate = :plate,
+                        ocr_confidence = :ocr_conf,
+                        plate_confidence = :plate_conf,
+                        plate_crop_path = COALESCE(:plate_crop_path, plate_crop_path),
+                        anpr_provider = :provider
+                    WHERE id = :id
+                """),
+                {
+                    "id": detection_id,
+                    "plate": normalized,
+                    "ocr_conf": round(float(ocr_conf), 4) if ocr_conf else None,
+                    "plate_conf": round(float(plate_conf), 4) if plate_conf else None,
+                    "plate_crop_path": plate_crop_path,
+                    "provider": provider,
+                }
+            )
+            db.commit()
+            logger.info(f"Updated detection {detection_id} with plate={normalized} (conf={ocr_conf:.2f}, prov={provider})")
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Failed to update detection {detection_id} plate: {e}")

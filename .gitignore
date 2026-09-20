@@ -59,3 +59,7 @@ model2_analytics/pipeline/*.cache
 model2_analytics/pipeline/dataset.yaml
 demo_results/
 
+# ── Model 2 — OCR Fine-Tuning Experiments ──
+model2_analytics/experiments/
+
+

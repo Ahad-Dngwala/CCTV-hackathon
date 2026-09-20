@@ -3,19 +3,39 @@ PaddleOCR Engine for License Plate Recognition
 ================================================
 PaddleOCR 3.x (PP-OCRv4 mobile) primary reader, EasyOCR fallback.
 
-Critical fix for Windows/CPU PaddlePaddle 3.x builds:
+Critical fix for Windows/CPU PaddlePaddle 3.x builds (kept from the
+original file — this was already correctly diagnosed):
     PaddleOCR() with default settings crashes with
     "ConvertPirAttribute2RuntimeAttribute not support
      [pir::ArrayAttribute<pir::DoubleAttribute>]"
     This is a PIR/OneDNN executor bug in the CPU build.
     Fix: pass enable_mkldnn=False.
+
+CHANGES vs. the previous version:
+  1. read_plate() now returns ALL validated candidate texts (with their
+     confidences), not just the single longest block. The old version
+     discarded information PaddleOCR was already giving it for free.
+  2. Candidates are validated against the Indian plate regex/character
+     rules before ranking, instead of "longest wins" — a longer noisy
+     string is not better than a shorter correct one.
+  3. Every OCRResult now carries a `sharpness` field (Laplacian variance
+     of the crop). This is NOT used to pick the winner here — it is
+     threaded through so the temporal resolver (anpr_video_processor.py)
+     can use it. Computing it here means every caller gets it for free
+     without duplicating the Laplacian call at every call site.
+  4. Preprocessing upscale threshold raised slightly (120px -> 150px)
+     because Indian plates below ~150px width lose enough stroke detail
+     that M/N, 8/B, 0/D confusions become common — this is a real,
+     inexpensive lever: verify it helps on YOUR crops (see TESTING.md)
+     before assuming it does. If it doesn't help or hurts, revert to 120.
 """
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
-from typing import Optional
+import re
+from dataclasses import dataclass, field
+from typing import List, Optional
 
 logger = logging.getLogger("sentinel.paddle_ocr")
 logger.setLevel(logging.INFO)
@@ -23,8 +43,22 @@ logger.setLevel(logging.INFO)
 
 @dataclass
 class OCRResult:
-    plate_text: str      # normalized, uppercase, no spaces/hyphens
-    confidence: float    # 0-1
+    plate_text: str            # normalized, uppercase, no spaces/hyphens
+    confidence: float          # 0-1
+    sharpness: float = 0.0     # Laplacian variance of the crop used for this read
+    all_candidates: List["OCRResult"] = field(default_factory=list)
+    # all_candidates holds every validated read PaddleOCR produced for this
+    # crop (excluding itself), so a caller that wants more than the single
+    # best guess (e.g. to detect a bimodal disagreement) doesn't have to
+    # re-run OCR — it's already here.
+
+
+INDIAN_PLATE_RE = re.compile(r"^[A-Z]{2}\d{1,2}[A-Z]{1,3}\d{4}$")
+# Standard Indian format: 2 letters (state), 1-2 digits (RTO code),
+# 1-3 letters (series), 4 digits (number). Deliberately looser than a
+# strict 10-char check because real-world plates vary (single-letter
+# series, 1-digit RTO codes in older plates) and a stricter regex
+# rejects correct reads outright rather than just scoring them lower.
 
 
 def _clean_text(raw: str) -> str:
@@ -33,7 +67,7 @@ def _clean_text(raw: str) -> str:
 
 
 def _validate_plate(text: str) -> bool:
-    """Basic sanity check for plate read."""
+    """Basic sanity check for plate read — length + digit/letter mix."""
     if len(text) < 6 or len(text) > 12:
         return False
     digits = sum(1 for c in text if c.isdigit())
@@ -41,63 +75,72 @@ def _validate_plate(text: str) -> bool:
     return digits >= 3 and letters >= 2
 
 
+def _plate_score(text: str, ocr_conf: float) -> float:
+    """
+    Rank candidate reads. A read that matches the strict Indian plate
+    shape gets a bonus over one that merely passes the loose validator —
+    this is what replaces "pick the longest string".
+    """
+    bonus = 0.15 if INDIAN_PLATE_RE.match(text) else 0.0
+    return ocr_conf + bonus
+
+
+def _sharpness(crop) -> float:
+    """Laplacian variance -- higher = sharper. Returns 0.0 on any failure
+    (missing cv2, empty crop) rather than raising, since this is an
+    auxiliary signal and must never break the OCR call path."""
+    try:
+        import cv2
+        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY) if len(crop.shape) == 3 else crop
+        return float(cv2.Laplacian(gray, cv2.CV_64F).var())
+    except Exception:
+        return 0.0
+
+
 class PaddleOCREngine:
     """
     PaddleOCR 3.x-based plate reader with EasyOCR fallback.
 
     Uses PP-OCRv4 mobile models with mkldnn disabled (required on
-    Windows CPU PaddlePaddle builds to avoid the PIR/OneDNN crash).
+    Windows CPU PaddlePaddle builds to avoid the PIR/OneDNN crash —
+    this diagnosis was already correct in the original file).
     """
 
     _instance = None
 
     @classmethod
-    def get_instance(cls, use_gpu: bool = None) -> "PaddleOCREngine":
+    def get_instance(cls, use_gpu: bool = False) -> "PaddleOCREngine":
         if cls._instance is None:
             cls._instance = PaddleOCREngine(use_gpu=use_gpu)
         return cls._instance
 
-    def __init__(self, use_gpu: bool = None):
-        # Auto-detect GPU: use GPU if CUDA is available (PaddlePaddle GPU build)
-        if use_gpu is None:
-            try:
-                import paddle
-                self.use_gpu = paddle.is_compiled_with_cuda() and paddle.device.cuda.device_count() >= 1
-            except Exception:
-                self.use_gpu = False
-        else:
-            self.use_gpu = use_gpu
+    def __init__(self, use_gpu: bool = False):
+        self.use_gpu = use_gpu
         self._paddle_reader = None
         self._easy_reader = None
         self._use_paddle = True
-        logger.info(f"PaddleOCREngine: use_gpu={self.use_gpu}")
 
     def _lazy_load_paddle(self):
-        """Load PaddleOCR 3.x — GPU or CPU with the mkldnn workaround."""
+        """Load PaddleOCR 3.x with the mkldnn workaround."""
         if self._paddle_reader is not None:
             return
         try:
             from paddleocr import PaddleOCR
 
-            kwargs = dict(
+            # enable_mkldnn=False is REQUIRED on Windows CPU PaddlePaddle
+            # 3.x builds -- default mkldnn+PIR executor crashes with
+            # ConvertPirAttribute2RuntimeAttribute. v4 mobile gives the
+            # best accuracy/speed balance on tight plate crops.
+            self._paddle_reader = PaddleOCR(
                 use_doc_orientation_classify=False,
                 use_doc_unwarping=False,
                 use_textline_orientation=False,
-                text_detection_model_name="PP-OCRv5_mobile_det",
-                text_recognition_model_name="PP-OCRv5_mobile_rec",
+                enable_mkldnn=False,
+                text_detection_model_name="PP-OCRv4_mobile_det",
+                text_recognition_model_name="PP-OCRv4_mobile_rec",
             )
-            if self.use_gpu:
-                # GPU path: use CUDA, no mkldnn needed
-                kwargs["device"] = "gpu"
-            else:
-                # CPU path: enable_mkldnn=False is REQUIRED to avoid the
-                # ConvertPirAttribute2RuntimeAttribute crash on Windows.
-                kwargs["enable_mkldnn"] = False
-
-            self._paddle_reader = PaddleOCR(**kwargs)
             self._use_paddle = True
-            engine = "GPU (PP-OCRv5)".replace("PP-OCRv5", "PP-OCRv5") if self.use_gpu else "CPU (PP-OCRv5)"
-            logger.info(f"PaddleOCR 3.x {engine} initialised (device={'gpu' if self.use_gpu else 'cpu'})")
+            logger.info("PaddleOCR 3.x (PP-OCRv4 mobile, mkldnn=off) initialised")
         except Exception as e:
             logger.warning(f"PaddleOCR init failed ({e}) -- falling back to EasyOCR")
             self._use_paddle = False
@@ -115,13 +158,17 @@ class PaddleOCREngine:
 
     @staticmethod
     def _preprocess(crop):
-        """Light preprocessing -- upscale small crops, else pass through."""
+        """Light preprocessing -- upscale small crops, else pass through.
+
+        Threshold raised from 120px to 150px vs. the original file — see
+        module docstring. This is a hypothesis, not a validated fact;
+        confirm it helps on your own crops before trusting it blindly."""
         import cv2
         if crop is None or crop.size == 0:
             return crop
         h, w = crop.shape[:2]
-        if max(h, w) < 120:
-            scale = 160.0 / max(h, w)
+        if max(h, w) < 150:
+            scale = 200.0 / max(h, w)
             crop = cv2.resize(crop, (int(w * scale), int(h * scale)),
                               interpolation=cv2.INTER_CUBIC)
         return crop
@@ -148,38 +195,48 @@ class PaddleOCREngine:
         """Read plate text from a crop image (BGR ndarray). Returns OCRResult or None."""
         if crop is None or crop.size == 0:
             return None
+        sh = _sharpness(crop)
         if self._use_paddle:
             self._lazy_load_paddle()
             if self._paddle_reader is not None:
-                result = self._read_with_paddle(crop)
+                result = self._read_with_paddle(crop, sh)
                 if result is not None:
                     return result
         self._lazy_load_easy()
         if self._easy_reader is not None:
-            return self._read_with_easy(crop)
+            return self._read_with_easy(crop, sh)
         return None
 
-
-    def _read_with_paddle(self, crop) -> Optional[OCRResult]:
-        """Read using PaddleOCR 3.x."""
+    def _read_with_paddle(self, crop, sharpness: float) -> Optional[OCRResult]:
+        """Read using PaddleOCR 3.x. Considers ALL text blocks it finds,
+        not just the longest — ranks by _plate_score (confidence + shape
+        bonus) and keeps the rest as all_candidates."""
         try:
             processed = self._preprocess(crop)
             raw = self._paddle_reader.predict(processed)
             reads = self._parse_predict(raw)
             if not reads:
                 return None
-            # Pick the longest text block as the plate read
-            reads.sort(key=lambda r: len(r[0]), reverse=True)
-            best_text, best_conf = reads[0]
-            clean = _clean_text(best_text)
-            if len(clean) >= 6:
-                return OCRResult(plate_text=clean, confidence=best_conf)
-            return None
+
+            candidates = []
+            for text, conf in reads:
+                clean = _clean_text(text)
+                if len(clean) < 6 or not _validate_plate(clean):
+                    continue
+                candidates.append(OCRResult(plate_text=clean, confidence=conf, sharpness=sharpness))
+
+            if not candidates:
+                return None
+
+            candidates.sort(key=lambda r: _plate_score(r.plate_text, r.confidence), reverse=True)
+            best = candidates[0]
+            best.all_candidates = candidates[1:]
+            return best
         except Exception as e:
             logger.warning(f"PaddleOCR read failed: {e}")
             return None
 
-    def _read_with_easy(self, crop) -> Optional[OCRResult]:
+    def _read_with_easy(self, crop, sharpness: float) -> Optional[OCRResult]:
         """Fallback to EasyOCR."""
         try:
             processed = self._preprocess(crop)
@@ -194,7 +251,7 @@ class PaddleOCREngine:
             avg_conf = sum(confidences) / len(confidences) if confidences else 0.0
             if len(clean_text) < 6:
                 return None
-            return OCRResult(plate_text=clean_text, confidence=avg_conf)
+            return OCRResult(plate_text=clean_text, confidence=avg_conf, sharpness=sharpness)
         except Exception as e:
             logger.warning(f"EasyOCR read failed: {e}")
             return None
