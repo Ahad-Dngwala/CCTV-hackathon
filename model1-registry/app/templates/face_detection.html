@@ -1,7 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Sentinel — Face Detection & Person Watchlist Surveillance{% endblock %}
+{% block title %}EyesOnGuj — Face Detection & Person Watchlist Surveillance{% endblock %}
 
 {% block head_extra %}
+{% import "components/icons.html" as icons %}
 <style>
 /* ══ Face Detection Surveillance Dashboard ══════════════════════════════ */
 .face-wrap { padding: 1.5rem; max-width: 1650px; margin: 0 auto; }
@@ -12,35 +13,36 @@
     flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;
 }
 .face-hdr h1 {
-    font-size: 1.75rem; font-weight: 800; color: #f8fafc;
-    margin: 0; display: flex; align-items: center; gap: .55rem;
+    font-size: 1.75rem; font-weight: 800; color: var(--text-primary);
+    margin: 0; display: flex; align-items: center; gap: .6rem;
 }
-.face-hdr p { color: #94a3b8; font-size: .875rem; margin: .2rem 0 0; }
+.face-hdr h1 .svg-icon { color: var(--accent); }
+.face-hdr p { color: var(--text-secondary); font-size: .875rem; margin: .2rem 0 0; }
 
 .hdr-pills { display: flex; gap: .65rem; flex-wrap: wrap; align-items: center; }
 .pill {
-    background: rgba(15,23,42,.75); border: 1px solid rgba(255,255,255,.1);
+    background: var(--bg-card); border: 1px solid var(--border-glass);
     border-radius: 9999px; padding: .3rem .85rem;
-    font-size: .8rem; font-weight: 600; color: #cbd5e1;
+    font-size: .8rem; font-weight: 600; color: var(--text-secondary);
     display: flex; align-items: center; gap: .4rem;
 }
-.pill .v { color: #38bdf8; font-weight: 800; }
+.pill .v { color: var(--accent); font-weight: 800; }
 .pill-match { border-color: rgba(239,68,68,.4); background: rgba(239,68,68,.12); }
-.pill-match .v { color: #ef4444; }
+.pill-match .v { color: var(--danger); }
 
 /* Glass Cards */
 .face-card {
-    background: #0f172a; border: 1px solid rgba(255,255,255,.08);
-    border-radius: 14px; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,.35);
+    background: var(--bg-card); border: 1px solid var(--border-glass);
+    border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-card);
     margin-bottom: 1.5rem;
 }
 .face-card-hdr {
-    padding: .9rem 1.25rem; background: rgba(15,23,42,.95);
-    border-bottom: 1px solid rgba(255,255,255,.07);
+    padding: .9rem 1.25rem; background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-subtle);
     display: flex; justify-content: space-between; align-items: center;
 }
 .face-card-title {
-    font-size: 1.05rem; font-weight: 700; color: #f8fafc;
+    font-size: 1.05rem; font-weight: 700; color: var(--text-primary);
     display: flex; align-items: center; gap: .5rem; margin: 0;
 }
 .face-card-body { padding: 1.25rem; }
@@ -52,59 +54,71 @@
 @media(max-width: 950px) { .upload-grid { grid-template-columns: 1fr; } }
 
 .dropzone {
-    border: 2px dashed rgba(56,189,248,.35); border-radius: 12px;
+    border: 2px dashed var(--border-subtle); border-radius: var(--radius-md);
     padding: 2rem 1.5rem; text-align: center; cursor: pointer;
-    background: rgba(15,23,42,.6); transition: border-color .2s, background .2s;
+    background: var(--bg-secondary); transition: border-color var(--transition-fast), background var(--transition-fast);
     display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 180px;
 }
 .dropzone:hover, .dropzone.dragover {
-    border-color: #38bdf8; background: rgba(56,189,248,.07);
+    border-color: var(--accent); background: var(--accent-glow);
 }
-.drop-icon { font-size: 2.5rem; margin-bottom: .6rem; }
-.drop-text { font-size: .95rem; font-weight: 600; color: #f1f5f9; margin-bottom: .25rem; }
-.drop-sub { font-size: .78rem; color: #64748b; }
+.drop-icon { color: var(--accent); margin-bottom: .6rem; display: flex; justify-content: center; }
+.drop-text { font-size: .95rem; font-weight: 600; color: var(--text-primary); margin-bottom: .25rem; }
+.drop-sub { font-size: .78rem; color: var(--text-muted); }
 
 .cam-selector-box { display: flex; flex-direction: column; gap: .85rem; justify-content: center; }
-.form-group label { display: block; font-size: .8rem; font-weight: 600; color: #94a3b8; margin-bottom: .35rem; }
+.form-group label { display: block; font-size: .8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: .35rem; }
 .form-input {
-    width: 100%; background: #1e293b; border: 1px solid rgba(255,255,255,.12);
-    border-radius: 8px; padding: .65rem .85rem; color: #f8fafc; font-size: .875rem;
+    width: 100%; background: var(--bg-secondary); border: 1px solid var(--border-glass);
+    border-radius: var(--radius-sm); padding: .65rem .85rem; color: var(--text-primary); font-size: .875rem;
+    color-scheme: dark;
+}
+.form-input option, select option, option {
+    background-color: #0f172a !important;
+    color: #f8fafc !important;
+    padding: 8px 12px;
+}
+[data-theme="light"] .form-input option,
+[data-theme="light"] select option,
+[data-theme="light"] option {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
 }
 
 /* Controls Bar */
 .ctrl-bar {
     display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;
-    gap: 1rem; margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid rgba(255,255,255,.07);
+    gap: 1rem; margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid var(--border-subtle);
 }
 .btn-group { display: flex; gap: .5rem; align-items: center; }
 .btn-face {
-    padding: .5rem 1.1rem; border-radius: 8px; font-size: .85rem; font-weight: 600;
-    cursor: pointer; display: flex; align-items: center; gap: .4rem; border: none; transition: opacity .2s;
+    padding: .5rem 1.1rem; border-radius: var(--radius-sm); font-size: .85rem; font-weight: 600;
+    cursor: pointer; display: flex; align-items: center; gap: .4rem; border: none; transition: opacity var(--transition-fast);
 }
 .btn-face:disabled { opacity: .4; cursor: not-allowed; }
-.btn-start { background: #10b981; color: #fff; }
-.btn-pause { background: #f59e0b; color: #fff; }
-.btn-stop { background: #ef4444; color: #fff; }
+.btn-start { background: var(--success); color: #fff; }
+.btn-pause { background: var(--warning); color: #fff; }
+.btn-stop { background: var(--danger); color: #fff; }
 
 /* Canvas Viewport */
 .viewport-wrap {
-    display: flex; flex-direction: column; align-items: center; background: #020617;
-    border-radius: 10px; overflow: hidden; position: relative; border: 1px solid rgba(255,255,255,.05);
+    display: flex; flex-direction: column; align-items: center; background: #000;
+    border-radius: var(--radius-md); overflow: hidden; position: relative; border: 1px solid var(--border-subtle);
 }
 #videoCanvas {
     max-width: 100%; max-height: 580px; width: auto; height: auto; display: block;
 }
 .canvas-placeholder {
-    padding: 7rem 2rem; text-align: center; color: #475569;
+    padding: 7rem 2rem; text-align: center; color: var(--text-muted);
 }
-.canvas-placeholder span { font-size: 3rem; display: block; margin-bottom: .5rem; }
+.canvas-placeholder span { font-size: 3rem; display: block; margin-bottom: .5rem; opacity: .7; }
 
 /* Progress bar */
 .progress-bar-wrap {
-    width: 100%; background: #1e293b; height: 8px; border-radius: 4px; overflow: hidden; margin-top: 1rem;
+    width: 100%; background: var(--bg-secondary); height: 8px; border-radius: 4px; overflow: hidden; margin-top: 1rem;
 }
 .progress-bar-fill {
-    height: 100%; background: linear-gradient(90deg, #38bdf8, #818cf8); width: 0%; transition: width .2s;
+    height: 100%; background: linear-gradient(90deg, var(--accent), #818cf8); width: 0%; transition: width .2s;
 }
 
 /* Live Alert Stream Cards */
@@ -112,36 +126,47 @@
     display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 1rem; margin-top: 1rem;
 }
 .alert-card {
-    background: #1e293b; border: 1px solid rgba(239,68,68,.3); border-radius: 12px;
+    background: var(--bg-secondary); border: 1px solid rgba(239,68,68,.35); border-radius: var(--radius-md);
     padding: 1rem; display: flex; flex-direction: column; gap: .75rem;
-    box-shadow: 0 4px 20px rgba(239,68,68,.15); position: relative; overflow: hidden;
+    box-shadow: 0 4px 20px rgba(239,68,68,.12); position: relative; overflow: hidden;
     animation: alertSlideIn .3s ease-out;
 }
 @keyframes alertSlideIn {
     from { opacity: 0; transform: translateY(12px); }
     to { opacity: 1; transform: translateY(0); }
 }
-.alert-card.missing { border-color: rgba(245,158,11,.4); box-shadow: 0 4px 20px rgba(245,158,11,.15); }
+.alert-card.missing { border-color: rgba(245,158,11,.4); box-shadow: 0 4px 20px rgba(245,158,11,.12); }
 
 .alert-imgs {
     display: flex; gap: .75rem; align-items: center; justify-content: space-around;
-    background: #0b1120; border-radius: 8px; padding: .65rem;
+    background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 8px; padding: .65rem;
 }
 .img-box {
     display: flex; flex-direction: column; align-items: center; gap: .25rem;
 }
 .img-box img {
     width: 96px; height: 96px; object-fit: cover; border-radius: 8px;
-    border: 2px solid rgba(255,255,255,.1);
+    border: 1px solid var(--border-glass);
 }
-.img-box span { font-size: .68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; }
+.img-box span { font-size: .68rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; }
 
 .badge-tag {
     padding: .2rem .55rem; border-radius: 4px; font-size: .72rem; font-weight: 800; text-transform: uppercase;
 }
-.badge-wanted { background: #ef4444; color: #fff; }
-.badge-missing { background: #f59e0b; color: #fff; }
+.badge-wanted { background: var(--danger); color: #fff; }
+.badge-missing { background: var(--warning); color: #fff; }
 .badge-suspect { background: #8b5cf6; color: #fff; }
+
+/* Match Confidence Meter */
+.conf-meter {
+    display: flex; align-items: center; gap: .5rem;
+}
+.conf-bar {
+    width: 60px; height: 6px; background: var(--bg-primary); border-radius: 3px; overflow: hidden;
+}
+.conf-fill {
+    height: 100%; border-radius: 3px;
+}
 </style>
 {% endblock %}
 
@@ -151,7 +176,7 @@
     <!-- Header -->
     <div class="face-hdr">
         <div>
-            <h1><span>🎯</span> Face Detection & Person Watchlist</h1>
+            <h1>{{ icons.icon("face", size=26) }} Face Detection &amp; Person Watchlist</h1>
             <p>Real-time facial recognition and suspect correlation against Gujarat Police Person Watchlist</p>
         </div>
         <div class="hdr-pills">
@@ -163,18 +188,18 @@
     </div>
 
     <!-- Top Grid: Ingestion & Playback Controls -->
-    <div class="face-card">
+    <div class="face-card hud-bracket">
         <div class="face-card-hdr">
-            <h2 class="face-card-title"><span>📼</span> Surveillance Video Source & Target Association</h2>
-            <span class="badge" id="jobBadge" style="background:#334155; color:#f8fafc; font-size:.75rem;">No Active Job</span>
+            <h2 class="face-card-title">{{ icons.icon("video", size=18) }} Surveillance Video Source &amp; Target Association</h2>
+            <span class="badge badge-subtle" id="jobBadge" style="font-size:.75rem;">No Active Job</span>
         </div>
         <div class="face-card-body">
             <div class="upload-grid">
                 <!-- Dropzone -->
                 <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
                     <input type="file" id="fileInput" accept=".mp4,.avi,.mov,.mkv,.webm" style="display:none;" onchange="handleFileSelect(this.files[0])">
-                    <div class="drop-icon" id="dropIcon">📁</div>
-                    <div class="drop-text" id="dropText">Drag & drop surveillance footage here or click to browse</div>
+                    <div class="drop-icon" id="dropIcon">{{ icons.icon("upload", size=32) }}</div>
+                    <div class="drop-text" id="dropText">Drag &amp; drop surveillance footage here or click to browse</div>
                     <div class="drop-sub">Supported formats: MP4, AVI, MOV, MKV, WebM (Max: 2 GB)</div>
                 </div>
 
@@ -183,9 +208,9 @@
                     <div class="form-group">
                         <label for="cameraSelect">Camera Source / Video Feed Origin:</label>
                         <select id="cameraSelect" class="form-input">
-                            <option value="prerecorded" selected>📁 Pre-recorded Video Upload (Schema ID: prerecorded)</option>
+                            <option value="prerecorded" selected>Pre-recorded Video Upload (Schema ID: prerecorded)</option>
                             {% for c in cameras %}
-                            <option value="{{ c.id }}">{{ c.name }} ({{ c.district }})</option>
+                            <option value="{{ c.id }}">{{ c.name }} ({{ c.district.name if c.district and c.district.name is defined else (c.location_label or 'Gujarat Grid') }})</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -194,12 +219,12 @@
                         <select id="speedSelect" class="form-input">
                             <option value="1x" selected>1x Real-Time (Smooth Pacing)</option>
                             <option value="2x">2x Fast Scan (Double Speed)</option>
-                            <option value="max">Max ⚡ (Highest GPU/CPU Throughput)</option>
+                            <option value="max">Max Throughput (Highest GPU/CPU Speed)</option>
                         </select>
                     </div>
-                    <div style="margin-top: .6rem; display: flex; align-items: center; gap: .5rem; font-size: .84rem; color: #cbd5e1;">
-                        <input type="checkbox" id="autoStartCheck" checked style="accent-color: #38bdf8; width: 16px; height: 16px; cursor: pointer;">
-                        <label for="autoStartCheck" style="cursor: pointer; margin-bottom: 0;">⚡ Auto-start face detection immediately upon upload</label>
+                    <div style="margin-top: .6rem; display: flex; align-items: center; gap: .5rem; font-size: .84rem; color: var(--text-secondary);">
+                        <input type="checkbox" id="autoStartCheck" checked style="accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer;">
+                        <label for="autoStartCheck" style="cursor: pointer; margin-bottom: 0;">Auto-start face detection immediately upon upload</label>
                     </div>
                 </div>
             </div>
@@ -208,20 +233,20 @@
             <div class="ctrl-bar">
                 <div class="btn-group">
                     <button type="button" class="btn-face btn-start" id="btnStart" onclick="startJob()" disabled>
-                        <span>▶</span> Start Detection
+                        Start Detection
                     </button>
                     <button type="button" class="btn-face btn-pause" id="btnPause" onclick="pauseJob()" disabled>
-                        <span>⏸</span> Pause
+                        Pause
                     </button>
                     <button type="button" class="btn-face btn-pause" id="btnResume" onclick="resumeJob()" style="display:none;">
-                        <span>▶</span> Resume
+                        Resume
                     </button>
                     <button type="button" class="btn-face btn-stop" id="btnStop" onclick="stopJob()" disabled>
-                        <span>⏹</span> Stop
+                        Stop
                     </button>
                 </div>
 
-                <div id="videoMetaText" style="color: #94a3b8; font-size: .82rem;">
+                <div id="videoMetaText" style="color: var(--text-muted); font-size: .82rem;">
                     Upload video to begin face recognition analysis
                 </div>
             </div>
@@ -229,19 +254,20 @@
     </div>
 
     <!-- Middle: Synchronized Video Viewport -->
-    <div class="face-card">
+    <div class="face-card hud-bracket">
         <div class="face-card-hdr">
-            <h2 class="face-card-title"><span>🖥️</span> Live Biometric Video Viewport (Face Boxes & Badges)</h2>
-            <span id="frameCounterText" style="font-size: .8rem; color: #94a3b8;">Frame: 0 / 0</span>
+            <h2 class="face-card-title">{{ icons.icon("live", size=18) }} Live Biometric Video Viewport (Face Boxes &amp; Badges)</h2>
+            <span id="frameCounterText" style="font-size: .8rem; color: var(--text-muted);">Frame: 0 / 0</span>
         </div>
         <div class="face-card-body" style="padding: 1rem;">
             <div class="viewport-wrap">
                 <div class="canvas-placeholder" id="canvasPlaceholder">
-                    <span>👤</span>
-                    <p style="font-size:1rem; font-weight:600; color:#94a3b8;">Surveillance stream awaiting upload</p>
-                    <p style="font-size:.8rem; color:#64748b;">Uploaded video will render here with facial bounding boxes</p>
+                    <div style="margin-bottom:.5rem; display:flex; justify-content:center;">{{ icons.icon("person", size=48) }}</div>
+                    <p style="font-size:1rem; font-weight:600; color:var(--text-secondary);">Surveillance stream awaiting upload</p>
+                    <p style="font-size:.8rem; color:var(--text-muted);">Uploaded video will render here with facial bounding boxes</p>
                 </div>
                 <canvas id="videoCanvas" style="display:none;"></canvas>
+                <div class="feed-scanline" style="pointer-events:none;"></div>
             </div>
 
             <!-- Progress bar -->
@@ -252,18 +278,27 @@
     </div>
 
     <!-- Bottom: Live Watchlist Match Alerts Feed -->
-    <div class="face-card">
+    <div class="face-card hud-bracket">
         <div class="face-card-hdr">
-            <h2 class="face-card-title"><span>🚨</span> Real-Time Watchlist Suspect Match Feed</h2>
-            <span style="font-size:.8rem; color:#94a3b8;">Auto-updated via WebSockets & PostgreSQL pgvector</span>
+            <h2 class="face-card-title">{{ icons.icon("alert", size=18) }} Real-Time Watchlist Suspect Match Feed</h2>
+            <span style="font-size:.8rem; color:var(--text-muted);">Auto-updated via WebSockets &amp; PostgreSQL pgvector</span>
         </div>
         <div class="face-card-body">
             <div id="alertsContainer" class="alerts-grid">
                 <!-- Alert cards dynamically injected here -->
-                <div id="noAlertsMsg" style="color:#64748b; font-size:.875rem; text-align:center; padding:2rem; grid-column:1/-1;">
+                <div id="noAlertsMsg" style="color:var(--text-muted); font-size:.875rem; text-align:center; padding:2rem; grid-column:1/-1;">
                     No suspect matches detected yet. Watchlist alerts will appear here in real-time.
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Modal for Zooming Crop Image -->
+    <div id="cropModal" onclick="this.style.display='none'" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.85); backdrop-filter:blur(8px); z-index:9999; align-items:center; justify-content:center; cursor:pointer;">
+        <div style="max-width:90vw; max-height:85vh; background:var(--bg-card); padding:1.25rem; border-radius:var(--radius-md); border:1px solid var(--border-glass); text-align:center; box-shadow:var(--shadow-card);" onclick="event.stopPropagation()">
+            <img id="cropModalImg" src="" style="max-width:100%; max-height:70vh; border-radius:var(--radius-sm); object-fit:contain; display:block; margin:0 auto .75rem; box-shadow:0 8px 30px rgba(0,0,0,.6);">
+            <div id="cropModalCaption" style="font-size:.95rem; font-weight:700; color:var(--text-primary);"></div>
+            <button onclick="document.getElementById('cropModal').style.display='none'" class="btn btn-secondary btn-sm" style="margin-top:.85rem;">Close</button>
         </div>
     </div>
 
@@ -435,53 +470,87 @@ function handleWsMessage(msg) {
 }
 
 // ── Render Alert Card ─────────────────────────────────────────────
+function openCropModal(url, title) {
+    const modal = document.getElementById('cropModal');
+    const img = document.getElementById('cropModalImg');
+    const cap = document.getElementById('cropModalCaption');
+    if (!modal || !img) return;
+    img.src = url;
+    if (cap) cap.textContent = title || 'Biometric Crop';
+    modal.style.display = 'flex';
+}
+window.showCropModal = openCropModal;
+
 function renderMatchAlert(d) {
     playAlertTone();
 
-    // Visual viewport pulse beacon
-    const wrap = document.querySelector('.viewport-wrap');
-    if (wrap) {
-        wrap.style.borderColor = "#ef4444";
-        wrap.style.boxShadow = "0 0 28px rgba(239, 68, 68, 0.75)";
-        setTimeout(() => {
-            wrap.style.borderColor = "rgba(255,255,255,.05)";
-            wrap.style.boxShadow = "none";
-        }, 700);
+    const simPct = Math.round((d.similarity || 0) * 100);
+    const isHighConf = simPct >= 80;
+    const isMedConf = simPct >= 65 && simPct < 80;
+
+    // Viewport alert flash on high-confidence match
+    if (isHighConf) {
+        const wrap = document.querySelector('.viewport-wrap');
+        if (wrap) {
+            wrap.style.borderColor = "var(--danger)";
+            wrap.style.boxShadow = "0 0 28px rgba(239, 68, 68, 0.75)";
+            setTimeout(() => {
+                wrap.style.borderColor = "rgba(255,255,255,.05)";
+                wrap.style.boxShadow = "none";
+            }, 700);
+        }
     }
 
     const noMsg = document.getElementById('noAlertsMsg');
     if (noMsg) noMsg.style.display = "none";
 
     const container = document.getElementById('alertsContainer');
-    const cat = (d.category || 'wanted').toLowerCase();
+    const cat = (d.category || 'suspect').toLowerCase();
     const isMissing = cat === 'missing';
 
     const card = document.createElement('div');
-    card.className = `alert-card ${isMissing ? 'missing' : ''}`;
+    const borderStyle = isHighConf
+        ? 'border-color:rgba(239,68,68,0.7);box-shadow:0 4px 20px rgba(239,68,68,0.25);'
+        : isMedConf
+            ? 'border-color:rgba(245,158,11,0.5);box-shadow:0 4px 15px rgba(245,158,11,0.15);'
+            : 'border-color:var(--border-glass);box-shadow:none;opacity:0.88;';
 
-    const simPct = Math.round((d.similarity || 0) * 100);
+    card.className = `alert-card hud-bracket ${isMissing ? 'missing' : ''}`;
+    card.style.cssText = borderStyle;
+
+    const confColor = isHighConf ? 'var(--danger)' : isMedConf ? 'var(--warning)' : 'var(--accent-light)';
+    const statusLabel = isHighConf ? 'CONFIRMED MATCH' : isMedConf ? 'PROBABLE MATCH' : 'ADVISORY — LOW CONF';
+
+    const watchlistImg = d.photo_path || '/static/img/avatar-placeholder.png';
+    const cctvImg = d.crop_url || '/static/img/avatar-placeholder.png';
 
     card.innerHTML = `
         <div style="display:flex; justify-content:space-between; align-items:center;">
-            <span class="badge-tag ${isMissing ? 'badge-missing' : (cat === 'suspect' ? 'badge-suspect' : 'badge-wanted')}">${cat.toUpperCase()}</span>
-            <span style="font-size:.78rem; font-weight:700; color:#38bdf8;">⚡ ${simPct}% Match</span>
+            <div style="display:flex;align-items:center;gap:0.4rem;">
+                <span class="badge-tag ${isMissing ? 'badge-missing' : (cat === 'suspect' ? 'badge-suspect' : 'badge-wanted')}">${cat.toUpperCase()}</span>
+                <span style="font-size:0.68rem;font-weight:700;color:${confColor};letter-spacing:0.04em;">${statusLabel}</span>
+            </div>
+            <div class="conf-meter" title="${simPct}% Match Confidence">
+                <div class="conf-bar"><div class="conf-fill" style="width:${simPct}%; background:${confColor};"></div></div>
+                <span style="font-size:.78rem; font-weight:700; color:${confColor}; font-family:var(--font-mono);">${simPct}%</span>
+            </div>
         </div>
 
         <div class="alert-imgs">
-            <div class="img-box">
-                <img src="${d.photo_path || '/static/img/avatar-placeholder.png'}" alt="Watchlist">
+            <div class="img-box" style="cursor:pointer;" onclick="openCropModal('${watchlistImg}', '${esc(d.name)} — Watchlist Photo')">
+                <img src="${watchlistImg}" alt="Watchlist" style="transition:transform 0.15s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='none'">
                 <span>Watchlist</span>
             </div>
-            <div style="font-size:1.2rem; color:#ef4444; font-weight:800;">VS</div>
-            <div class="img-box">
-                <img src="${d.crop_url || '/static/img/avatar-placeholder.png'}" alt="Detected">
-                <span>CCTV Crop</span>
+            <div style="font-size:.85rem; color:var(--text-muted); font-weight:800; padding:0 .3rem; font-family:var(--font-mono);">VS</div>
+            <div class="img-box" style="cursor:pointer;" onclick="openCropModal('${cctvImg}', '${esc(d.name)} — Detected CCTV Face Crop')">
+                <img src="${cctvImg}" alt="Detected" style="transition:transform 0.15s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='none'">
+                <span>CCTV Crop 🔍</span>
             </div>
         </div>
 
         <div>
-            <div style="font-size:1.05rem; font-weight:800; color:#f8fafc;">${d.name}</div>
-            <div style="font-size:.78rem; color:#94a3b8; margin-top:.2rem;">📍 ${d.camera_name || 'Camera'} | Frame #${d.frame_index || 0}</div>
+            <div style="font-size:1.05rem; font-weight:800; color:var(--text-primary);">${esc(d.name)}</div>
+            <div style="font-size:.78rem; color:var(--text-secondary); margin-top:.2rem; font-family:var(--font-mono);">${esc(d.camera_name || 'Camera')} &middot; Frame #${d.frame_index || 0}</div>
         </div>
     `;
 
