@@ -1,0 +1,46 @@
+{% from "components/icons.html" import icon %}
+
+{# EyesOnGuj Reusable Empty State Macro #}
+{% macro empty_state(title="No records found", message="Try adjusting your filters or search terms.", icon_name="search", action_text=none, action_click=none, action_href=none) %}
+<div class="empty-state">
+  <div class="empty-state-icon">
+    {{ icon(icon_name, class="svg-icon", size=42) }}
+  </div>
+  <div class="empty-state-title">{{ title }}</div>
+  <div class="empty-state-desc">{{ message }}</div>
+  {% if action_text %}
+    {% if action_href %}
+      <a href="{{ action_href }}" class="btn btn--secondary btn--sm">{{ action_text }}</a>
+    {% elif action_click %}
+      <button type="button" onclick="{{ action_click }}" class="btn btn--secondary btn--sm">{{ action_text }}</button>
+    {% endif %}
+  {% endif %}
+</div>
+{% endmacro %}
+
+{# Reusable Skeleton Table Rows Macro for HTMX loading #}
+{% macro skeleton_rows(count=5, cols=4) %}
+{% for r in range(count) %}
+<tr class="skeleton-row">
+  {% for c in range(cols) %}
+  <td>
+    <div class="skeleton-loader" style="height: 18px; width: {{ [65, 85, 45, 75, 90, 55][(r + c) % 6] }}%; margin: 4px 0;"></div>
+  </td>
+  {% endfor %}
+</tr>
+{% endfor %}
+{% endmacro %}
+
+{# Reusable Skeleton Cards Macro #}
+{% macro skeleton_cards(count=3) %}
+{% for i in range(count) %}
+<div class="card" style="margin-bottom: 1rem; padding: 1.25rem;">
+  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+    <div class="skeleton-loader" style="height: 20px; width: 40%;"></div>
+    <div class="skeleton-loader" style="height: 16px; width: 60px; border-radius: 999px;"></div>
+  </div>
+  <div class="skeleton-loader" style="height: 14px; width: 80%; margin-bottom: 0.5rem;"></div>
+  <div class="skeleton-loader" style="height: 14px; width: 60%;"></div>
+</div>
+{% endfor %}
+{% endmacro %}
