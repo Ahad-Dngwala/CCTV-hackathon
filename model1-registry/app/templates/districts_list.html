@@ -1,21 +1,36 @@
 {% extends "base.html" %}
+{% import "components/icons.html" as icons %}
+{% from "components/empty_state.html" import skeleton_rows, empty_state %}
 
-{% block title %}Sentinel — Districts{% endblock %}
+{% block title %}EyesOnGuj — Districts{% endblock %}
 
 {% block content %}
 <div class="page-container" x-data="districtsPage()" x-init="load()">
     <div class="page-header">
-        <h1 class="page-title">
-            <span class="page-title-icon">📍</span> Districts of Gujarat
-        </h1>
-        <span class="badge badge--info">33 Districts</span>
+        <div>
+            <h1 class="page-title">
+                <span class="page-title-icon">{{ icons.icon("district", class="svg-icon", size=24) }}</span>
+                <span>Districts of Gujarat</span>
+            </h1>
+            <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.25rem;">
+                State territorial jurisdictions integrated with PostGIS geospatial boundary MultiPolygons.
+            </p>
+        </div>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <span class="badge badge--online"><span class="badge-dot badge-dot--online"></span> 33/33 Boundaries Active</span>
+        </div>
     </div>
 
-    <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: var(--radius-md); padding: 0.75rem 1rem; margin-bottom: 1.5rem; font-size: 0.85rem; color: #34d399;">
-        🗺️ <strong>PostGIS MultiPolygon Boundaries Active.</strong> Spatial boundaries are loaded for all 33 Gujarat districts.
+    <div class="form-banner form-banner--success hud-bracket" style="display: flex; align-items: center; gap: 0.65rem; margin-bottom: 1.5rem;">
+        <div style="color: var(--success); flex-shrink: 0;">
+            {{ icons.icon("map", class="svg-icon", size=18) }}
+        </div>
+        <div>
+            <strong>PostGIS MultiPolygon Boundaries Active.</strong> Exact geographic polygon geometries are synchronized for all 33 Gujarat administrative districts for real-time spatial queries and gap analysis.
+        </div>
     </div>
 
-    <div class="table-wrapper">
+    <div class="table-wrapper hud-bracket">
         <table class="data-table" id="districts-table">
             <thead>
                 <tr>
@@ -27,9 +42,12 @@
             </thead>
             <tbody id="districts-tbody">
                 <template x-if="loading">
+                    {{ skeleton_rows(count=8, cols=4) }}
+                </template>
+                <template x-if="!loading && districts.length === 0">
                     <tr>
-                        <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 2rem;">
-                            Loading districts...
+                        <td colspan="4">
+                            {{ empty_state(title="No districts found", message="No district spatial data available.", icon_name="district") }}
                         </td>
                     </tr>
                 </template>
@@ -37,7 +55,7 @@
                     <tr>
                         <td style="font-weight: 600;" x-text="dist.name"></td>
                         <td>
-                            <span style="font-weight: 700; font-size: 1.1rem;" x-text="dist.camera_count"></span>
+                            <span style="font-weight: 700; font-size: 1.05rem;" x-text="dist.camera_count"></span>
                             <span style="color: var(--text-muted); font-size: 0.8rem;"> cameras</span>
                         </td>
                         <td>

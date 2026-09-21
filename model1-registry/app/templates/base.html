@@ -1,23 +1,41 @@
 <!DOCTYPE html>
+{% import "components/icons.html" as icons %}
 <html lang="en" x-data="{
-    sidebarCollapsed: localStorage.getItem('sentinel_sidebar_collapsed') === 'true',
+    theme: localStorage.getItem('eyesonguj_theme') || 'dark',
+    sidebarCollapsed: localStorage.getItem('eyesonguj_sidebar_collapsed') === 'true',
     mobileOpen: false,
+    toggleTheme() {
+        this.theme = this.theme === 'dark' ? 'light' : 'dark';
+        localStorage.setItem('eyesonguj_theme', this.theme);
+        document.documentElement.setAttribute('data-theme', this.theme);
+    },
     toggleSidebar() {
         this.sidebarCollapsed = !this.sidebarCollapsed;
-        localStorage.setItem('sentinel_sidebar_collapsed', this.sidebarCollapsed);
+        localStorage.setItem('eyesonguj_sidebar_collapsed', this.sidebarCollapsed);
         setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 260);
     }
-}" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
+}" :data-theme="theme" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Sentinel — Gujarat CCTV camera registry, GIS mapping, and surveillance management dashboard.">
-    <title>{% block title %}Sentinel — Registry & GIS{% endblock %}</title>
+    <meta name="description" content="EyesOnGuj — Gujarat CCTV camera registry, GIS mapping, and surveillance management dashboard.">
+    <title>{% block title %}EyesOnGuj — Registry & GIS{% endblock %}</title>
 
-    <!-- Google Fonts -->
+    <script>
+        (function() {
+            var t = localStorage.getItem('eyesonguj_theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', t);
+        })();
+    </script>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="apple-touch-icon" href="/static/favicon.svg">
+
+    <!-- Google Fonts: Inter & JetBrains Mono for Telemetry -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -30,12 +48,13 @@
 
     {% block head_extra %}{% endblock %}
 </head>
-<body>
+<body class="{% if request.url.path == '/login' %}no-sidebar{% endif %}">
 
     <!-- Top Navigation Bar -->
     <nav class="nav" id="main-nav">
         <div class="nav-inner">
             <div class="nav-left">
+                {% if request.url.path != '/login' %}
                 <!-- Sidebar Collapse / Expand Toggle Button -->
                 <button type="button" class="sidebar-toggle-btn" @click="toggleSidebar()" :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'" id="sidebar-toggle" aria-label="Toggle sidebar">
                     <svg class="sidebar-toggle-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -44,27 +63,51 @@
                         <line x1="3" y1="18" x2="21" y2="18"></line>
                     </svg>
                 </button>
+                {% endif %}
 
                 <a href="/" class="nav-brand" id="nav-brand">
-                    <span class="nav-logo">🛡️</span>
-                    <span class="nav-title">Sentinel</span>
+                    <span class="nav-logo">{{ icons.icon("brand", class="nav-brand-svg", size=26) }}</span>
+                    <span class="nav-title">EyesOnGuj</span>
                     <span class="nav-subtitle">Registry & GIS</span>
                 </a>
             </div>
 
+            {% if request.url.path != '/login' %}
+            <div class="nav-center">
+                <div class="nav-system-pill">
+                    <span class="status-beacon"></span>
+                    <span>GRID SECURE • 30 NODES</span>
+                </div>
+                <div class="nav-clock" id="navClock" title="Indian Standard Time">
+                    <span class="clock-prefix">IST</span>
+                    <span id="clockTime">--:--:--</span>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="nav-right" style="display: flex; align-items: center; gap: 0.75rem; margin-left: auto;">
+                <!-- Theme Switcher Button -->
+                <button type="button" class="theme-toggle-btn" @click="toggleTheme()" :title="theme === 'dark' ? 'Switch to Light mode' : 'Switch to Dark mode'" aria-label="Toggle theme" id="btn-theme-toggle">
+                    <span x-show="theme === 'dark'">{{ icons.icon("sun", size=18) }}</span>
+                    <span x-show="theme === 'light'">{{ icons.icon("moon", size=18) }}</span>
+                </button>
+
+                {% if user %}
+                <div class="nav-user" style="margin-left: 0;">
+                    <span class="badge badge--online" style="font-size: 0.78rem; font-weight: 600; white-space: nowrap;">
+                        👤 {{ user.username }} ({{ user.role }})
+                    </span>
+                    <button type="button" class="btn btn--secondary btn--sm" onclick="logoutUser()" id="btn-logout" style="padding: 0.22rem 0.55rem; font-size: 0.78rem; white-space: nowrap;">
+                        Logout
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+
+            {% if request.url.path != '/login' %}
             <button class="nav-toggle" @click="mobileOpen = !mobileOpen" id="nav-toggle" aria-label="Toggle mobile menu">
                 <span></span><span></span><span></span>
             </button>
-
-            {% if user %}
-            <div class="nav-user">
-                <span class="badge badge--online" style="font-size: 0.78rem; font-weight: 600; white-space: nowrap;">
-                    👤 {{ user.username }} ({{ user.role }})
-                </span>
-                <button type="button" class="btn btn--secondary btn--sm" onclick="logoutUser()" id="btn-logout" style="padding: 0.22rem 0.55rem; font-size: 0.78rem; white-space: nowrap;">
-                    Logout
-                </button>
-            </div>
             {% endif %}
         </div>
     </nav>
@@ -77,8 +120,26 @@
         }
         window.location.href = '/login';
     }
+
+    (function initClock() {
+        function updateClock() {
+            const el = document.getElementById('clockTime');
+            if (!el) return;
+            const now = new Date();
+            const pad = n => String(n).padStart(2, '0');
+            const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+            const ist = new Date(utc + (3600000 * 5.5));
+            const h = pad(ist.getHours());
+            const m = pad(ist.getMinutes());
+            const s = pad(ist.getSeconds());
+            el.innerHTML = `${h}<span class="clock-blink">:</span>${m}<span class="clock-blink">:</span>${s}`;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+    })();
     </script>
 
+    {% if request.url.path != '/login' %}
     <!-- Mobile Backdrop -->
     <div class="sidebar-backdrop" x-show="mobileOpen" @click="mobileOpen = false" x-transition.opacity></div>
 
@@ -88,33 +149,33 @@
             <!-- Section 1: Registry & GIS -->
             <div class="sidebar-section-title">Registry & GIS</div>
             <a href="/" class="sidebar-link {% if request.url.path == '/' %}active{% endif %}" id="nav-map" data-tooltip="Map Dashboard">
-                <span class="sidebar-link-icon">🗺️</span>
+                <span class="sidebar-link-icon">{{ icons.icon("map", size=18) }}</span>
                 <span class="sidebar-link-text">Map Dashboard</span>
             </a>
             <a href="/live" class="sidebar-link {% if request.url.path == '/live' %}active{% endif %}" id="nav-live" data-tooltip="Live Feeds">
-                <span class="sidebar-link-icon">📺</span>
+                <span class="sidebar-link-icon">{{ icons.icon("live", size=18) }}</span>
                 <span class="sidebar-link-text">Live Feeds</span>
             </a>
             <a href="/cameras" class="sidebar-link {% if '/cameras' in request.url.path %}active{% endif %}" id="nav-cameras" data-tooltip="Cameras Registry">
-                <span class="sidebar-link-icon">📷</span>
+                <span class="sidebar-link-icon">{{ icons.icon("camera", size=18) }}</span>
                 <span class="sidebar-link-text">Cameras</span>
             </a>
             <a href="/departments" class="sidebar-link {% if request.url.path == '/departments' %}active{% endif %}" id="nav-departments" data-tooltip="Departments">
-                <span class="sidebar-link-icon">🏛️</span>
+                <span class="sidebar-link-icon">{{ icons.icon("department", size=18) }}</span>
                 <span class="sidebar-link-text">Departments</span>
             </a>
             <a href="/districts" class="sidebar-link {% if request.url.path == '/districts' %}active{% endif %}" id="nav-districts" data-tooltip="Districts">
-                <span class="sidebar-link-icon">📍</span>
+                <span class="sidebar-link-icon">{{ icons.icon("district", size=18) }}</span>
                 <span class="sidebar-link-text">Districts</span>
             </a>
             {% if user and user.role in ('dept_admin', 'operator') %}
             <a href="/audit" class="sidebar-link {% if request.url.path == '/audit' %}active{% endif %}" id="nav-audit" data-tooltip="Audit Log">
-                <span class="sidebar-link-icon">📜</span>
+                <span class="sidebar-link-icon">{{ icons.icon("audit", size=18) }}</span>
                 <span class="sidebar-link-text">Audit Log</span>
             </a>
             {% endif %}
             <a href="/gap-analysis" class="sidebar-link {% if request.url.path == '/gap-analysis' %}active{% endif %}" id="nav-gap-analysis" data-tooltip="Gap Analysis">
-                <span class="sidebar-link-icon">📊</span>
+                <span class="sidebar-link-icon">{{ icons.icon("gap", size=18) }}</span>
                 <span class="sidebar-link-text">Gap Analysis</span>
             </a>
 
@@ -123,31 +184,31 @@
             <!-- Section 2: AI & Analytics -->
             <div class="sidebar-section-title">AI & Analytics</div>
             <a href="/detections" class="sidebar-link {% if request.url.path == '/detections' %}active{% endif %}" id="nav-detections" data-tooltip="Vehicle Detections">
-                <span class="sidebar-link-icon">🔍</span>
+                <span class="sidebar-link-icon">{{ icons.icon("detection", size=18) }}</span>
                 <span class="sidebar-link-text">Detections</span>
             </a>
             <a href="/recorded-detection" class="sidebar-link {% if request.url.path == '/recorded-detection' %}active{% endif %}" id="nav-recorded-detection" data-tooltip="Recorded Video AI">
-                <span class="sidebar-link-icon">📼</span>
+                <span class="sidebar-link-icon">{{ icons.icon("video", size=18) }}</span>
                 <span class="sidebar-link-text">Recorded AI</span>
             </a>
             <a href="/watchlist" class="sidebar-link {% if request.url.path == '/watchlist' %}active{% endif %}" id="nav-watchlist" data-tooltip="Vehicle Watchlist">
-                <span class="sidebar-link-icon">🚗</span>
+                <span class="sidebar-link-icon">{{ icons.icon("vehicle", size=18) }}</span>
                 <span class="sidebar-link-text">Vehicles</span>
             </a>
             <a href="/watchlist/persons" class="sidebar-link {% if '/watchlist/persons' in request.url.path %}active{% endif %}" id="nav-person-watchlist" data-tooltip="Person Watchlist">
-                <span class="sidebar-link-icon">👤</span>
+                <span class="sidebar-link-icon">{{ icons.icon("person", size=18) }}</span>
                 <span class="sidebar-link-text">Person Watchlist</span>
             </a>
             <a href="/face-detection" class="sidebar-link {% if request.url.path == '/face-detection' %}active{% endif %}" id="nav-face-detection" data-tooltip="Face Surveillance">
-                <span class="sidebar-link-icon">🎯</span>
+                <span class="sidebar-link-icon">{{ icons.icon("face", size=18) }}</span>
                 <span class="sidebar-link-text">Face Detection</span>
             </a>
             <a href="/anpr" class="sidebar-link {% if request.url.path == '/anpr' %}active{% endif %}" id="nav-anpr" data-tooltip="ANPR Pipeline">
-                <span class="sidebar-link-icon">🚘</span>
+                <span class="sidebar-link-icon">{{ icons.icon("anpr", size=18) }}</span>
                 <span class="sidebar-link-text">ANPR</span>
             </a>
             <a href="/alerts" class="sidebar-link {% if request.url.path == '/alerts' %}active{% endif %}" id="nav-alerts" data-tooltip="Real-time Alerts">
-                <span class="sidebar-link-icon">🚨</span>
+                <span class="sidebar-link-icon">{{ icons.icon("alert", size=18) }}</span>
                 <span class="sidebar-link-text">Alerts Feed</span>
             </a>
 
@@ -156,7 +217,7 @@
             <!-- Section 3: Federation -->
             <div class="sidebar-section-title">Federation</div>
             <a href="/federation" class="sidebar-link {% if request.url.path == '/federation' %}active{% endif %}" id="nav-federation" data-tooltip="VMS Federation">
-                <span class="sidebar-link-icon">🔗</span>
+                <span class="sidebar-link-icon">{{ icons.icon("federation", size=18) }}</span>
                 <span class="sidebar-link-text">VMS Federation</span>
             </a>
         </div>
@@ -164,11 +225,15 @@
         <!-- Sidebar Collapse / Expand Footer Button -->
         <div class="sidebar-footer">
             <button type="button" class="sidebar-footer-btn" @click="toggleSidebar()" id="sidebar-footer-toggle" :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'">
-                <span class="sidebar-footer-icon" x-text="sidebarCollapsed ? '▶' : '◀'">◀</span>
+                <span class="sidebar-footer-icon">
+                    <span x-show="sidebarCollapsed">{{ icons.icon("chevron-right", size=16) }}</span>
+                    <span x-show="!sidebarCollapsed">{{ icons.icon("chevron-left", size=16) }}</span>
+                </span>
                 <span class="sidebar-footer-text" x-show="!sidebarCollapsed">Collapse</span>
             </button>
         </div>
     </aside>
+    {% endif %}
 
     <!-- Main Content Area -->
     <main class="main-content" id="main-content">
@@ -190,6 +255,11 @@
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <!-- HTMX -->
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <script>
+        if (typeof htmx !== 'undefined') {
+            htmx.config.historyEnabled = false;
+        }
+    </script>
     <!-- Alpine.js -->
     <script defer src="https://unpkg.com/alpinejs@3.14.3/dist/cdn.min.js"></script>
 

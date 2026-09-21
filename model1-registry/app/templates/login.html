@@ -1,47 +1,118 @@
 {% extends "base.html" %}
 
-{% block title %}Sentinel — Login{% endblock %}
+{% block title %}EyesOnGuj — Cyber Command Login{% endblock %}
 
 {% block content %}
-<div class="login-wrapper" style="min-height: calc(100vh - 120px); display: flex; align-items: center; justify-content: center; padding: 2rem 1rem;">
-    <div class="card" style="width: 100%; max-width: 420px; backdrop-filter: blur(16px); background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 1rem; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); padding: 2.5rem 2rem;">
+<div class="login-wrapper" style="min-height: calc(100vh - var(--nav-height)); display: flex; align-items: center; justify-content: center; padding: 2rem 1rem; position: relative;">
+    
+    <!-- Background Ambient Glow -->
+    <div style="position: absolute; width: 340px; height: 340px; background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%); top: 50%; left: 50%; transform: translate(-50%, -55%); pointer-events: none; opacity: 0.6; filter: blur(50px);"></div>
+
+    <div class="card hud-bracket" style="width: 100%; max-width: 440px; backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px); background: var(--bg-card); border: 1px solid var(--border-glass); border-radius: var(--radius-lg); box-shadow: var(--shadow-modal); padding: 2.75rem 2.25rem; position: relative; z-index: 10;">
         
-        <div style="text-align: center; margin-bottom: 2rem;">
-            <div style="font-size: 3rem; margin-bottom: 0.5rem;">🛡️</div>
-            <h2 style="font-size: 1.5rem; font-weight: 700; color: #f8fafc; margin-bottom: 0.25rem;">Sentinel Command Portal</h2>
-            <p style="color: #94a3b8; font-size: 0.875rem;">Sign in with your operational credentials</p>
+        <div style="text-align: center; margin-bottom: 2.25rem;">
+            <div style="margin-bottom: 1rem; position: relative; display: inline-block;">
+                <img src="/static/img/eyesonguj-mark.svg" width="64" height="64" alt="EyesOnGuj Mark" style="display: block; filter: drop-shadow(0 0 20px var(--accent-glow)); transition: transform 0.3s ease;">
+            </div>
+            <h2 style="font-size: 1.55rem; font-weight: 800; color: var(--text-primary); margin-bottom: 0.35rem; letter-spacing: -0.02em;">
+                EyesOnGuj Command
+            </h2>
+            <div style="display: inline-flex; align-items: center; gap: 0.45rem; background: rgba(0, 229, 255, 0.08); border: 1px solid rgba(0, 229, 255, 0.2); padding: 0.2rem 0.65rem; border-radius: 9999px; font-size: 0.72rem; font-weight: 700; color: var(--accent); letter-spacing: 0.05em; text-transform: uppercase;">
+                <span class="status-beacon" style="background: var(--accent); box-shadow: 0 0 8px var(--accent);"></span>
+                <span>SECURE TERMINAL ACCESS</span>
+            </div>
         </div>
 
-        <div id="login-error" class="form-error" style="display: none; background: rgba(239, 68, 68, 0.15); border: 1px solid var(--danger); color: #fca5a5; padding: 0.75rem 1rem; border-radius: 0.5rem; margin-bottom: 1.5rem; font-size: 0.875rem; text-align: center;">
+        <div id="login-error" class="form-error" style="display: none; background: var(--danger-bg); border: 1px solid var(--danger); color: var(--danger); padding: 0.75rem 1rem; border-radius: var(--radius-sm); margin-bottom: 1.5rem; font-size: 0.85rem; text-align: center; font-weight: 500;">
         </div>
 
         <form id="login-form">
-            <div class="form-group" style="margin-bottom: 1.25rem;">
-                <label class="form-label" for="username" style="display: block; font-size: 0.85rem; font-weight: 600; color: #cbd5e1; margin-bottom: 0.5rem;">Username</label>
-                <input class="form-input" type="text" id="username" name="username" required placeholder="e.g. admin_home" style="width: 100%; padding: 0.75rem 1rem; background: rgba(30, 41, 59, 0.8); border: 1px solid #334155; border-radius: 0.5rem; color: #f8fafc; font-size: 0.95rem;">
+            <div class="form-group" style="margin-bottom: 1.35rem;">
+                <label class="form-label" for="username" style="display: block; font-size: 0.82rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.45rem; text-transform: uppercase; letter-spacing: 0.04em;">Operational ID / Username</label>
+                <input class="form-control mono-text" type="text" id="username" name="username" required placeholder="e.g. admin_home" style="width: 100%; padding: 0.8rem 1rem; background: var(--bg-secondary); border: 1px solid var(--border-glass); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 0.95rem; transition: border-color 0.2s, box-shadow 0.2s;">
             </div>
 
             <div class="form-group" style="margin-bottom: 1.75rem;">
-                <label class="form-label" for="password" style="display: block; font-size: 0.85rem; font-weight: 600; color: #cbd5e1; margin-bottom: 0.5rem;">Password</label>
-                <input class="form-input" type="password" id="password" name="password" required placeholder="••••••••" style="width: 100%; padding: 0.75rem 1rem; background: rgba(30, 41, 59, 0.8); border: 1px solid #334155; border-radius: 0.5rem; color: #f8fafc; font-size: 0.95rem;">
+                <label class="form-label" for="password" style="display: block; font-size: 0.82rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.45rem; text-transform: uppercase; letter-spacing: 0.04em;">Authentication Key / Password</label>
+                <input class="form-control" type="password" id="password" name="password" required placeholder="••••••••••••" style="width: 100%; padding: 0.8rem 1rem; background: var(--bg-secondary); border: 1px solid var(--border-glass); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 0.95rem; transition: border-color 0.2s, box-shadow 0.2s;">
             </div>
 
-            <button type="submit" id="btn-login-submit" class="btn btn--primary" style="width: 100%; padding: 0.85rem; font-weight: 600; font-size: 1rem; border-radius: 0.5rem;">
-                Sign In ➔
+            <button type="submit" id="btn-login-submit" class="btn btn-primary" style="width: 100%; padding: 0.85rem; font-weight: 700; font-size: 0.98rem; letter-spacing: 0.03em; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; gap: 0.5rem; transition: all 0.2s;">
+                <span id="btn-text">Authenticate Session ➔</span>
+                <span id="btn-spinner" style="display: none; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite;"></span>
             </button>
         </form>
 
-        <div style="margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid #334155; font-size: 0.8rem; color: #64748b; text-align: center;">
-            Demo Credentials: <code>admin_home</code> / <code>operator1</code> / <code>viewer1</code> (Password: <code>password123</code>)
+        <!-- Quick-Fill Demo Chips -->
+        <div style="margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid var(--border-subtle); text-align: center;">
+            <div style="font-size: 0.76rem; color: var(--text-muted); margin-bottom: 0.65rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700;">
+                Quick-Connect Role Credentials
+            </div>
+            <div style="display: flex; justify-content: center; gap: 0.5rem; flex-wrap: wrap;">
+                <button type="button" class="demo-chip" onclick="fillCreds('admin_home')" title="Admin with full department registry & audit privileges">
+                    <code>admin_home</code>
+                </button>
+                <button type="button" class="demo-chip" onclick="fillCreds('operator1')" title="Operator with live stream, detection & alert privileges">
+                    <code>operator1</code>
+                </button>
+                <button type="button" class="demo-chip" onclick="fillCreds('viewer1')" title="Viewer role with view-only privileges">
+                    <code>viewer1</code>
+                </button>
+            </div>
+            <div id="fill-feedback" style="font-size: 0.72rem; color: var(--accent); margin-top: 0.5rem; min-height: 1.1rem; font-weight: 600; opacity: 0; transition: opacity 0.2s;">
+                Credentials loaded
+            </div>
         </div>
     </div>
 </div>
 
+<style>
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+.demo-chip {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-sm);
+    padding: 0.35rem 0.65rem;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    color: var(--text-secondary);
+}
+.demo-chip:hover {
+    background: rgba(0, 229, 255, 0.12);
+    border-color: var(--accent);
+    color: var(--accent);
+    transform: translateY(-1px);
+}
+.demo-chip code {
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    font-weight: 700;
+}
+</style>
+
 <script>
+function fillCreds(username) {
+    document.getElementById('username').value = username;
+    document.getElementById('password').value = 'password123';
+    const feedback = document.getElementById('fill-feedback');
+    feedback.textContent = `✓ Loaded ${username} (password123)`;
+    feedback.style.opacity = '1';
+    setTimeout(() => { feedback.style.opacity = '0'; }, 3000);
+}
+
 document.getElementById('login-form').addEventListener('submit', async function(e) {
     e.preventDefault();
     const errDiv = document.getElementById('login-error');
+    const submitBtn = document.getElementById('btn-login-submit');
+    const btnText = document.getElementById('btn-text');
+    const btnSpinner = document.getElementById('btn-spinner');
+    
     errDiv.style.display = 'none';
+    submitBtn.disabled = true;
+    btnText.style.display = 'none';
+    btnSpinner.style.display = 'inline-block';
 
     const username = document.getElementById('username').value.trim();
     const password = document.getElementById('password').value;
@@ -59,11 +130,17 @@ document.getElementById('login-form').addEventListener('submit', async function(
         } else {
             errDiv.textContent = data.detail || 'Authentication failed. Please check credentials.';
             errDiv.style.display = 'block';
+            submitBtn.disabled = false;
+            btnText.style.display = 'inline-block';
+            btnSpinner.style.display = 'none';
         }
     } catch (err) {
         console.error('Login error:', err);
         errDiv.textContent = 'Server communication error. Please try again.';
         errDiv.style.display = 'block';
+        submitBtn.disabled = false;
+        btnText.style.display = 'inline-block';
+        btnSpinner.style.display = 'none';
     }
 });
 </script>

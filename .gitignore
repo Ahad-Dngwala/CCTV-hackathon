@@ -62,4 +62,8 @@ demo_results/
 # ── Model 2 — OCR Fine-Tuning Experiments ──
 model2_analytics/experiments/
 
+# Local testing & scratch files
+cookies.txt
+scratch/
+
 

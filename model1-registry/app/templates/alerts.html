@@ -1,13 +1,141 @@
 {% extends "base.html" %}
-{% block title %}Sentinel — Watchlist Alerts{% endblock %}
+{% import "components/icons.html" as icons %}
+{% block title %}EyesOnGuj — Watchlist Alerts{% endblock %}
+
+{% block head_extra %}
+<style>
+.stats-grid-alerts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.25rem;
+    margin-bottom: 1.75rem;
+}
+.stat-tile {
+    background: var(--bg-card);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-lg);
+    padding: 1.4rem;
+    box-shadow: var(--shadow-sm);
+    position: relative;
+}
+.stat-tile-label {
+    font-size: .8rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+}
+.stat-tile-value {
+    font-size: 2rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    margin-top: .3rem;
+}
+.stat-tile--today .stat-tile-value { color: var(--info); }
+.stat-tile--unacked .stat-tile-value { color: var(--warning); }
+.stat-tile--critical .stat-tile-value { color: var(--danger); }
+.stat-tile--high .stat-tile-value { color: var(--warning); }
+
+.alerts-toolbar {
+    display: flex;
+    gap: .75rem;
+    padding: 1rem 1.1rem;
+    background: var(--bg-glass);
+    border-bottom: 1px solid var(--border-subtle);
+    align-items: center;
+    flex-wrap: wrap;
+}
+.feed-count {
+    font-size: .75rem;
+    color: var(--text-secondary);
+    margin-left: auto;
+}
+#alertList {
+    max-height: 600px;
+    overflow-y: auto;
+}
+.al-empty {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-secondary);
+}
+.al-empty-icon {
+    font-size: 2rem;
+    display: block;
+    margin-bottom: .5rem;
+}
+.al-row {
+    display: flex;
+    align-items: stretch;
+    gap: .75rem;
+    padding: 1rem;
+    margin-bottom: .5rem;
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-left: 4px solid var(--border-subtle);
+    transition: transform var(--transition-fast);
+}
+.al-critical { border-left-color: var(--danger); }
+.al-high { border-left-color: var(--warning); }
+.al-medium { border-left-color: var(--warning); }
+.al-low { border-left-color: var(--text-muted); }
+.al-acked { opacity: .5; }
+
+.al-sev {
+    font-size: .7rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    padding: .25rem .5rem;
+    border-radius: var(--radius-sm);
+    min-width: 70px;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.al-sev--critical { background: var(--danger-bg); color: var(--danger); border: 1px solid rgba(239,68,68,.3); }
+.al-sev--high { background: var(--warning-bg); color: var(--warning); border: 1px solid rgba(245,158,11,.3); }
+.al-sev--medium { background: var(--warning-bg); color: var(--warning); border: 1px solid rgba(245,158,11,.2); }
+.al-sev--low { background: rgba(148,163,184,.12); color: var(--text-muted); border: 1px solid rgba(148,163,184,.2); }
+
+.al-plate {
+    font-family: monospace;
+    font-weight: 800;
+    font-size: 1.1rem;
+    color: var(--text-primary);
+    min-width: 120px;
+}
+.al-body { flex: 1; min-width: 0; }
+.al-cat { font-weight: 700; font-size: .85rem; color: var(--text-primary); }
+.al-desc { font-size: .8rem; color: var(--text-secondary); margin-top: .15rem; }
+.al-meta { font-size: .7rem; color: var(--text-secondary); margin-top: .3rem; }
+.al-ack {
+    padding: .3rem .7rem;
+    font-size: .75rem;
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all var(--transition-fast);
+}
+.al-ack:hover { background: var(--bg-glass); color: var(--text-primary); border-color: var(--accent-light); }
+.al-ack:disabled { opacity: .5; cursor: default; }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="page-container" style="max-width: 1380px; margin: 0 auto; padding: 2rem 1.5rem;">
     <!-- Header -->
     <div class="page-header" style="margin-bottom: 2rem; display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
         <div>
-            <h1 class="page-title" style="font-size: 1.75rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.02em;">
-                🚨 Watchlist Alerts
+            <h1 class="page-title" style="font-size: 1.75rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.02em; display: flex; align-items: center; gap: 0.6rem;">
+                <span class="page-title-icon" style="color: var(--danger);">{{ icons.icon("alert", class="svg-icon", size=26) }}</span>
+                <span>Watchlist Alerts</span>
             </h1>
             <p style="color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.35rem;">
                 Real-time alerts generated when the ANPR pipeline reads a watchlisted plate.
@@ -18,30 +146,30 @@
 
     <!-- Stat tiles -->
     <div class="stats-grid-alerts">
-        <div class="stat-tile">
+        <div class="stat-tile hud-bracket">
             <div class="stat-tile-label">Total Alerts</div>
             <div class="stat-tile-value" id="stTotal">—</div>
         </div>
-        <div class="stat-tile stat-tile--today">
+        <div class="stat-tile stat-tile--today hud-bracket">
             <div class="stat-tile-label">Today</div>
             <div class="stat-tile-value" id="stToday">—</div>
         </div>
-        <div class="stat-tile stat-tile--unacked">
+        <div class="stat-tile stat-tile--unacked hud-bracket">
             <div class="stat-tile-label">Unacknowledged</div>
             <div class="stat-tile-value" id="stUnacked">—</div>
         </div>
-        <div class="stat-tile stat-tile--critical">
+        <div class="stat-tile stat-tile--critical hud-bracket">
             <div class="stat-tile-label">Critical</div>
             <div class="stat-tile-value" id="stCritical">—</div>
         </div>
-        <div class="stat-tile stat-tile--high">
+        <div class="stat-tile stat-tile--high hud-bracket">
             <div class="stat-tile-label">High</div>
             <div class="stat-tile-value" id="stHigh">—</div>
         </div>
     </div>
 
-    <!-- Alert Feed -->
-    <div class="card" style="border-radius: var(--radius-lg); overflow: hidden;">
+    <!-- Alert Feed Card -->
+    <div class="card hud-bracket" style="border-radius: var(--radius-lg); overflow: hidden; background: var(--bg-card); border: 1px solid var(--border-glass);">
         <div class="alerts-toolbar">
             <input type="text" id="searchInput" class="form-input" placeholder="Search plate, category or camera…" style="flex:1; min-width:180px;">
             <select id="sevFilter" class="form-select" style="max-width:160px;">
@@ -59,40 +187,8 @@
         <div id="alertList" style="padding:1.1rem;">
             <div class="al-empty"><span class="al-empty-icon">🔍</span>Loading alerts…</div>
         </div>
-{% block head_extra %}
-<style>
-.stats-grid-alerts{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1.25rem;margin-bottom:1.75rem;}
-.stat-tile{background:rgba(17,24,39,0.7);border:1px solid rgba(255,255,255,0.08);border-radius:var(--radius-lg);padding:1.4rem;}
-.stat-tile-label{font-size:.8rem;color:var(--text-secondary);font-weight:600;text-transform:uppercase;letter-spacing:.05em;}
-.stat-tile-value{font-size:2rem;font-weight:800;color:var(--text-primary);margin-top:.3rem;}
-.stat-tile--today .stat-tile-value{color:#38bdf8;}
-.stat-tile--unacked .stat-tile-value{color:#fbbf24;}
-.stat-tile--critical .stat-tile-value{color:#f87171;}
-.stat-tile--high .stat-tile-value{color:#fb923c;}
-.alerts-toolbar{display:flex;gap:.75rem;padding:1rem 1.1rem;background:rgba(17,24,39,0.5);border-bottom:1px solid var(--border-subtle);align-items:center;flex-wrap:wrap;}
-.feed-count{font-size:.75rem;color:var(--text-secondary);margin-left:auto;}
-#alertList{max-height:600px;overflow-y:auto;}
-.al-empty{text-align:center;padding:3rem 1rem;color:var(--text-secondary);}
-.al-empty-icon{font-size:2rem;display:block;margin-bottom:.5rem;}
-.al-row{display:flex;align-items:stretch;gap:.75rem;padding:1rem;margin-bottom:.5rem;border-radius:var(--radius-md);background:rgba(17,24,39,0.5);border:1px solid var(--border-subtle);border-left:4px solid var(--border-subtle);}
-.al-critical{border-left-color:#f87171;}
-.al-high{border-left-color:#fb923c;}
-.al-medium{border-left-color:#fbbf24;}
-.al-low{border-left-color:#94a3b8;}
-.al-acked{opacity:.5;}
-.al-sev{font-size:.7rem;font-weight:800;text-transform:uppercase;padding:.25rem .5rem;border-radius:4px;min-width:70px;text-align:center;}
-.al-sev--critical{background:rgba(239,68,68,.2);color:#f87171;}
-.al-sev--high{background:rgba(251,146,60,.2);color:#fb923c;}
-.al-sev--medium{background:rgba(251,191,36,.2);color:#fbbf24;}
-.al-sev--low{background:rgba(148,163,184,.2);color:#94a3b8;}
-.al-plate{font-family:monospace;font-weight:800;font-size:1.1rem;color:var(--text-primary);min-width:120px;}
-.al-body{flex:1;min-width:0;}
-.al-cat{font-weight:700;font-size:.85rem;color:var(--text-primary);}
-.al-desc{font-size:.8rem;color:var(--text-secondary);margin-top:.15rem;}
-.al-meta{font-size:.7rem;color:var(--text-secondary);margin-top:.3rem;}
-.al-ack{padding:.3rem .7rem;font-size:.75rem;font-weight:600;border-radius:6px;border:1px solid var(--border-subtle);background:transparent;color:var(--text-secondary);cursor:pointer;white-space:nowrap;}
-.al-ack:disabled{opacity:.5;cursor:default;}
-</style>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -102,6 +198,26 @@ const acked = new Set();
 const seenIds = new Set();
 let firstRenderDone = false;
 
+function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+}
+
+function fmtTime(iso) {
+    if (!iso) return '';
+    return new Date(iso).toLocaleString();
+}
+
+function fmtRelative(iso) {
+    if (!iso) return '';
+    const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+    if (s < 60) return s + 's ago';
+    if (s < 3600) return Math.floor(s / 60) + 'm ago';
+    if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+    return Math.floor(s / 86400) + 'd ago';
+}
+
 async function loadAlerts() {
     try {
         const res = await fetch('/api/v1/alerts?limit=200');
@@ -110,8 +226,22 @@ async function loadAlerts() {
         ALERTS = data.alerts || [];
         render();
         firstRenderDone = true;
-        const st = await (await fetch('/api/v1/alerts/stats')).json();
-        if (st.stats) {
+        const stRes = await fetch('/api/v1/alerts/stats');
+        if (stRes.ok) {
+            const st = await stRes.json();
+            if (st.stats) {
+                document.getElementById('stTotal').textContent = st.stats.total ?? '—';
+                document.getElementById('stToday').textContent = st.stats.today ?? '—';
+                document.getElementById('stUnacked').textContent = st.stats.unacked ?? '—';
+                document.getElementById('stCritical').textContent = st.stats.by_severity?.critical ?? '—';
+                document.getElementById('stHigh').textContent = st.stats.by_severity?.high ?? '—';
+            }
+        }
+    } catch (err) {
+        document.getElementById('alertList').innerHTML = '<div class="al-empty">Failed to load: ' + err.message + '</div>';
+    }
+}
+
 function render() {
     const listEl = document.getElementById('alertList');
     const q = (document.getElementById('searchInput').value || '').toLowerCase();
@@ -143,9 +273,12 @@ function render() {
         const sev = (a.severity || 'low').toLowerCase();
         const isNew = firstRenderDone && !seenIds.has(a.id) ? ' al-new' : '';
         seenIds.add(a.id);
+        const plateBadge = a.detected_plate
+            ? '<div class="hsrp-chip hsrp-chip--alert" style="margin-right:0.65rem;flex-shrink:0;"><span class="hsrp-ind"><span class="hsrp-chakra">&#9770;</span>IND</span><span class="hsrp-number">' + esc(a.detected_plate) + '</span></div>'
+            : '<span class="al-plate" style="color:var(--text-muted);">&#8212;</span>';
         return '<div class="al-row al-' + sev + isNew + (isAcked ? ' al-acked' : '') + '" id="al-' + a.id + '">'
             + '<span class="al-sev al-sev--' + sev + '">' + sev + '</span>'
-            + '<span class="al-plate">' + esc(a.detected_plate || '—') + '</span>'
+            + plateBadge
             + '<div class="al-body">'
             + '<div class="al-cat">' + esc(a.category || 'watchlist match') + '</div>'
             + '<div class="al-desc">' + esc(a.description || '') + '</div>'
@@ -165,8 +298,13 @@ async function ackAlert(id, btn) {
         if (!res.ok) throw new Error('HTTP ' + res.status);
         acked.add(id);
         btn.textContent = '✓ Acked';
-        const st = await (await fetch('/api/v1/alerts/stats')).json();
-        if (st.stats) stUnacked.textContent = st.stats.unacked ?? '—';
+        const stRes = await fetch('/api/v1/alerts/stats');
+        if (stRes.ok) {
+            const st = await stRes.json();
+            if (st.stats && document.getElementById('stUnacked')) {
+                document.getElementById('stUnacked').textContent = st.stats.unacked ?? '—';
+            }
+        }
         render();
     } catch (err) {
         btn.disabled = false; btn.textContent = 'Acknowledge';
@@ -182,51 +320,27 @@ function liveAlert(a) {
 }
 
 const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/detections');
-ws.onopen = () => { document.getElementById('wsDot').classList.add('ws-dot--on'); wsText.textContent = 'Live'; };
-ws.onclose = () => { wsText.textContent = 'Offline'; };
+ws.onopen = () => {
+    const wsDot = document.getElementById('wsDot');
+    const wsText = document.getElementById('wsText');
+    if (wsDot) wsDot.classList.add('ws-dot--on');
+    if (wsText) wsText.textContent = 'Live';
+};
+ws.onclose = () => {
+    const wsText = document.getElementById('wsText');
+    if (wsText) wsText.textContent = 'Offline';
+};
 ws.onmessage = ({ data }) => {
     try {
         const msg = JSON.parse(data);
         if (msg.type === 'WATCHLIST_ALERT') liveAlert(msg.data && msg.data.alert ? msg.data.alert : msg.data);
     } catch (_) {}
 };
+
 document.getElementById('unackedOnly').addEventListener('change', render);
 document.getElementById('searchInput').addEventListener('input', render);
 document.getElementById('sevFilter').addEventListener('change', render);
 
 loadAlerts();
 </script>
-{% endblock %}
-            document.getElementById('stTotal').textContent = st.stats.total ?? '—';
-            document.getElementById('stToday').textContent = st.stats.today ?? '—';
-            document.getElementById('stUnacked').textContent = st.stats.unacked ?? '—';
-            document.getElementById('stCritical').textContent = st.stats.by_severity?.critical ?? '—';
-            document.getElementById('stHigh').textContent = st.stats.by_severity?.high ?? '—';
-        }
-    } catch (err) {
-        document.getElementById('alertList').innerHTML = '<div class="al-empty">Failed to load: ' + err.message + '</div>';
-    }
-}
-
-function esc(s) {
-    const d = document.createElement('div');
-    d.textContent = s || '';
-    return d.innerHTML;
-}
-
-function fmtTime(iso) {
-    if (!iso) return '';
-    return new Date(iso).toLocaleString();
-}
-
-function fmtRelative(iso) {
-    if (!iso) return '';
-    const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-    if (s < 60) return s + 's ago';
-    if (s < 3600) return Math.floor(s / 60) + 'm ago';
-    if (s < 86400) return Math.floor(s / 3600) + 'h ago';
-    return Math.floor(s / 86400) + 'd ago';
-}
-    </div>
-</div>
 {% endblock %}
