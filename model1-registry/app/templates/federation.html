@@ -1,6 +1,7 @@
 {% extends "base.html" %}
+{% import "components/icons.html" as icons %}
 
-{% block title %}Sentinel — VMS Federation Dashboard{% endblock %}
+{% block title %}EyesOnGuj — VMS Federation Dashboard{% endblock %}
 
 {% block head_extra %}
 <style>
@@ -9,15 +10,15 @@
   --col-police:  #3b82f6;  /* blue  */
   --col-rto:     #f59e0b;  /* amber */
   --col-muni:    #14b8a6;  /* teal  */
-  --col-alert:   #ef4444;  /* red   */
-  --col-bg:      #0f172a;
-  --col-surface: #1e293b;
-  --col-border:  #334155;
-  --col-text:    #e2e8f0;
-  --col-muted:   #94a3b8;
+  --col-alert:   var(--danger);
+  --col-bg:      var(--bg-primary);
+  --col-surface: var(--bg-card);
+  --col-border:  var(--border-glass);
+  --col-text:    var(--text-primary);
+  --col-muted:   var(--text-secondary);
 }
 
-.fed-page { background: var(--col-bg); min-height: 100vh; padding: 1.25rem; font-family: 'Inter', sans-serif; color: var(--col-text); }
+.fed-page { background: var(--col-bg); min-height: 100vh; padding: 1.25rem; font-family: inherit; color: var(--col-text); }
 
 /* ── Topology Bar ──────────────────────────────────────── */
 .topology-bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.25rem; }
@@ -237,7 +238,7 @@
 
   <!-- Topology Bar -->
   <div class="topology-bar" id="topology-bar">
-    <div class="topo-card topo-card--police">
+    <div class="topo-card topo-card--police hud-bracket">
       <div class="topo-header"><div class="topo-dot"></div><div class="topo-name">Gujarat Police VMS</div></div>
       <div class="topo-vendor">Milestone XProtect · simulated</div>
       <div class="topo-stats">
@@ -247,7 +248,7 @@
       <div class="topo-epm" id="sys-epm-police">⚡ 0 events/min</div>
       <button class="sim-btn" style="margin-top:.65rem" onclick="simulateBurst('a1000001-0000-0000-0000-000000000001',this)">Simulate burst ▶</button>
     </div>
-    <div class="topo-card topo-card--rto">
+    <div class="topo-card topo-card--rto hud-bracket">
       <div class="topo-header"><div class="topo-dot"></div><div class="topo-name">Gujarat RTO System</div></div>
       <div class="topo-vendor">HikCentral · simulated</div>
       <div class="topo-stats">
@@ -257,7 +258,7 @@
       <div class="topo-epm" id="sys-epm-rto">⚡ 0 events/min</div>
       <button class="sim-btn" style="margin-top:.65rem" onclick="simulateBurst('a1000002-0000-0000-0000-000000000002',this)">Simulate burst ▶</button>
     </div>
-    <div class="topo-card topo-card--muni">
+    <div class="topo-card topo-card--muni hud-bracket">
       <div class="topo-header"><div class="topo-dot"></div><div class="topo-name">AMC City Surveillance</div></div>
       <div class="topo-vendor">Dahua DSS · simulated</div>
       <div class="topo-stats">
@@ -273,9 +274,9 @@
   <div class="fed-grid">
 
     <!-- Left: Live Event Feed -->
-    <div class="panel">
+    <div class="panel hud-bracket">
       <div class="panel-header">
-        📡 Live Event Feed
+        <span style="display:flex; align-items:center; gap:.5rem;">{{ icons.icon("live", size=16) }} Live Event Feed</span>
         <span class="badge-count" id="feed-count">0</span>
       </div>
       <div class="panel-body" id="event-feed">
@@ -284,9 +285,9 @@
     </div>
 
     <!-- Right: Cross-system Correlations -->
-    <div class="panel">
+    <div class="panel hud-bracket">
       <div class="panel-header">
-        🔁 Cross-System Correlations
+        <span style="display:flex; align-items:center; gap:.5rem;">{{ icons.icon("federation", size=16) }} Cross-System Correlations</span>
         <span class="badge-count" id="corr-count">0</span>
       </div>
       <div class="panel-body" id="corr-feed">
@@ -297,14 +298,48 @@
   </div>
 
   <!-- GIS Map -->
-  <div class="map-panel">
+  <div class="map-panel hud-bracket">
     <div id="fed-map"></div>
   </div>
 
-  <!-- VMS Systems management (Finding 1: manual onboarding, no adapter required) -->
-  <div class="panel" style="margin-top: 1rem;">
+  <!-- Federated Watchlist Alerts Review Panel -->
+  <div class="panel hud-bracket" style="margin-top: 1rem;">
     <div class="panel-header">
-      🗂️ VMS Systems
+      <div style="display:flex; align-items:center; gap:.5rem;">
+        {{ icons.icon("alert", size=16) }} Federated Watchlist Alerts Review
+      </div>
+      <div style="display:flex; align-items:center; gap:.75rem;">
+        <label style="font-size:.75rem; color:var(--col-muted); font-weight:normal; display:flex; align-items:center; gap:.35rem; cursor:pointer;">
+          <input type="checkbox" id="fed-alerts-unack-only" style="cursor:pointer;" checked> Unacknowledged only
+        </label>
+        <span class="badge-count" id="fed-alerts-count">0</span>
+        <button class="sim-btn" onclick="loadFederatedAlerts()">Refresh</button>
+      </div>
+    </div>
+    <div class="panel-body" style="max-height: 320px; overflow-y: auto;">
+      <table class="sys-table" id="fed-alerts-table">
+        <thead>
+          <tr>
+            <th>Severity</th>
+            <th>Plate</th>
+            <th>Type</th>
+            <th>Origin System</th>
+            <th>Camera</th>
+            <th>Timestamp</th>
+            <th style="text-align:right;">Action</th>
+          </tr>
+        </thead>
+        <tbody id="fed-alerts-tbody">
+          <tr><td colspan="7" class="empty-state">Loading federated alerts…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- VMS Systems management (Finding 1: manual onboarding, no adapter required) -->
+  <div class="panel hud-bracket" style="margin-top: 1rem;">
+    <div class="panel-header">
+      <span style="display:flex; align-items:center; gap:.5rem;">{{ icons.icon("building", size=16) }} VMS Systems</span>
       <span class="badge-count" id="systems-count">0</span>
     </div>
     <div class="panel-body" style="max-height: none;">
@@ -377,6 +412,12 @@ function sysColour(systemId) {
 }
 function sysLabel(systemId) {
   return (SYS_COLOURS[systemId] || { label: systemId }).label;
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
 }
 
 // ── Counters ──────────────────────────────────────────────────────
@@ -504,11 +545,14 @@ function addEventCard(ev) {
     <div style="flex:1;min-width:0">
       <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
         ${isAlert ? '<span style="font-size:.8rem">🚨</span>' : ''}
-        <span class="plate-badge ${isAlert ? 'plate-badge--alert' : ''}">${ev.detected_plate || '—'}</span>
+        <div class="hsrp-chip ${isAlert ? 'hsrp-chip--alert' : ''}" style="display:inline-flex; font-size:0.75rem; padding:0.15rem 0.45rem;">
+          <span class="hsrp-ind"><span class="hsrp-chakra">&#9770;</span>IND</span>
+          <span class="hsrp-number">${esc(ev.detected_plate || '—')}</span>
+        </div>
         <span class="sys-badge sys-badge--${sysClass(ev.system_id)}">${sysLabel(ev.system_id)}</span>
-        ${ev.vehicle_type ? `<span style="font-size:.68rem;color:#94a3b8">${ev.vehicle_type}</span>` : ''}
+        ${ev.vehicle_type ? `<span style="font-size:.68rem;color:#94a3b8">${esc(ev.vehicle_type)}</span>` : ''}
       </div>
-      <div class="event-meta">${ev.camera_name || ev.camera_external_id} · ${time}</div>
+      <div class="event-meta">${esc(ev.camera_name || ev.camera_external_id)} · ${time}</div>
       <div class="conf-bar"><div class="conf-bar-fill" style="width:${conf}%;${isAlert ? 'background:#ef4444' : ''}"></div></div>
     </div>
     <div style="font-size:.68rem;color:#94a3b8;flex-shrink:0">${conf}%</div>
@@ -536,9 +580,12 @@ function addCorrCard(corr) {
   div.innerHTML = `
     <div style="display:flex;align-items:center;gap:.5rem">
       ${corr.is_watchlisted ? '<span>🚨</span>' : '<span>🔁</span>'}
-      <span class="corr-plate">${corr.plate_number}</span>
+      <div class="hsrp-chip ${corr.is_watchlisted ? 'hsrp-chip--alert' : ''}" style="display:inline-flex; font-size:0.78rem; padding:0.18rem 0.5rem;">
+        <span class="hsrp-ind"><span class="hsrp-chakra">&#9770;</span>IND</span>
+        <span class="hsrp-number">${esc(corr.plate_number || '—')}</span>
+      </div>
     </div>
-    <div class="corr-route">${systems}</div>
+    <div class="corr-route">${esc(systems)}</div>
     <div class="corr-meta">
       ${mins != null ? `<span>⏱ ${mins} min travel</span>` : ''}
       <span>${(corr.camera_sequence || []).length} stops</span>
@@ -625,6 +672,18 @@ function connectWS() {
       const al = msg.payload;
       // Re-render as an event card with alert styling
       addEventCard({ ...al, camera_external_id: '', _is_alert: true });
+      // Add to persistent review list
+      FED_ALERTS.unshift({
+        id: al.id || ('al-' + Date.now()),
+        created_at: al.created_at || new Date().toISOString(),
+        severity: al.severity || 'high',
+        alert_type: al.alert_type || 'Watchlist Match',
+        acknowledged: false,
+        plate_number: al.detected_plate || al.plate_number,
+        camera_name: al.camera_name || 'Camera',
+        system_name: al.system_name || 'Federation'
+      });
+      renderFederatedAlerts();
 
     } else if (msg.type === 'correlation') {
       addCorrCard(msg.payload);
@@ -794,6 +853,7 @@ function renderSystems(systems) {
       : (s.unmatched_department_hint
           ? `<span class="sys-unresolved" title="Hint '${s.unmatched_department_hint}' matched no department">⚠ unresolved</span>`
           : '—');
+    const statusBadge = s.status === 'connected' ? 'badge-success' : s.status === 'disconnected' ? 'badge-danger' : 'badge-subtle';
     return `
       <tr>
         <td>${s.name}</td>
@@ -801,7 +861,7 @@ function renderSystems(systems) {
         <td>${s.adapter_type ? '🔌 ' : ''}${s.protocol || '—'}</td>
         <td>${s.ownership}</td>
         <td>${dept}</td>
-        <td><span class="sys-status-pill sys-status-pill--${s.status}">${s.status}</span></td>
+        <td><span class="badge ${statusBadge}"><span class="badge-dot"></span>${s.status}</span></td>
         <td>${s.camera_count}</td>
         <td class="sys-actions">
           <button type="button" class="sim-btn" data-edit="${s.id}">Edit</button>
@@ -932,11 +992,103 @@ document.getElementById('system-form').addEventListener('submit', (e) => {
 
 document.getElementById('sf-cancel').addEventListener('click', cancelEditSystem);
 
+// ── Federated Watchlist Alerts Review ─────────────────────────────
+let FED_ALERTS = [];
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+async function loadFederatedAlerts() {
+  const tbody = document.getElementById('fed-alerts-tbody');
+  const countEl = document.getElementById('fed-alerts-count');
+  try {
+    const res = await fetch('/api/v3/alerts?limit=50');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    FED_ALERTS = await res.json();
+    renderFederatedAlerts();
+  } catch (err) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="empty-state" style="color:var(--danger)">Failed to load alerts: ${esc(err.message)}</td></tr>`;
+  }
+}
+
+function renderFederatedAlerts() {
+  const tbody = document.getElementById('fed-alerts-tbody');
+  const countEl = document.getElementById('fed-alerts-count');
+  if (!tbody) return;
+  const unackOnly = document.getElementById('fed-alerts-unack-only')?.checked;
+
+  const filtered = FED_ALERTS.filter(a => {
+    if (unackOnly && a.acknowledged) return false;
+    return true;
+  });
+
+  if (countEl) countEl.textContent = filtered.length;
+
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="empty-state">No ${unackOnly ? 'unacknowledged ' : ''}federation alerts found.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(a => {
+    const sev = (a.severity || 'low').toLowerCase();
+    const isAcked = !!a.acknowledged;
+    const sevBadge = sev === 'critical' ? 'badge-danger' : sev === 'high' ? 'badge-warning' : 'badge-subtle';
+    const timeStr = a.created_at ? new Date(a.created_at).toLocaleTimeString() : '—';
+    const sysName = a.system_name || '';
+    const sysCls = sysName.toLowerCase().includes('police') ? 'police' : sysName.toLowerCase().includes('rto') ? 'rto' : 'muni';
+    return `
+      <tr>
+        <td><span class="badge ${sevBadge}">${sev.toUpperCase()}</span></td>
+        <td>
+          <div class="hsrp-chip ${sev === 'critical' || sev === 'high' ? 'hsrp-chip--alert' : ''}" style="display:inline-flex; font-size:0.75rem; padding:0.15rem 0.45rem;">
+            <span class="hsrp-ind"><span class="hsrp-chakra">&#9770;</span>IND</span>
+            <span class="hsrp-number">${esc(a.plate_number || '—')}</span>
+          </div>
+        </td>
+        <td style="color:var(--text-secondary);">${esc(a.alert_type || 'Watchlist Match')}</td>
+        <td><span class="sys-badge sys-badge--${sysCls}">${esc(sysName || 'System')}</span></td>
+        <td style="color:var(--text-muted); font-size:.78rem;">${esc(a.camera_name || 'Camera')}</td>
+        <td style="color:var(--text-muted); font-size:.75rem; font-family:monospace;">${timeStr}</td>
+        <td style="text-align:right;">
+          ${isAcked
+            ? '<span class="badge badge-subtle" style="font-size:.7rem;">✓ Acknowledged</span>'
+            : `<button class="sim-btn" style="color:var(--success); border-color:rgba(34,197,94,.35);" onclick="acknowledgeFedAlert('${a.id}', this)">Acknowledge</button>`
+          }
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function acknowledgeFedAlert(alertId, btn) {
+  btn.disabled = true;
+  btn.textContent = '…';
+  try {
+    const res = await fetch(`/api/v3/alerts/${alertId}/acknowledge`, { method: 'POST' });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'HTTP ' + res.status);
+    }
+    const item = FED_ALERTS.find(a => a.id === alertId);
+    if (item) item.acknowledged = true;
+    renderFederatedAlerts();
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = 'Acknowledge';
+    alert('Acknowledge failed: ' + err.message);
+  }
+}
+
 // ── Boot ──────────────────────────────────────────────────────────
 loadInitialData();
 connectWS();
 loadDepartments();
 loadAdapterTypes();
 loadSystems();
+loadFederatedAlerts();
+document.getElementById('fed-alerts-unack-only')?.addEventListener('change', renderFederatedAlerts);
 </script>
 {% endblock %}

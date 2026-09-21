@@ -126,6 +126,9 @@ def cameras_table_partial(
     db: Session = Depends(get_db),
     user: Optional[UserModel] = Depends(get_optional_current_user),
 ):
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+
     from geoalchemy2.shape import to_shape
 
     q = (
@@ -460,6 +463,30 @@ def persons_watchlist_page(
         context={
             "user": user,
         },
+    )
+
+
+@router.get("/persons-watchlist", response_class=HTMLResponse)
+def persons_watchlist_redirect(
+    request: Request,
+    user: Optional[UserModel] = Depends(get_optional_current_user),
+):
+    """Alias for /watchlist/persons."""
+    return RedirectResponse(url="/watchlist/persons", status_code=302)
+
+
+@router.get("/anpr", response_class=HTMLResponse)
+def anpr_page(
+    request: Request,
+    user: Optional[UserModel] = Depends(get_optional_current_user),
+):
+    """ANPR pipeline demonstration and testing page."""
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+    return request.app.state.templates.TemplateResponse(
+        request=request,
+        name="anpr.html",
+        context={"user": user},
     )
 
 
