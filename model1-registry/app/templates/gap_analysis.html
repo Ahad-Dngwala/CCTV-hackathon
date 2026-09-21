@@ -1,12 +1,15 @@
 {% extends "base.html" %}
+{% import "components/icons.html" as icons %}
+{% from "components/empty_state.html" import skeleton_rows, empty_state %}
 
-{% block title %}Sentinel — Gap Analysis{% endblock %}
+{% block title %}EyesOnGuj — Gap Analysis{% endblock %}
 
 {% block content %}
 <div class="page-container" x-data="gapAnalysisPage()" x-init="load()">
     <div class="page-header">
         <h1 class="page-title">
-            <span class="page-title-icon">📊</span> Surveillance Gap Analysis
+            <span class="page-title-icon">{{ icons.icon("gap", class="svg-icon", size=24) }}</span>
+            <span>Surveillance Gap Analysis</span>
         </h1>
         <div style="display: flex; gap: 0.5rem; align-items: center;">
             <span class="badge badge--info">1km Buffer Radius</span>
@@ -14,51 +17,70 @@
         </div>
     </div>
 
-    <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--radius-md); padding: 1rem 1.25rem; margin-bottom: 1.5rem; font-size: 0.875rem; color: var(--text-secondary);">
-        💡 <strong>PostGIS Spatial Analysis:</strong> Identifies unmonitored geographic holes across Gujarat districts by calculating the spatial difference between district MultiPolygon boundaries and a 1km circular monitoring buffer around active cameras.
+    <div class="card hud-bracket" style="padding: 1rem 1.25rem; margin-bottom: 1.5rem; font-size: 0.875rem; color: var(--text-secondary); display: flex; align-items: flex-start; gap: 0.75rem;">
+        <div style="color: var(--accent); margin-top: 2px; flex-shrink: 0;">
+            {{ icons.icon("gap", class="svg-icon", size=20) }}
+        </div>
+        <div>
+            <strong style="color: var(--text-primary);">PostGIS Geospatial Gap Analytics:</strong> Identifies unmonitored geographic blindspots across Gujarat by calculating the exact topological difference between official district MultiPolygon boundaries and a 1km circular radar buffer surrounding each active optical surveillance node.
+        </div>
     </div>
 
     <!-- Ranked coverage table -->
-    <div class="table-wrapper">
+    <div class="table-wrapper hud-bracket">
         <table class="data-table" id="gap-table">
             <thead>
                 <tr>
                     <th>Rank</th>
-                    <th>District Name</th>
-                    <th>Active Cameras</th>
-                    <th>Total Area (sq km)</th>
-                    <th>Uncovered Area (sq km)</th>
-                    <th>Coverage %</th>
+                    <th>Jurisdiction</th>
+                    <th>Active Fleet</th>
+                    <th>Total Territory</th>
+                    <th>Unmonitored Gap</th>
+                    <th>Surveillance Density</th>
                 </tr>
             </thead>
             <tbody id="gap-tbody">
                 <template x-if="loading">
+                    {{ skeleton_rows(count=8, cols=6) }}
+                </template>
+                <template x-if="!loading && items.length === 0">
                     <tr>
-                        <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">
-                            Calculating spatial PostGIS coverage...
+                        <td colspan="6">
+                            {{ empty_state(title="No gap analysis data", message="Spatial gap calculation returned no records.", icon_name="gap") }}
                         </td>
                     </tr>
                 </template>
                 <template x-for="(item, index) in items" :key="item.district_id">
                     <tr>
-                        <td style="font-weight: 700; color: var(--text-muted);" x-text="'#' + (index + 1)"></td>
+                        <td style="font-weight: 700; font-family: var(--font-mono); color: var(--text-muted);" x-text="'#' + (index + 1)"></td>
                         <td style="font-weight: 600; color: var(--text-primary);" x-text="item.district_name"></td>
                         <td>
-                            <span style="font-weight: 700;" x-text="item.camera_count"></span>
-                            <span style="font-size: 0.8rem; color: var(--text-muted);"> cams</span>
+                            <span style="font-weight: 700; font-family: var(--font-mono);" x-text="item.camera_count"></span>
+                            <span style="font-size: 0.8rem; color: var(--text-muted);"> nodes</span>
                         </td>
-                        <td style="font-size: 0.85rem; font-family: monospace; color: var(--text-secondary);" x-text="item.district_area_sq_km.toLocaleString() + ' km²'"></td>
-                        <td style="font-size: 0.85rem; font-family: monospace; color: #fca5a5;" x-text="item.uncovered_area_sq_km.toLocaleString() + ' km²'"></td>
+                        <td style="font-size: 0.85rem; font-family: var(--font-mono); color: var(--text-secondary);" x-text="item.district_area_sq_km.toLocaleString() + ' km²'"></td>
+                        <td style="font-size: 0.85rem; font-family: var(--font-mono); color: var(--danger); font-weight: 600;" x-text="item.uncovered_area_sq_km.toLocaleString() + ' km²'"></td>
                         <td>
-                            <span class="badge"
-                                  :class="{
-                                      'badge--offline': item.coverage_pct < 1.0,
-                                      'badge--maintenance': item.coverage_pct >= 1.0 && item.coverage_pct < 5.0,
-                                      'badge--online': item.coverage_pct >= 5.0
-                                  }"
-                                  style="font-size: 0.85rem; font-weight: 700;"
-                                  x-text="item.coverage_pct + '%'">
-                            </span>
+                            <div class="coverage-bar-cell">
+                                <span class="badge"
+                                      :class="{
+                                          'badge--offline': item.coverage_pct < 1.0,
+                                          'badge--maintenance': item.coverage_pct >= 1.0 && item.coverage_pct < 5.0,
+                                          'badge--online': item.coverage_pct >= 5.0
+                                      }"
+                                      style="font-size: 0.82rem; font-weight: 700; width: fit-content;"
+                                      x-text="item.coverage_pct + '%'">
+                                </span>
+                                <div class="coverage-progress-track">
+                                    <div class="coverage-progress-fill"
+                                         :style="'width: ' + Math.min(item.coverage_pct * 10, 100) + '%;'"
+                                         :class="{
+                                             'fill--offline': item.coverage_pct < 1.0,
+                                             'fill--maintenance': item.coverage_pct >= 1.0 && item.coverage_pct < 5.0,
+                                             'fill--online': item.coverage_pct >= 5.0
+                                         }"></div>
+                                </div>
+                            </div>
                         </td>
                     </tr>
                 </template>

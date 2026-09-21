@@ -1,61 +1,71 @@
 {# HTMX partial — the <tbody> content for the cameras table #}
+{% from "components/icons.html" import icon %}
+{% from "components/empty_state.html" import empty_state %}
+
 {% if camera_rows %}
 {% for row in camera_rows %}
 <tr>
-    <td style="font-weight: 600;">{{ row.cam.name }}</td>
+    <td style="font-weight: 600; color: var(--text-primary);">
+        <div style="display: flex; align-items: center; gap: 0.45rem;">
+            <span style="color: var(--accent); opacity: 0.85;">{{ icon("camera", class="svg-icon", size=14) }}</span>
+            <span>{{ row.cam.name }}</span>
+        </div>
+    </td>
     <td>{{ row.cam.department.name if row.cam.department else '—' }}</td>
     <td>{{ row.cam.district.name if row.cam.district else '—' }}</td>
     <td>
         <span class="badge badge--{{ row.cam.connectivity_status }}">
-            <span class="badge-dot badge-dot--{{ row.cam.connectivity_status }}"></span>
-            {{ row.cam.connectivity_status }}
+            <span class="badge-dot badge-dot--{{ row.cam.connectivity_status }}{% if row.cam.connectivity_status == 'online' %} radar-pulse-dot{% endif %}"></span>
+            {{ row.cam.connectivity_status | upper }}
         </span>
     </td>
-    <td>{{ row.cam.camera_type or '—' }}</td>
+    <td>
+        <span class="badge badge--info" style="font-size: 0.72rem;">{{ row.cam.camera_type or 'Standard' }}</span>
+    </td>
     <td>{{ row.cam.ownership or '—' }}</td>
     <td>
         {% if row.location_str %}
-            <span style="font-size: 0.8rem; font-family: monospace;">{{ row.location_str }}</span>
+            <span class="coord-pill">{{ row.location_str }}</span>
         {% else %}
             <span class="badge badge--unmapped">unmapped</span>
         {% endif %}
     </td>
-    <td style="font-size: 0.8rem; color: var(--text-muted);">
+    <td style="font-size: 0.78rem; font-family: var(--font-mono); color: var(--text-muted);">
         {{ row.cam.updated_at.strftime('%Y-%m-%d %H:%M') if row.cam.updated_at else '—' }}
     </td>
-    <td>
+    <td style="text-align: right;">
         {% if user and user.role == 'dept_admin' %}
             {% if not user.department_id or row.cam.department_id == user.department_id %}
-            <div style="display: flex; gap: 0.35rem;">
+            <div style="display: flex; gap: 0.35rem; justify-content: flex-end;">
                 <button type="button"
-                        class="btn btn--secondary btn--sm"
+                        class="btn btn--secondary btn--sm btn--icon"
+                        title="Edit Camera"
                         hx-get="/cameras/{{ row.cam.id }}/edit"
                         hx-target="#form-container"
-                        hx-swap="innerHTML"
-                        hx-on::after-swap="window.dispatchEvent(new CustomEvent('open-modal'))">
-                    ✏️
+                        hx-swap="innerHTML">
+                    {{ icon("edit", class="svg-icon", size=13) }}
                 </button>
-                <button type="button" class="btn btn--danger btn--sm"
+                <button type="button" class="btn btn--danger btn--sm btn--icon"
+                        title="Deactivate Camera"
                         onclick="deactivateCamera('{{ row.cam.id }}')">
-                    🗑️
+                    {{ icon("trash", class="svg-icon", size=13) }}
                 </button>
             </div>
             {% else %}
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem; justify-content: flex-end;">
                 <button type="button"
-                        class="btn btn--secondary btn--sm"
+                        class="btn btn--secondary btn--sm btn--icon"
                         title="Belongs to {{ row.cam.department.name if row.cam.department else 'another department' }} — view only"
                         hx-get="/cameras/{{ row.cam.id }}/edit"
                         hx-target="#form-container"
-                        hx-swap="innerHTML"
-                        hx-on::after-swap="window.dispatchEvent(new CustomEvent('open-modal'))">
-                    👁️
+                        hx-swap="innerHTML">
+                    {{ icon("eye", class="svg-icon", size=13) }}
                 </button>
-                <span style="font-size: 0.75rem; color: var(--text-muted);">Not your dept</span>
+                <span style="font-size: 0.72rem; color: var(--text-muted);">View only</span>
             </div>
             {% endif %}
         {% else %}
-        <span style="font-size: 0.8rem; color: var(--text-muted);">Read only</span>
+        <span style="font-size: 0.75rem; color: var(--text-muted);">Read only</span>
         {% endif %}
     </td>
 </tr>
@@ -63,10 +73,7 @@
 {% else %}
 <tr>
     <td colspan="9">
-        <div class="empty-state">
-            <div class="empty-state-icon">📷</div>
-            <div class="empty-state-text">No cameras found matching filters.</div>
-        </div>
+        {{ empty_state(title="No cameras found", message="No cameras match the current filter selection. Try adjusting or resetting your filters.", icon_name="camera") }}
     </td>
 </tr>
 {% endif %}
