@@ -401,6 +401,12 @@ async def create_system(
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(require_role("dept_admin", "operator")),
 ) -> dict[str, Any]:
+    # IDOR Fix: Force department to match the user's department
+    if current_user.role in ["dept_admin", "operator"]:
+        if payload.department_id is not None and str(payload.department_id) != str(current_user.department_id):
+            raise HTTPException(status_code=403, detail="You can only create systems for your own department.")
+        payload.department_id = current_user.department_id
+
     if payload.department_id is not None:
         dept_row = db.execute(text(
             "SELECT 1 FROM departments WHERE id = :id"
