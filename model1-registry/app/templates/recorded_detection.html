@@ -928,6 +928,14 @@ function drawCurrentBoundingBoxes() {
 
 // ══ 6. Sighting Entry & Category Counters ════════════════════════
 function handleNewDetection(d) {
+    // Check if row already exists for this detection_id or track_id -> update in-place without double counting
+    const existing = document.getElementById('audit-row-' + d.detection_id)
+                  || (d.track_id ? document.querySelector(`tr[data-track-id="${d.track_id}"]`) : null);
+    if (existing) {
+        handleDetectionUpdated(d);
+        return;
+    }
+
     totalSightings++;
     document.getElementById('lblSightings').textContent = totalSightings;
     document.getElementById('auditCountBadge').textContent = `${totalSightings} sightings recorded`;
@@ -1003,13 +1011,14 @@ function handleDetectionUpdated(d) {
                     style="width:64px;height:20px;object-fit:cover;border-radius:3px;border:1px solid rgba(16,185,129,.4);cursor:pointer;display:block;margin-top:3px;">`
             : '';
 
+        const isAlert = !!(d.watchlist_match || d.alert_id);
         const plateCell = tr.children[4];
         if (plateCell && d.detected_plate) {
             plateCell.innerHTML = `
-                <span style="display:inline-block; padding:.2rem .55rem; background:#064e3b;
-                              border:1px solid rgba(52,211,153,.6);
-                              border-radius:4px; font-family:monospace; font-weight:700; letter-spacing:1px;
-                              color:#34d399;">🪪 ${d.detected_plate}</span>${plateCropThumb}
+                <div class="hsrp-chip ${isAlert ? 'hsrp-chip--alert' : ''}">
+                     <span class="hsrp-ind"><span class="hsrp-chakra">&#9770;</span>IND</span>
+                     <span class="hsrp-number">${d.detected_plate}</span>
+                </div>${plateCropThumb}
             `;
         }
 
@@ -1030,10 +1039,14 @@ function handleDetectionUpdated(d) {
     const card = document.getElementById('feed-card-' + d.detection_id) || document.querySelector(`.rec-ec[data-track-id="${d.track_id}"]`);
     if (card && d.detected_plate) {
         card.style.borderLeftColor = '#10b981';
-        const plateEl = card.querySelector('span[style*="monospace"]');
-        if (plateEl) {
-            plateEl.innerHTML = `🪪 ${d.detected_plate}`;
-            plateEl.style.color = '#34d399';
+        const isAlert = !!(d.watchlist_match || d.alert_id);
+        const plateContainer = card.querySelector('.hsrp-chip') || card.querySelector('span[style*="font-family:monospace"]');
+        if (plateContainer) {
+            plateContainer.outerHTML = `
+                <div class="hsrp-chip ${isAlert ? 'hsrp-chip--alert' : ''}" style="transform:scale(0.92);transform-origin:left;">
+                     <span class="hsrp-ind"><span class="hsrp-chakra">&#9770;</span>IND</span>
+                     <span class="hsrp-number">${d.detected_plate}</span>
+                </div>`;
         }
     }
 }
