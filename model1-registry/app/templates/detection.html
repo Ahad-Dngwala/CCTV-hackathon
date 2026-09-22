@@ -1,7 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Sentinel — Live AI Vehicle Detection{% endblock %}
+{% block title %}EyesOnGuj — Live AI Vehicle Detection{% endblock %}
 
 {% block head_extra %}
+{% import "components/icons.html" as icons %}
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
 <style>
 /* ══ Detection Dashboard ══════════════════════════════════════════ */
@@ -13,19 +14,20 @@
     flex-wrap: wrap; gap: 1rem; margin-bottom: 1.75rem;
 }
 .det-hdr h1 {
-    font-size: 1.75rem; font-weight: 800; color: #f8fafc;
-    margin: 0; display: flex; align-items: center; gap: .55rem;
+    font-size: 1.75rem; font-weight: 800; color: var(--text-primary);
+    margin: 0; display: flex; align-items: center; gap: .6rem;
 }
-.det-hdr p { color: #94a3b8; font-size: .875rem; margin: .2rem 0 0; }
+.det-hdr h1 .svg-icon { color: var(--accent); }
+.det-hdr p { color: var(--text-secondary); font-size: .875rem; margin: .2rem 0 0; }
 
 .hdr-pills { display: flex; gap: .65rem; flex-wrap: wrap; align-items: center; }
 .pill {
-    background: rgba(15,23,42,.75); border: 1px solid rgba(255,255,255,.1);
+    background: var(--bg-card); border: 1px solid var(--border-glass);
     border-radius: 9999px; padding: .3rem .85rem;
-    font-size: .8rem; font-weight: 600; color: #cbd5e1;
+    font-size: .8rem; font-weight: 600; color: var(--text-secondary);
     display: flex; align-items: center; gap: .4rem;
 }
-.pill .v { color: #38bdf8; font-weight: 800; }
+.pill .v { color: var(--accent); font-weight: 800; }
 
 /* Body: feeds | sidebar */
 .det-body {
@@ -37,14 +39,14 @@
 
 /* Camera card */
 .cam-card {
-    position: relative; background: #0f172a;
-    border: 1px solid rgba(255,255,255,.07); border-radius: 14px; overflow: hidden;
-    box-shadow: 0 8px 32px rgba(0,0,0,.35);
-    transition: border-color .2s, box-shadow .2s;
+    position: relative; background: var(--bg-card);
+    border: 1px solid var(--border-glass); border-radius: var(--radius-md); overflow: hidden;
+    box-shadow: var(--shadow-card);
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 .cam-card:hover {
-    border-color: rgba(56,189,248,.45);
-    box-shadow: 0 12px 40px rgba(56,189,248,.12);
+    border-color: var(--accent);
+    box-shadow: 0 12px 40px var(--accent-glow);
 }
 .cam-topbar {
     position: absolute; top:0; left:0; right:0; z-index:10;
@@ -55,12 +57,12 @@
 }
 .cam-badge {
     background: rgba(7,15,35,.85); backdrop-filter: blur(8px);
-    border: 1px solid rgba(255,255,255,.12); border-radius: 6px;
+    border: 1px solid var(--border-glass); border-radius: 6px;
     padding: .2rem .55rem; font-size: .72rem; font-weight: 700; color: #fff;
     display: flex; align-items: center; gap: .3rem;
 }
-.cam-badge--on  { color:#34d399; border-color:rgba(52,211,153,.35); }
-.cam-badge--off { color:#f87171; border-color:rgba(248,113,113,.35); }
+.cam-badge--on  { color: var(--success); border-color: rgba(34,197,94,.35); }
+.cam-badge--off { color: var(--danger); border-color: rgba(239,68,68,.35); }
 .pulse { width:7px; height:7px; border-radius:50%; background:currentColor;
          box-shadow:0 0 7px currentColor; animation:pu 1.5s infinite; flex-shrink:0; }
 @keyframes pu { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.7)} }
@@ -69,55 +71,55 @@
 .cam-video video { width:100%; height:100%; object-fit:cover; display:block; }
 
 .cam-bar {
-    padding: .7rem 1rem; background: rgba(7,15,35,.95);
-    border-top: 1px solid rgba(255,255,255,.06);
+    padding: .7rem 1rem; background: var(--bg-card);
+    border-top: 1px solid var(--border-subtle);
     display: flex; justify-content: space-between; align-items: center;
     flex-wrap: wrap; gap: .4rem;
 }
-.cam-bar-name { font-size: .9rem; font-weight: 700; color: #f1f5f9; }
-.cam-bar-meta { display:flex; gap:.7rem; font-size:.73rem; color:#64748b; }
+.cam-bar-name { font-size: .9rem; font-weight: 700; color: var(--text-primary); }
+.cam-bar-meta { display:flex; gap:.7rem; font-size:.73rem; color: var(--text-muted); }
 
 /* Sidebar */
 .evts-sidebar {
-    background: rgba(15,22,36,.85); backdrop-filter: blur(20px);
-    border: 1px solid rgba(255,255,255,.07); border-radius: 14px;
+    background: var(--bg-card); backdrop-filter: blur(20px);
+    border: 1px solid var(--border-glass); border-radius: var(--radius-md);
     display: flex; flex-direction: column;
     height: calc(100vh - 136px); min-height: 540px;
     position: sticky; top: 76px; overflow: hidden;
 }
 .evts-head {
     padding: 1rem 1.1rem .85rem;
-    border-bottom: 1px solid rgba(255,255,255,.07); flex-shrink: 0;
+    border-bottom: 1px solid var(--border-subtle); flex-shrink: 0;
 }
 .evts-head-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:.6rem; }
-.evts-title { font-size:1rem; font-weight:700; color:#f8fafc; display:flex; align-items:center; gap:.4rem; }
+.evts-title { font-size:1rem; font-weight:700; color: var(--text-primary); display:flex; align-items:center; gap:.4rem; }
 .evts-cnt {
-    background:rgba(99,102,241,.2); color:#818cf8;
-    border:1px solid rgba(99,102,241,.35); border-radius:9999px;
+    background: rgba(99,102,241,.18); color: var(--accent);
+    border: 1px solid var(--border-glass); border-radius: 9999px;
     font-size:.72rem; font-weight:700; padding:.15rem .55rem;
 }
 .evts-stats { display:flex; gap:.5rem; }
-.estat { flex:1; background:rgba(15,23,42,.6); border:1px solid rgba(255,255,255,.07);
-         border-radius:8px; padding:.4rem .5rem; text-align:center; }
-.estat .ev { font-size:1.1rem; font-weight:800; color:#38bdf8; line-height:1; }
-.estat .el { font-size:.65rem; color:#64748b; margin-top:.15rem; text-transform:uppercase; }
+.estat { flex:1; background: var(--bg-secondary); border: 1px solid var(--border-subtle);
+         border-radius: 8px; padding:.4rem .5rem; text-align:center; }
+.estat .ev { font-size:1.1rem; font-weight:800; color: var(--accent); line-height:1; }
+.estat .el { font-size:.65rem; color: var(--text-muted); margin-top:.15rem; text-transform:uppercase; }
 
 .evts-list {
     flex:1; overflow-y:auto; padding:.85rem;
     display:flex; flex-direction:column; gap:.55rem;
 }
-.evts-list::-webkit-scrollbar{width:3px}
-.evts-list::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:4px}
+.evts-list::-webkit-scrollbar{width:4px}
+.evts-list::-webkit-scrollbar-thumb{background: var(--border-subtle); border-radius:4px}
 
 /* Event card */
 .ec {
-    background:rgba(15,23,42,.9); border:1px solid rgba(255,255,255,.07);
-    border-radius:10px; padding:.7rem .85rem;
+    background: var(--bg-secondary); border: 1px solid var(--border-glass);
+    border-radius: var(--radius-sm); padding:.7rem .85rem;
     animation: ec-in .28s cubic-bezier(.16,1,.3,1);
-    transition: border-color .2s;
+    transition: border-color var(--transition-fast);
 }
-.ec:hover { border-color:rgba(99,102,241,.35); }
-.ec--alert { border-color:rgba(239,68,68,.45)!important; background:rgba(127,29,29,.15)!important; }
+.ec:hover { border-color: var(--accent); }
+.ec--alert { border-color: var(--danger) !important; background: rgba(239,68,68,.1) !important; }
 @keyframes ec-in { from{opacity:0;transform:translateY(-7px)} to{opacity:1;transform:none} }
 
 .ec-r1 { display:flex; justify-content:space-between; align-items:center; margin-bottom:.3rem; }
@@ -133,32 +135,32 @@
 .b-motorcycle    {background:rgba(14,165,233,.12); color:#38bdf8; border:1px solid rgba(14,165,233,.3)}
 .b-auto-rickshaw {background:rgba(234,179,8,.12);  color:#facc15; border:1px solid rgba(234,179,8,.35)}
 .b-bicycle       {background:rgba(16,185,129,.12); color:#34d399; border:1px solid rgba(16,185,129,.3)}
-.b-vehicle       {background:rgba(100,116,139,.12);color:#94a3b8; border:1px solid rgba(100,116,139,.3)}
+.b-vehicle       {background:rgba(100,116,139,.12);color:var(--text-muted); border:1px solid var(--border-subtle)}
 
-.ec-time { font-size:.7rem; color:#475569; font-family:monospace; }
+.ec-time { font-size:.7rem; color: var(--text-muted); font-family:monospace; }
 .ec-r2 { display:flex; justify-content:space-between; align-items:center; margin-top:.28rem; }
-.ec-cam { font-size:.75rem; color:#94a3b8; }
-.ec-conf { font-size:.7rem; color:#64748b; margin-top:.2rem; }
-.ec-conf strong { color:#34d399; }
+.ec-cam { font-size:.75rem; color: var(--text-secondary); }
+.ec-conf { font-size:.7rem; color: var(--text-muted); margin-top:.2rem; }
+.ec-conf strong { color: var(--success); }
 
-.evts-empty { text-align:center; padding:2.5rem 1rem; color:#475569; }
-.evts-empty .ei { font-size:2.2rem; margin-bottom:.4rem; }
+.evts-empty { text-align:center; padding:2.5rem 1rem; color: var(--text-muted); }
+.evts-empty .ei { font-size:2.2rem; margin-bottom:.4rem; opacity:.7; }
 .evts-empty p { font-size:.82rem; }
 
 .evts-foot {
-    padding:.6rem .85rem; border-top:1px solid rgba(255,255,255,.07);
+    padding:.6rem .85rem; border-top:1px solid var(--border-subtle);
     display:flex; gap:.5rem; flex-shrink:0;
 }
 .evts-foot button {
     flex:1; padding:.38rem; font-size:.77rem; border-radius:7px;
-    border:1px solid rgba(255,255,255,.09); background:rgba(255,255,255,.04);
-    color:#94a3b8; cursor:pointer; transition:background .15s;
+    border:1px solid var(--border-glass); background: var(--bg-secondary);
+    color: var(--text-secondary); cursor:pointer; transition:all var(--transition-fast);
 }
-.evts-foot button:hover { background:rgba(255,255,255,.09); color:#e2e8f0; }
+.evts-foot button:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-subtle); }
 
-.ws-dot { width:8px; height:8px; border-radius:50%; background:#475569;
+.ws-dot { width:8px; height:8px; border-radius:50%; background: var(--text-muted);
            transition:background .3s,box-shadow .3s; flex-shrink:0; }
-.ws-dot--on { background:#34d399; box-shadow:0 0 8px #34d399; animation:pu 2s infinite; }
+.ws-dot--on { background: var(--success); box-shadow:0 0 8px var(--success); animation:pu 2s infinite; }
 </style>
 {% endblock %}
 
@@ -168,17 +170,14 @@
     <!-- Header -->
     <div class="det-hdr">
         <div>
-            <h1>🤖 Live AI Detection</h1>
-            <p>Real-time vehicle detection — Camera 04 (Paldi Circle) · Camera 22 (BK Mervada)</p>
+            <h1>{{ icons.icon("vehicle", size=26) }} Live AI Vehicle Detection</h1>
+            <p>Real-time vehicle detection &amp; Indian plate recognition — Camera 04 (Paldi Circle) · Camera 22 (BK Mervada)</p>
         </div>
         <div class="hdr-pills">
             <span class="pill"><span class="ws-dot" id="wsDot"></span><span id="wsLbl">Connecting…</span></span>
-            <span class="pill">⚡ Today: <span class="v" id="stToday">—</span></span>
-            <span class="pill">📋 Total: <span class="v" id="stTotal">—</span></span>
-            <button onclick="clearFeed()"
-                style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
-                       color:#94a3b8;padding:.3rem .75rem;border-radius:9999px;cursor:pointer;
-                       font-size:.8rem;font-weight:600;">🧹 Clear</button>
+            <span class="pill">Today: <span class="v" id="stToday">—</span></span>
+            <span class="pill">Total: <span class="v" id="stTotal">—</span></span>
+            <button onclick="clearFeed()" class="btn btn-secondary btn-sm" style="border-radius:9999px; padding:.3rem .75rem; font-size:.8rem;">Clear</button>
         </div>
     </div>
 
@@ -194,7 +193,7 @@
         </div>
 
         <!-- Sidebar -->
-        <div class="evts-sidebar">
+        <div class="evts-sidebar hud-bracket">
             <div class="evts-head">
                 <div class="evts-head-row">
                     <div class="evts-title">⚡ Live Sightings</div>
@@ -215,8 +214,8 @@
             </div>
 
             <div class="evts-foot">
-                <button onclick="clearFeed()">🧹 Clear</button>
-                <button onclick="loadStats()">🔄 Stats</button>
+                <button onclick="clearFeed()">Clear Feed</button>
+                <button onclick="loadStats()">Refresh Stats</button>
             </div>
         </div>
     </div>
@@ -225,30 +224,30 @@
     <div class="det-report-section" style="margin-top: 2.25rem;">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.1rem;">
             <div>
-                <h2 style="font-size:1.35rem; font-weight:800; color:#f8fafc; display:flex; align-items:center; gap:.5rem; margin:0;">
-                    📊 Vehicle Detection Audit Report
+                <h2 style="font-size:1.35rem; font-weight:800; color:var(--text-primary); display:flex; align-items:center; gap:.5rem; margin:0;">
+                    {{ icons.icon("gap", size=22) }} Vehicle Detection Audit Report
                 </h2>
-                <p style="font-size:.82rem; color:#94a3b8; margin:.25rem 0 0;">
+                <p style="font-size:.82rem; color:var(--text-secondary); margin:.25rem 0 0;">
                     Confirmed vehicle sightings logged to PostgreSQL with crop signatures, Indian plate OCR, and cross-camera tracks
                 </p>
             </div>
             <div style="display:flex; align-items:center; gap:.75rem;">
-                <select id="reportCamFilter" onchange="loadReport(1)" style="background:#0f172a; border:1px solid rgba(255,255,255,.15); color:#f8fafc; border-radius:8px; padding:.4rem .85rem; font-size:.82rem; font-weight:500;">
+                <select id="reportCamFilter" onchange="loadReport(1)" class="form-control" style="width:auto; padding:.4rem .85rem; font-size:.82rem; font-weight:500;">
                     <option value="">All Cameras</option>
                     <option value="cam04">Camera 04 (Paldi Circle)</option>
                     <option value="cam22">Camera 22 (BK Mervada)</option>
                 </select>
-                <button onclick="loadReport(1)" style="background:rgba(59,130,246,.15); border:1px solid rgba(59,130,246,.4); color:#60a5fa; border-radius:8px; padding:.4rem .9rem; font-size:.82rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:.4rem;">
-                    🔄 Refresh Log
+                <button onclick="loadReport(1)" class="btn btn-secondary btn-sm" style="display:flex; align-items:center; gap:.4rem;">
+                    Refresh Log
                 </button>
             </div>
         </div>
 
-        <div style="background:#0f172a; border:1px solid rgba(255,255,255,.08); border-radius:14px; overflow:hidden; box-shadow:0 8px 32px rgba(0,0,0,.35);">
+        <div class="hud-bracket" style="background:var(--bg-card); border:1px solid var(--border-glass); border-radius:var(--radius-md); overflow:hidden; box-shadow:var(--shadow-card);">
             <div style="overflow-x:auto;">
-                <table style="width:100%; border-collapse:collapse; text-align:left; font-size:.84rem; color:#e2e8f0;">
+                <table style="width:100%; border-collapse:collapse; text-align:left; font-size:.84rem; color:var(--text-primary);">
                     <thead>
-                        <tr style="background:rgba(15,23,42,.95); border-bottom:1px solid rgba(255,255,255,.1); text-transform:uppercase; font-size:.72rem; letter-spacing:.05em; color:#94a3b8;">
+                        <tr style="background:var(--bg-secondary); border-bottom:1px solid var(--border-subtle); text-transform:uppercase; font-size:.72rem; letter-spacing:.05em; color:var(--text-secondary);">
                             <th style="padding:.85rem 1rem;">Crop</th>
                             <th style="padding:.85rem 1rem;">Timestamp</th>
                             <th style="padding:.85rem 1rem;">Camera</th>
@@ -262,19 +261,19 @@
                     </thead>
                     <tbody id="reportBody">
                         <tr>
-                            <td colspan="7" style="text-align:center; padding:2.5rem; color:#64748b;">
+                            <td colspan="9" style="text-align:center; padding:2.5rem; color:var(--text-muted);">
                                 Loading sightings from database…
                             </td>
                         </tr>
                     </tbody>
                 </table>
             </div>
-            <div style="display:flex; justify-content:space-between; align-items:center; padding:.8rem 1.25rem; background:rgba(7,15,35,.95); border-top:1px solid rgba(255,255,255,.06); font-size:.8rem; color:#94a3b8;">
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:.8rem 1.25rem; background:var(--bg-secondary); border-top:1px solid var(--border-subtle); font-size:.8rem; color:var(--text-secondary);">
                 <span id="reportTotalText">0 sightings recorded</span>
                 <div style="display:flex; align-items:center; gap:.5rem;">
-                    <button id="btnPrevPage" onclick="changeReportPage(-1)" style="background:#1e293b; border:1px solid rgba(255,255,255,.1); color:#f8fafc; border-radius:6px; padding:.3rem .75rem; cursor:pointer;">← Prev</button>
-                    <span id="reportPageIndicator" style="padding:.3rem .5rem; font-weight:600;">Page 1</span>
-                    <button id="btnNextPage" onclick="changeReportPage(1)" style="background:#1e293b; border:1px solid rgba(255,255,255,.1); color:#f8fafc; border-radius:6px; padding:.3rem .75rem; cursor:pointer;">Next →</button>
+                    <button id="btnPrevPage" onclick="changeReportPage(-1)" class="btn btn-secondary btn-sm">← Prev</button>
+                    <span id="reportPageIndicator" style="padding:.3rem .5rem; font-weight:600; color:var(--text-primary);">Page 1</span>
+                    <button id="btnNextPage" onclick="changeReportPage(1)" class="btn btn-secondary btn-sm">Next →</button>
                 </div>
             </div>
         </div>
@@ -282,10 +281,10 @@
 
     <!-- Modal for Zooming Crop Image -->
     <div id="cropModal" onclick="this.style.display='none'" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.85); backdrop-filter:blur(8px); z-index:9999; align-items:center; justify-content:center; cursor:pointer;">
-        <div style="max-width:90vw; max-height:85vh; background:#0f172a; padding:1.25rem; border-radius:14px; border:1px solid rgba(255,255,255,.15); text-align:center;" onclick="event.stopPropagation()">
-            <img id="cropModalImg" src="" style="max-width:100%; max-height:70vh; border-radius:8px; object-fit:contain; display:block; margin:0 auto .75rem; box-shadow:0 8px 30px rgba(0,0,0,.6);">
-            <div id="cropModalCaption" style="font-size:.95rem; font-weight:700; color:#f8fafc;"></div>
-            <button onclick="document.getElementById('cropModal').style.display='none'" style="margin-top:.85rem; background:#334155; border:none; color:#f8fafc; border-radius:6px; padding:.4rem 1.25rem; cursor:pointer; font-weight:600;">Close</button>
+        <div style="max-width:90vw; max-height:85vh; background:var(--bg-card); padding:1.25rem; border-radius:var(--radius-md); border:1px solid var(--border-glass); text-align:center; box-shadow:var(--shadow-modal);" onclick="event.stopPropagation()">
+            <img id="cropModalImg" src="" style="max-width:100%; max-height:70vh; border-radius:var(--radius-sm); object-fit:contain; display:block; margin:0 auto .75rem; box-shadow:0 8px 30px rgba(0,0,0,.6);">
+            <div id="cropModalCaption" style="font-size:.95rem; font-weight:700; color:var(--text-primary);"></div>
+            <button onclick="document.getElementById('cropModal').style.display='none'" class="btn btn-secondary btn-sm" style="margin-top:.85rem;">Close</button>
         </div>
     </div>
 </div>
@@ -393,7 +392,7 @@ async function loadFeeds() {
             const loc    = cam.location_label || cam.district_name || 'Gujarat';
 
             const card = document.createElement('div');
-            card.className = 'cam-card';
+            card.className = 'cam-card hud-bracket';
             card.innerHTML = `
                 <div class="cam-topbar">
                     <span class="cam-badge ${isOn ? 'cam-badge--on' : 'cam-badge--off'}">
@@ -404,13 +403,14 @@ async function loadFeeds() {
                 <div class="feed-video-container" style="width:100%; aspect-ratio:16/9; background:#000; position:relative; overflow:hidden;">
                     <video id="video-feed-${cam.id}" controls autoplay muted playsinline style="width:100%; height:100%; object-fit:cover; background:#000; display:block;"></video>
                     <canvas id="canvas-feed-${tag}" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:5;"></canvas>
+                    <div class="feed-scanline" style="pointer-events:none;"></div>
                 </div>
                 <div class="cam-bar">
                     <span class="cam-bar-name">📷 Camera ${label}</span>
                     <div class="cam-bar-meta">
                         <span>📍 ${loc}</span>
-                        <span>🎯 Indian YOLOv8</span>
-                        <span id="trk-${tag}">0 tracks</span>
+                        <span style="font-family:var(--font-mono);color:var(--text-secondary);">🎯 YOLOv8x-IN</span>
+                        <span id="trk-${tag}" style="font-family:var(--font-mono);color:var(--accent-light);font-weight:700;">0 tracks</span>
                     </div>
                 </div>
             `;
@@ -561,17 +561,15 @@ function renderEvent(d, prepend = true) {
         </div>
         ${plate ? `
         <div style="margin-top:.4rem; display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;">
-            <span style="background:rgba(14,165,233,.15); border:1px solid rgba(14,165,233,.4);
-                         color:#38bdf8; font-family:monospace; font-size:.8rem; font-weight:800;
-                         letter-spacing:.08em; padding:.18rem .55rem; border-radius:6px;
-                         ${isAlert ? 'background:rgba(239,68,68,.2); border-color:rgba(239,68,68,.55); color:#f87171;' : ''}">
-                🪪 ${plate}
-            </span>
-            ${ocrConf != null ? `<span style="font-size:.68rem; color:#64748b;">OCR&nbsp;<strong style="color:#34d399;">${ocrConf}%</strong></span>` : ''}
-            ${platConf != null ? `<span style="font-size:.68rem; color:#64748b;">Det&nbsp;<strong style="color:#a78bfa;">${platConf}%</strong></span>` : ''}
-            ${provider ? `<span style="font-size:.65rem; color:#475569; font-style:italic;">${provider}</span>` : ''}
+            <div class="hsrp-chip ${isAlert ? 'hsrp-chip--alert' : ''}" style="transform:scale(0.92);transform-origin:left;">
+                <span class="hsrp-ind"><span class="hsrp-chakra">&#9770;</span>IND</span>
+                <span class="hsrp-number">${plate}</span>
+            </div>
+            ${ocrConf != null ? `<span style="font-size:.68rem; color:var(--text-muted);">OCR&nbsp;<strong style="color:var(--success);">${ocrConf}%</strong></span>` : ''}
+            ${platConf != null ? `<span style="font-size:.68rem; color:var(--text-muted);">Det&nbsp;<strong style="color:var(--accent-light);">${platConf}%</strong></span>` : ''}
+            ${provider ? `<span style="font-size:.65rem; color:var(--text-muted); font-style:italic;">${provider}</span>` : ''}
         </div>` : `
-        <div style="margin-top:.35rem; font-size:.7rem; color:#475569; font-style:italic;">
+        <div style="margin-top:.35rem; font-size:.7rem; color:var(--text-muted); font-style:italic;">
             Scanning plate…
         </div>`}
         ${platCrop ? `
@@ -752,12 +750,12 @@ function createReportRow(d) {
     const platConf = d.plate_confidence != null ? Math.round(d.plate_confidence * 100) + '%' : null;
 
     const plateHtml = d.detected_plate && d.detected_plate !== '—'
-        ? `<span style="display:inline-block; padding:.2rem .55rem; background:${isWatchlisted ? 'rgba(239,68,68,.15)' : '#1e293b'};
-                  border:1px solid ${isWatchlisted ? 'rgba(239,68,68,.45)' : 'rgba(255,255,255,.18)'};
-                  border-radius:4px; font-family:monospace; font-weight:700; letter-spacing:1px;
-                  color:${isWatchlisted ? '#f87171' : '#38bdf8'};">🪪 ${d.detected_plate}</span>
+        ? `<div class="hsrp-chip ${isWatchlisted ? 'hsrp-chip--alert' : ''}">
+             <span class="hsrp-ind"><span class="hsrp-chakra">&#9770;</span>IND</span>
+             <span class="hsrp-number">${d.detected_plate}</span>
+           </div>
            ${plateCropThumb}`
-        : '<span style="color:#475569;font-size:.78rem;">No plate read</span>';
+        : '<span style="color:var(--text-muted);font-size:.78rem;">No plate read</span>';
 
     const ocrHtml = (ocrConf || platConf)
         ? `${ocrConf ? `<span style="font-size:.73rem;color:#64748b;">OCR <strong style="color:#34d399;">${ocrConf}</strong></span>` : ''}
@@ -810,9 +808,10 @@ function openCropModal(url, title) {
     const caption = document.getElementById('cropModalCaption');
     if (!modal || !img) return;
     img.src = url;
-    caption.textContent = title;
+    if (caption) caption.textContent = title || 'Detection Crop';
     modal.style.display = 'flex';
 }
+window.showCropModal = openCropModal;
 
 // ══ WebSocket ═════════════════════════════════════════════════════
 let ws = null;

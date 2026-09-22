@@ -1,47 +1,47 @@
 {% extends "base.html" %}
 
-{% block title %}Sentinel — Live CCTV Matrix{% endblock %}
+{% block title %}EyesOnGuj — Live CCTV Matrix{% endblock %}
 
 {% block head_extra %}
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js"></script>
 <style>
 /* ── Live Matrix Layout ──────────────────────────────────────── */
-.live-page { display: flex; flex-direction: column; min-height: calc(100vh - 64px); }
+.live-page { display: flex; flex-direction: column; min-height: calc(100vh - var(--nav-height)); }
 
 /* ── Toolbar ─────────────────────────────────────────────────── */
 .matrix-toolbar {
   display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem;
-  background: rgba(8,14,30,0.97); backdrop-filter: blur(12px);
-  padding: 0.65rem 1.2rem; border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: var(--bg-card); backdrop-filter: blur(16px);
+  padding: 0.65rem 1.2rem; border-bottom: 1px solid var(--border-glass);
   flex-shrink: 0; z-index: 10;
 }
 .toolbar-section { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
-.toolbar-label { font-size: 0.68rem; font-weight: 800; letter-spacing: 0.1em; color: #64748b; text-transform: uppercase; }
+.toolbar-label { font-size: 0.68rem; font-weight: 800; letter-spacing: 0.1em; color: var(--text-muted); text-transform: uppercase; }
 .tab-btn {
-  background: rgba(20,30,60,0.8); border: 1px solid #1a2540; color: #94a3b8;
-  padding: 0.28rem 0.7rem; border-radius: 0.35rem; font-size: 0.75rem; font-weight: 600;
+  background: var(--bg-secondary); border: 1px solid var(--border-glass); color: var(--text-secondary);
+  padding: 0.28rem 0.7rem; border-radius: var(--radius-sm); font-size: 0.75rem; font-weight: 600;
   cursor: pointer; transition: all 0.15s ease; white-space: nowrap;
 }
-.tab-btn:hover { background: #1a2540; color: #cbd5e1; border-color: #2a3a5c; }
+.tab-btn:hover { background: var(--bg-card); color: var(--text-primary); border-color: var(--accent); }
 .tab-btn.active {
-  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
-  border-color: transparent; color: #fff; box-shadow: 0 0 14px rgba(79,70,229,0.45);
+  background: var(--accent); border-color: transparent; color: #fff;
+  box-shadow: 0 0 14px var(--accent-glow);
 }
 .layout-btn {
-  background: rgba(20,30,60,0.8); border: 1px solid #1a2540; color: #64748b;
-  padding: 0.28rem 0.55rem; border-radius: 0.35rem; font-size: 0.8rem;
+  background: var(--bg-secondary); border: 1px solid var(--border-glass); color: var(--text-muted);
+  padding: 0.28rem 0.55rem; border-radius: var(--radius-sm); font-size: 0.8rem;
   cursor: pointer; transition: all 0.15s ease; line-height: 1;
 }
-.layout-btn:hover { background: #1a2540; color: #cbd5e1; }
-.layout-btn.active { background: rgba(37,99,235,0.15); border-color: #2563eb; color: #60a5fa; }
+.layout-btn:hover { background: var(--bg-card); color: var(--text-primary); }
+.layout-btn.active { background: var(--accent-glow); border-color: var(--accent); color: var(--accent-light); }
 .toolbar-spacer { flex: 1; min-width: 0.5rem; }
 .status-pill {
   font-size: 0.7rem; font-weight: 600; padding: 0.22rem 0.6rem;
   border-radius: 9999px; display: flex; align-items: center; gap: 0.3rem; white-space: nowrap;
 }
-.status-pill.online { background: rgba(16,185,129,0.12); color: #10b981; border: 1px solid rgba(16,185,129,0.3); }
-.status-pill.loading { background: rgba(234,179,8,0.12); color: #eab308; border: 1px solid rgba(234,179,8,0.3); }
-.status-pill.error { background: rgba(239,68,68,0.12); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); }
+.status-pill.online { background: var(--success-bg); color: var(--success); border: 1px solid rgba(34,197,94,0.3); }
+.status-pill.loading { background: var(--warning-bg); color: var(--warning); border: 1px solid rgba(245,158,11,0.3); }
+.status-pill.error { background: var(--danger-bg); color: var(--danger); border: 1px solid rgba(239,68,68,0.3); }
 .pulse { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: pa 1.5s infinite; }
 @keyframes pa { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.35;transform:scale(0.8)} }
 
@@ -49,11 +49,11 @@
 .grid-container {
   flex: 1; overflow-y: auto; overflow-x: hidden;
   padding: 0.85rem; scroll-behavior: smooth;
-  background: #030712;
+  background: var(--bg-primary);
 }
 .grid-container::-webkit-scrollbar { width: 5px; }
 .grid-container::-webkit-scrollbar-track { background: transparent; }
-.grid-container::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+.grid-container::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 3px; }
 
 /* ── Video grid ──────────────────────────────────────────────── */
 .video-grid { display: grid; gap: 0.75rem; width: 100%; }
@@ -65,43 +65,43 @@
 
 /* ── Camera card ─────────────────────────────────────────────── */
 .camera-card {
-  background: #080f20; border: 1px solid #1a2744;
-  border-radius: 0.6rem; overflow: hidden;
+  background: var(--bg-card); border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md); overflow: hidden;
   display: flex; flex-direction: column;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+  box-shadow: var(--shadow-md);
   transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
 }
 .camera-card:hover {
-  border-color: #2563eb; transform: translateY(-2px);
-  box-shadow: 0 8px 28px rgba(0,0,0,0.8), 0 0 0 1px rgba(37,99,235,0.2);
+  border-color: var(--accent); transform: translateY(-2px);
+  box-shadow: var(--shadow-lg), 0 0 12px var(--accent-glow);
 }
 
 .cam-header {
-  padding: 0.4rem 0.75rem; background: rgba(10,18,36,0.98);
+  padding: 0.45rem 0.75rem; background: var(--bg-secondary);
   display: flex; align-items: center; justify-content: space-between;
-  border-bottom: 1px solid rgba(255,255,255,0.05); flex-shrink: 0; gap: 0.5rem;
+  border-bottom: 1px solid var(--border-subtle); flex-shrink: 0; gap: 0.5rem;
 }
 .cam-title {
-  font-size: 0.76rem; font-weight: 700; color: #f1f5f9;
+  font-size: 0.78rem; font-weight: 700; color: var(--text-primary);
   display: flex; align-items: center; gap: 0.35rem;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
 }
-.cam-meta { font-size: 0.62rem; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+.cam-meta { font-size: 0.65rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
 .cam-actions { display: flex; align-items: center; gap: 0.35rem; flex-shrink: 0; }
 .badge {
   font-size: 0.6rem; font-weight: 800; padding: 0.12rem 0.45rem;
   border-radius: 9999px; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap;
 }
-.badge-live { background: rgba(16,185,129,0.18); color: #10b981; border: 1px solid rgba(16,185,129,0.4); }
-.badge-buffering { background: rgba(234,179,8,0.18); color: #eab308; border: 1px solid rgba(234,179,8,0.4); }
-.badge-error { background: rgba(239,68,68,0.18); color: #ef4444; border: 1px solid rgba(239,68,68,0.4); }
-.badge-connecting { background: rgba(51,65,85,0.5); color: #94a3b8; border: 1px solid #334155; }
+.badge-live { background: var(--success-bg); color: var(--success); border: 1px solid rgba(34,197,94,0.3); }
+.badge-buffering { background: var(--warning-bg); color: var(--warning); border: 1px solid rgba(245,158,11,0.3); }
+.badge-error { background: var(--danger-bg); color: var(--danger); border: 1px solid rgba(239,68,68,0.3); }
+.badge-connecting { background: var(--border-subtle); color: var(--text-muted); border: 1px solid var(--border-glass); }
 .btn-icon {
-  background: rgba(255,255,255,0.05); border: 1px solid #1e293b; color: #94a3b8;
-  padding: 0.2rem 0.45rem; border-radius: 0.3rem; font-size: 0.68rem; font-weight: 600;
+  background: var(--bg-card); border: 1px solid var(--border-glass); color: var(--text-secondary);
+  padding: 0.2rem 0.45rem; border-radius: var(--radius-sm); font-size: 0.68rem; font-weight: 600;
   cursor: pointer; transition: all 0.15s; display: flex; align-items: center; gap: 0.25rem;
 }
-.btn-icon:hover { background: #2563eb; color: #fff; border-color: #2563eb; }
+.btn-icon:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
 
 /* ── Video / Image area ──────────────────────────────────────── */
 .cam-body {
@@ -121,71 +121,71 @@
 .cam-overlay.gone { display: none !important; }
 .overlay-text { font-size: 0.7rem; font-weight: 600; color: #94a3b8; text-align: center; max-width: 180px; line-height: 1.35; }
 .overlay-spinner {
-  width: 24px; height: 24px; border: 2.5px solid #1e293b;
-  border-top-color: #3b82f6; border-radius: 50%;
+  width: 24px; height: 24px; border: 2.5px solid rgba(255,255,255,0.1);
+  border-top-color: var(--accent); border-radius: 50%;
   animation: spin 0.75s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ── Footer strip ────────────────────────────────────────────── */
 .cam-footer {
-  padding: 0.3rem 0.75rem; background: rgba(6,12,24,0.96);
+  padding: 0.35rem 0.75rem; background: var(--bg-secondary);
   display: flex; align-items: center; justify-content: space-between;
-  border-top: 1px solid rgba(255,255,255,0.04);
+  border-top: 1px solid var(--border-subtle);
 }
-.cam-footer-info { font-size: 0.62rem; color: #64748b; font-family: ui-monospace, SFMono-Regular, monospace; }
+.cam-footer-info { font-size: 0.64rem; color: var(--text-muted); font-family: ui-monospace, SFMono-Regular, monospace; }
 .rtsp-chip {
-  font-size: 0.58rem; color: #38bdf8; background: rgba(56,189,248,0.1);
-  padding: 0.1rem 0.35rem; border-radius: 0.25rem; border: 1px solid rgba(56,189,248,0.25);
+  font-size: 0.6rem; color: var(--info); background: var(--info-bg);
+  padding: 0.12rem 0.4rem; border-radius: var(--radius-sm); border: 1px solid rgba(56,189,248,0.25);
   cursor: pointer; text-decoration: none;
 }
 .rtsp-chip:hover { background: rgba(56,189,248,0.2); }
 
 /* ── Pagination ──────────────────────────────────────────────── */
-.page-info { font-size: 0.72rem; color: #64748b; padding-left: 0.3rem; }
+.page-info { font-size: 0.72rem; color: var(--text-muted); padding-left: 0.3rem; }
 
 /* ── Fullscreen modal ────────────────────────────────────────── */
 .stream-modal {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.92);
+  position: fixed; inset: 0; background: rgba(0,0,0,0.85);
   backdrop-filter: blur(16px); z-index: 9999;
   display: flex; align-items: center; justify-content: center; padding: 1.5rem;
 }
 .modal-card {
-  background: #080f20; border: 1px solid #1e293b; border-radius: 0.75rem;
+  background: var(--bg-secondary); border: 1px solid var(--border-glass); border-radius: var(--radius-lg);
   width: 100%; max-width: 1100px; display: flex; flex-direction: column;
-  overflow: hidden; box-shadow: 0 32px 80px rgba(0,0,0,0.95); max-height: 92vh;
+  overflow: hidden; box-shadow: var(--shadow-lg); max-height: 92vh;
 }
 .modal-header {
-  padding: 0.75rem 1.2rem; background: rgba(10,18,36,0.99);
+  padding: 0.75rem 1.2rem; background: var(--bg-card);
   display: flex; align-items: center; justify-content: space-between;
-  border-bottom: 1px solid rgba(255,255,255,0.06); flex-shrink: 0;
+  border-bottom: 1px solid var(--border-subtle); flex-shrink: 0;
 }
 .modal-body { flex: 1; min-height: 0; background: #000; aspect-ratio: 16/9; position: relative; }
 .modal-video { width: 100%; height: 100%; object-fit: contain; display: block; }
 .modal-close {
-  background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.25); color: #ef4444;
-  width: 30px; height: 30px; border-radius: 0.35rem; font-size: 0.95rem;
+  background: var(--danger-bg); border: 1px solid rgba(239,68,68,0.25); color: var(--danger);
+  width: 30px; height: 30px; border-radius: var(--radius-sm); font-size: 0.95rem;
   cursor: pointer; display: flex; align-items: center; justify-content: center;
   transition: all 0.12s;
 }
-.modal-close:hover { background: #ef4444; color: #fff; }
+.modal-close:hover { background: var(--danger); color: #fff; }
 
 /* ── Toast notifications ─────────────────────────────────────── */
 .notif-bar { position: fixed; bottom: 1.2rem; right: 1.2rem; z-index: 10000; display: flex; flex-direction: column; gap: 0.4rem; pointer-events: none; }
 .notif {
-  background: #0f172a; border: 1px solid #334155; border-radius: 0.45rem;
-  padding: 0.55rem 0.9rem; font-size: 0.76rem; color: #cbd5e1; max-width: 320px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.6); animation: ni 0.2s ease;
+  background: var(--bg-secondary); border: 1px solid var(--border-glass); border-radius: var(--radius-sm);
+  padding: 0.55rem 0.9rem; font-size: 0.76rem; color: var(--text-primary); max-width: 320px;
+  box-shadow: var(--shadow-lg); animation: ni 0.2s ease;
 }
 @keyframes ni { from{opacity:0;transform:translateX(14px)} to{opacity:1;transform:none} }
 
 /* ── Empty / error state ─────────────────────────────────────── */
 .empty-state {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 1rem; padding: 5rem 2rem; color: #64748b; text-align: center; grid-column: 1/-1;
+  gap: 1rem; padding: 5rem 2rem; color: var(--text-muted); text-align: center; grid-column: 1/-1;
 }
 .empty-state .ei { font-size: 2.5rem; }
-.empty-state h3 { color: #94a3b8; font-size: 1.1rem; margin: 0; }
+.empty-state h3 { color: var(--text-primary); font-size: 1.1rem; margin: 0; }
 .empty-state p { font-size: 0.85rem; max-width: 340px; line-height: 1.5; margin: 0; }
 
 * { box-sizing: border-box; }
@@ -204,15 +204,22 @@
       <span class="page-info" id="page-info"></span>
     </div>
 
+    <div class="toolbar-section" style="margin-left:0.5rem;">
+      <span class="toolbar-label">Stream Mode</span>
+      <button class="tab-btn active" id="proto-direct" onclick="setProtocol('direct')" title="Direct RTSP Frame Stream">Direct RTSP</button>
+      <button class="tab-btn" id="proto-hls" onclick="setProtocol('hls')" title="HLS Video Stream">HLS</button>
+    </div>
+
     <div class="toolbar-spacer"></div>
 
     <div class="toolbar-section">
-      <span class="toolbar-label">Grid</span>
+      <span class="toolbar-label">Grid Matrix</span>
       <button class="layout-btn" data-cols="1" onclick="setLayout(1)" title="1 Column">1&#215;1</button>
       <button class="layout-btn" data-cols="2" onclick="setLayout(2)" title="2 Columns">2&#215;2</button>
       <button class="layout-btn active" data-cols="3" onclick="setLayout(3)" title="3 Columns">3&#215;2</button>
       <button class="layout-btn" data-cols="4" onclick="setLayout(4)" title="4 Columns">4&#215;2</button>
       <button class="layout-btn" data-cols="5" onclick="setLayout(5)" title="5 Columns">5&#215;2</button>
+      <button class="layout-btn" id="btn-theater" onclick="toggleTheaterMode()" title="Toggle Fullscreen Theater Mode" style="font-weight:700;color:var(--accent-light);">&#x26F6; Theater</button>
     </div>
 
     <div id="feed-status" class="status-pill loading">
@@ -230,23 +237,36 @@
 
 <!-- Fullscreen Modal -->
 <div id="stream-modal" class="stream-modal" style="display:none;">
-  <div class="modal-card">
+  <div class="modal-card hud-bracket">
     <div class="modal-header">
       <div style="display:flex;align-items:center;gap:0.6rem;">
-        <span style="font-size:1.1rem;">&#128249;</span>
+        <span style="font-size:1.1rem;color:var(--accent);">&#128249;</span>
         <div>
-          <div id="modal-title" style="color:#f8fafc;font-weight:700;font-size:0.95rem;"></div>
-          <div id="modal-sub" style="color:#64748b;font-size:0.7rem;font-family:monospace;overflow:hidden;text-overflow:ellipsis;max-width:550px;white-space:nowrap;"></div>
+          <div id="modal-title" style="color:var(--text-primary);font-weight:700;font-size:0.95rem;"></div>
+          <div id="modal-sub" style="color:var(--text-muted);font-size:0.7rem;font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;max-width:550px;white-space:nowrap;"></div>
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:0.6rem;">
+      <div style="display:flex;align-items:center;gap:0.5rem;">
         <span class="badge badge-live">&#9679;&nbsp;LIVE</span>
+        <button class="btn-icon" onclick="captureModalSnapshot()" title="Capture High-Res Snapshot Frame" style="background:var(--bg-card);border:1px solid var(--border-glass);color:var(--text-primary);padding:0.25rem 0.6rem;border-radius:var(--radius-sm);font-size:0.72rem;cursor:pointer;">&#128248; Snapshot</button>
+        <button class="btn-icon" id="modal-scanline-toggle" onclick="toggleModalScanlines()" title="Toggle CRT Scanline Overlay" style="background:var(--bg-card);border:1px solid var(--border-glass);color:var(--text-secondary);padding:0.25rem 0.6rem;border-radius:var(--radius-sm);font-size:0.72rem;cursor:pointer;">&#128187; Scanlines</button>
         <button class="modal-close" onclick="closeModal()" title="Close (Esc)">&#10005;</button>
       </div>
     </div>
-    <div class="modal-body" style="position:relative;">
-      <video id="modal-video" class="modal-video" autoplay muted playsinline controls style="display:none;"></video>
-      <img id="modal-img" class="modal-video" alt="Live Stream Feed" style="display:none;object-fit:contain;position:absolute;inset:0;width:100%;height:100%;">
+    <div class="modal-body" style="position:relative;background:#020617;display:flex;align-items:center;justify-content:center;">
+      <video id="modal-video" class="modal-video" autoplay muted playsinline controls style="display:none;width:100%;height:100%;object-fit:contain;"></video>
+      <img id="modal-img" class="modal-video" alt="Live Stream Feed" style="display:none;object-fit:contain;width:100%;height:100%;">
+      <div id="modal-scanline" class="feed-scanline" style="pointer-events:none;"></div>
+    </div>
+    <div class="modal-footer" style="padding:0.45rem 1.2rem;background:var(--bg-card);border-top:1px solid var(--border-subtle);display:flex;align-items:center;justify-content:space-between;font-family:var(--font-mono);font-size:0.68rem;color:var(--text-muted);">
+      <div style="display:flex;gap:1rem;">
+        <span>RES: <strong style="color:var(--text-primary);">1080p FHD</strong></span>
+        <span>CODEC: <strong style="color:var(--accent-light);">H.264 / AVC</strong></span>
+        <span>LATENCY: <strong style="color:var(--success);">&lt; 400ms</strong></span>
+      </div>
+      <div id="modal-rtsp-strip" style="color:var(--info);cursor:pointer;" onclick="copyModalRtsp()" title="Click to copy stream URI">
+        RTSP PROTOCOL ACTIVE &copy;
+      </div>
     </div>
   </div>
 </div>
@@ -258,7 +278,7 @@
 {% block scripts %}
 <script>
 /**
- * Sentinel Live Camera Matrix
+ * EyesOnGuj Live Camera Matrix
  *
  * Rules from Integrator Guide strictly implemented:
  *  - Camera list loaded dynamically from /api/v1/streams/catalogue (NO hardcoded IDs)
@@ -360,7 +380,7 @@ function loadPage(pageNum) {
 function renderCard(cam, container) {
   const safeId = cam.id.replace(/[^A-Za-z0-9_-]/g, '_');
   var card = document.createElement('div');
-  card.className = 'camera-card';
+  card.className = 'camera-card hud-bracket';
   card.id = 'card-' + safeId;
 
   var codec = (cam.codec || 'H.264').toUpperCase();
@@ -370,7 +390,7 @@ function renderCard(cam, container) {
   header.className = 'cam-header';
   header.innerHTML =
     '<div style="min-width:0;flex:1;">' +
-      '<div class="cam-title">&#128249;&nbsp;' + esc(cam.name) + '</div>' +
+      '<div class="cam-title"><span style="color:var(--accent);">&#128249;</span>&nbsp;' + esc(cam.name) + '</div>' +
       '<div class="cam-meta" title="' + esc(loc) + '">' + esc(loc) + '</div>' +
     '</div>' +
     '<div class="cam-actions">' +
@@ -386,13 +406,14 @@ function renderCard(cam, container) {
     '<div class="cam-overlay" id="ov-' + safeId + '">' +
       '<div class="overlay-spinner"></div>' +
       '<div class="overlay-text" id="ovt-' + safeId + '">Connecting stream...</div>' +
-    '</div>';
+    '</div>' +
+    '<div class="feed-scanline"></div>';
 
   var footer = document.createElement('div');
   footer.className = 'cam-footer';
   footer.innerHTML =
-    '<span class="cam-footer-info">' + codec + ' &middot; <span id="pl-' + safeId + '">' + (currentProtocol === 'direct' ? 'RTSP/TCP' : 'HLS') + '</span></span>' +
-    '<span class="rtsp-chip" id="chip-' + safeId + '" title="Click to copy RTSP URI">' + esc(cam.id) + ' RTSP</span>';
+    '<span class="cam-footer-info">' + codec + ' &middot; <span id="pl-' + safeId + '" style="font-family:var(--font-mono);">' + (currentProtocol === 'direct' ? 'RTSP/TCP' : 'HLS') + '</span></span>' +
+    '<span class="rtsp-chip" id="chip-' + safeId + '" title="Click to copy RTSP URI" style="font-family:var(--font-mono);">' + esc(cam.id).substring(0, 10) + '... RTSP</span>';
 
   card.appendChild(header);
   card.appendChild(body);
@@ -649,16 +670,24 @@ function setProtocol(proto) {
 }
 
 // ── Fullscreen Modal ───────────────────────────────────────────────
+var currentModalCam = null;
+
 function openModal(camId) {
   var cam = null;
   for (var i = 0; i < catalogue.length; i++) {
     if (catalogue[i].id === camId) { cam = catalogue[i]; break; }
   }
   if (!cam) return;
+  currentModalCam = cam;
 
   var loc = cam.location || cam.department || 'Gujarat Grid';
   document.getElementById('modal-title').textContent = cam.name + ' (' + cam.id + ')';
   document.getElementById('modal-sub').textContent = 'Location: ' + loc;
+  var rtspStrip = document.getElementById('modal-rtsp-strip');
+  if (rtspStrip) {
+    var cleanRtsp = cam.rtsp_url || ('rtsp://' + window.location.hostname + ':8554/stream/' + cam.id);
+    rtspStrip.textContent = cleanRtsp.substring(0, 45) + '... (Click to copy)';
+  }
 
   // Pause background grid polling timers while modal is open
   Object.keys(streamPollTimers).forEach(function(id) {
@@ -688,6 +717,67 @@ function openModal(camId) {
   document.getElementById('stream-modal').style.display = 'flex';
 }
 
+function captureModalSnapshot() {
+  var mv = document.getElementById('modal-video');
+  var mi = document.getElementById('modal-img');
+  var canvas = document.createElement('canvas');
+  var ctx = canvas.getContext('2d');
+
+  if (mi && mi.style.display !== 'none' && mi.src) {
+    canvas.width = mi.naturalWidth || 1280;
+    canvas.height = mi.naturalHeight || 720;
+    ctx.drawImage(mi, 0, 0, canvas.width, canvas.height);
+  } else if (mv && mv.style.display !== 'none') {
+    canvas.width = mv.videoWidth || 1280;
+    canvas.height = mv.videoHeight || 720;
+    ctx.drawImage(mv, 0, 0, canvas.width, canvas.height);
+  } else {
+    notify('No active stream frame to capture');
+    return;
+  }
+
+  var a = document.createElement('a');
+  var camName = currentModalCam ? currentModalCam.id : 'camera';
+  a.download = 'eyesonguj_snapshot_' + camName + '_' + Date.now() + '.png';
+  a.href = canvas.toDataURL('image/png');
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  notify('Captured high-resolution snapshot frame');
+}
+
+function toggleModalScanlines() {
+  var scan = document.getElementById('modal-scanline');
+  if (!scan) return;
+  var isHidden = scan.style.display === 'none';
+  scan.style.display = isHidden ? 'block' : 'none';
+  var btn = document.getElementById('modal-scanline-toggle');
+  if (btn) btn.style.color = isHidden ? 'var(--accent-light)' : 'var(--text-secondary)';
+}
+
+function copyModalRtsp() {
+  if (!currentModalCam) return;
+  var urlToCopy = currentModalCam.rtsp_url || ('rtsp://' + window.location.hostname + ':8554/stream/' + currentModalCam.id);
+  copyToClipboard(urlToCopy);
+  notify('Copied RTSP URL: ' + urlToCopy);
+}
+
+function toggleTheaterMode() {
+  var el = document.getElementById('live-page');
+  if (!document.fullscreenElement) {
+    if (el.requestFullscreen) {
+      el.requestFullscreen().catch(function() {});
+    } else if (el.webkitRequestFullscreen) {
+      el.webkitRequestFullscreen();
+    }
+    notify('Entered Fullscreen Theater Mode (Press Esc to exit)');
+  } else {
+    if (document.exitFullscreen) {
+      document.exitFullscreen().catch(function() {});
+    }
+  }
+}
+
 function closeModal() {
   document.getElementById('stream-modal').style.display = 'none';
   var mv = document.getElementById('modal-video');
@@ -695,6 +785,7 @@ function closeModal() {
   if (modalHls) { try { modalHls.stopLoad(); modalHls.detachMedia(); modalHls.destroy(); } catch(e){} modalHls = null; }
   mv.pause(); mv.src = ''; mv.load();
   mi.src = '';
+  currentModalCam = null;
 
   // Resume grid polling for current page
   var start = (currentPage - 1) * perPage;

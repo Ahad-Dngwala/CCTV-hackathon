@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Sentinel — Pre-Recorded Video AI Detection{% endblock %}
+{% block title %}EyesOnGuj — Pre-Recorded Video AI Detection{% endblock %}
 
 {% block head_extra %}
 <style>
@@ -12,34 +12,34 @@
     flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;
 }
 .rec-hdr h1 {
-    font-size: 1.75rem; font-weight: 800; color: #f8fafc;
+    font-size: 1.75rem; font-weight: 800; color: var(--text-primary);
     margin: 0; display: flex; align-items: center; gap: .55rem;
 }
-.rec-hdr p { color: #94a3b8; font-size: .875rem; margin: .2rem 0 0; }
+.rec-hdr p { color: var(--text-muted); font-size: .875rem; margin: .2rem 0 0; }
 
 .hdr-pills { display: flex; gap: .65rem; flex-wrap: wrap; align-items: center; }
 .pill {
-    background: rgba(15,23,42,.75); border: 1px solid rgba(255,255,255,.1);
+    background: var(--bg-card); border: 1px solid var(--border-glass);
     border-radius: 9999px; padding: .3rem .85rem;
-    font-size: .8rem; font-weight: 600; color: #cbd5e1;
+    font-size: .8rem; font-weight: 600; color: var(--text-secondary);
     display: flex; align-items: center; gap: .4rem;
 }
-.pill .v { color: #38bdf8; font-weight: 800; }
+.pill .v { color: var(--accent-light); font-weight: 800; }
 .pill-state { text-transform: uppercase; font-size: .75rem; letter-spacing: .04em; }
 
 /* Glass Cards */
 .rec-card {
-    background: #0f172a; border: 1px solid rgba(255,255,255,.08);
-    border-radius: 14px; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,.35);
+    background: var(--bg-card); border: 1px solid var(--border-glass);
+    border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-md);
     margin-bottom: 1.5rem;
 }
 .rec-card-hdr {
-    padding: .9rem 1.25rem; background: rgba(15,23,42,.95);
-    border-bottom: 1px solid rgba(255,255,255,.07);
+    padding: .9rem 1.25rem; background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-subtle);
     display: flex; justify-content: space-between; align-items: center;
 }
 .rec-card-title {
-    font-size: 1.05rem; font-weight: 700; color: #f8fafc;
+    font-size: 1.05rem; font-weight: 700; color: var(--text-primary);
     display: flex; align-items: center; gap: .5rem; margin: 0;
 }
 .rec-card-body { padding: 1.25rem; }
@@ -51,49 +51,49 @@
 @media(max-width: 900px) { .upload-grid { grid-template-columns: 1fr; } }
 
 .dropzone {
-    border: 2px dashed rgba(56,189,248,.35); border-radius: 12px;
+    border: 2px dashed var(--accent-light); border-radius: var(--radius-md);
     padding: 2.25rem 1.5rem; text-align: center; cursor: pointer;
-    background: rgba(15,23,42,.6); transition: border-color .2s, background .2s;
+    background: var(--bg-secondary); transition: border-color .2s, background .2s;
     display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 180px;
 }
 .dropzone:hover, .dropzone.dragover {
-    border-color: #38bdf8; background: rgba(56,189,248,.07);
+    border-color: var(--accent); background: var(--accent-glow);
 }
-.drop-icon { font-size: 2.5rem; margin-bottom: .6rem; }
-.drop-text { font-size: .95rem; font-weight: 600; color: #f1f5f9; margin-bottom: .25rem; }
-.drop-sub { font-size: .78rem; color: #64748b; }
+.drop-icon { font-size: 2.5rem; margin-bottom: .6rem; color: var(--text-muted); }
+.drop-text { font-size: .95rem; font-weight: 600; color: var(--text-primary); margin-bottom: .25rem; }
+.drop-sub { font-size: .78rem; color: var(--text-muted); }
 
 /* Camera Selector Card */
 .cam-selector-box {
     display: flex; flex-direction: column; gap: .75rem;
 }
 .cam-select-input {
-    background: #1e293b; border: 1px solid rgba(255,255,255,.15);
-    color: #f8fafc; border-radius: 8px; padding: .65rem .85rem; font-size: .88rem; width: 100%;
+    background: var(--bg-secondary); border: 1px solid var(--border-glass);
+    color: var(--text-primary); border-radius: var(--radius-sm); padding: .65rem .85rem; font-size: .88rem; width: 100%;
 }
 .cam-quick-list {
     display: flex; flex-wrap: wrap; gap: .4rem; max-height: 130px; overflow-y: auto; padding-right: .3rem;
 }
 .cam-pill-opt {
-    background: rgba(30,41,59,.7); border: 1px solid rgba(255,255,255,.1);
-    border-radius: 6px; padding: .3rem .65rem; font-size: .75rem; color: #cbd5e1;
+    background: var(--bg-secondary); border: 1px solid var(--border-glass);
+    border-radius: var(--radius-sm); padding: .3rem .65rem; font-size: .75rem; color: var(--text-secondary);
     cursor: pointer; transition: all .15s;
 }
-.cam-pill-opt:hover { border-color: #38bdf8; color: #38bdf8; }
+.cam-pill-opt:hover { border-color: var(--accent); color: var(--accent-light); }
 .cam-pill-opt.selected {
-    background: rgba(56,189,248,.2); border-color: #38bdf8; color: #38bdf8; font-weight: 700;
+    background: var(--accent-glow); border-color: var(--accent); color: var(--accent-light); font-weight: 700;
 }
 
 /* File Info Box */
 .file-meta-box {
     display: none; margin-top: 1rem; padding: .85rem 1rem;
-    background: rgba(30,41,59,.6); border: 1px solid rgba(255,255,255,.1);
-    border-radius: 8px; font-size: .82rem; color: #cbd5e1;
+    background: var(--bg-secondary); border: 1px solid var(--border-glass);
+    border-radius: var(--radius-sm); font-size: .82rem; color: var(--text-secondary);
 }
 .file-meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: .75rem; }
 .meta-item { display: flex; flex-direction: column; }
-.meta-lbl { font-size: .7rem; color: #64748b; text-transform: uppercase; }
-.meta-val { font-size: .92rem; font-weight: 700; color: #f8fafc; font-family: monospace; }
+.meta-lbl { font-size: .7rem; color: var(--text-muted); text-transform: uppercase; }
+.meta-val { font-size: .92rem; font-weight: 700; color: var(--text-primary); font-family: monospace; }
 
 /* Main Stage: Player + Live Sidebar */
 .stage-grid {
@@ -104,15 +104,15 @@
 /* Player Container */
 .player-wrap {
     position: relative; width: 100%; aspect-ratio: 16/9; background: #000;
-    border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,.1);
-    box-shadow: 0 12px 40px rgba(0,0,0,.5);
+    border-radius: var(--radius-md); overflow: hidden; border: 1px solid var(--border-glass);
+    box-shadow: var(--shadow-lg);
 }
 #videoCanvas {
     width: 100%; height: 100%; object-fit: contain; display: block; background: #000;
 }
 .player-empty-placeholder {
     position: absolute; inset: 0; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; color: #475569; pointer-events: none;
+    align-items: center; justify-content: center; color: var(--text-muted); pointer-events: none;
 }
 .player-top-overlay {
     position: absolute; top: 0; left: 0; right: 0; padding: .6rem .85rem;
@@ -122,72 +122,72 @@
 
 /* Control Bar */
 .ctrl-bar {
-    padding: .85rem 1rem; background: rgba(7,15,35,.95);
-    border-top: 1px solid rgba(255,255,255,.07); display: flex; flex-direction: column; gap: .75rem;
+    padding: .85rem 1rem; background: var(--bg-secondary);
+    border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: .75rem;
 }
 .ctrl-row {
     display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .75rem;
 }
 .ctrl-btns { display: flex; align-items: center; gap: .5rem; }
 .btn-act {
-    padding: .45rem 1rem; border-radius: 8px; font-size: .82rem; font-weight: 700;
+    padding: .45rem 1rem; border-radius: var(--radius-sm); font-size: .82rem; font-weight: 700;
     cursor: pointer; border: none; display: flex; align-items: center; gap: .4rem; transition: all .15s;
 }
-.btn-start  { background: #10b981; color: #064e3b; }
-.btn-start:hover { background: #34d399; box-shadow: 0 0 14px rgba(16,185,129,.4); }
-.btn-start:disabled { background: #334155; color: #64748b; cursor: not-allowed; box-shadow: none; }
-.btn-pause  { background: #f59e0b; color: #451a03; }
-.btn-pause:hover { background: #fbbf24; }
-.btn-pause:disabled { background: #334155; color: #64748b; cursor: not-allowed; }
-.btn-stop   { background: #ef4444; color: #450a0a; }
-.btn-stop:hover  { background: #f87171; }
-.btn-stop:disabled  { background: #334155; color: #64748b; cursor: not-allowed; }
+.btn-start  { background: var(--success); color: #fff; }
+.btn-start:hover { box-shadow: 0 0 14px var(--success-bg); filter: brightness(1.1); }
+.btn-start:disabled { background: var(--border-subtle); color: var(--text-muted); cursor: not-allowed; box-shadow: none; }
+.btn-pause  { background: var(--warning); color: #fff; }
+.btn-pause:hover { filter: brightness(1.1); }
+.btn-pause:disabled { background: var(--border-subtle); color: var(--text-muted); cursor: not-allowed; }
+.btn-stop   { background: var(--danger); color: #fff; }
+.btn-stop:hover  { filter: brightness(1.1); }
+.btn-stop:disabled  { background: var(--border-subtle); color: var(--text-muted); cursor: not-allowed; }
 
-.speed-grp { display: flex; align-items: center; gap: .3rem; background: rgba(15,23,42,.8); padding: .2rem; border-radius: 8px; border: 1px solid rgba(255,255,255,.1); }
+.speed-grp { display: flex; align-items: center; gap: .3rem; background: var(--bg-card); padding: .2rem; border-radius: var(--radius-sm); border: 1px solid var(--border-glass); }
 .btn-spd {
-    padding: .3rem .6rem; border-radius: 6px; font-size: .75rem; font-weight: 700;
-    color: #94a3b8; background: transparent; border: none; cursor: pointer;
+    padding: .3rem .6rem; border-radius: var(--radius-sm); font-size: .75rem; font-weight: 700;
+    color: var(--text-muted); background: transparent; border: none; cursor: pointer;
 }
-.btn-spd.active { background: #38bdf8; color: #082f49; }
+.btn-spd.active { background: var(--accent); color: #fff; }
 
 /* Progress Bar */
 .progress-container { width: 100%; }
-.progress-labels { display: flex; justify-content: space-between; font-size: .75rem; color: #94a3b8; margin-bottom: .25rem; font-family: monospace; }
+.progress-labels { display: flex; justify-content: space-between; font-size: .75rem; color: var(--text-muted); margin-bottom: .25rem; font-family: monospace; }
 .progress-bar-track {
-    width: 100%; height: 8px; background: rgba(255,255,255,.1); border-radius: 4px; overflow: hidden;
+    width: 100%; height: 8px; background: var(--border-glass); border-radius: 4px; overflow: hidden;
 }
 .progress-bar-fill {
-    width: 0%; height: 100%; background: linear-gradient(to right, #38bdf8, #10b981);
+    width: 0%; height: 100%; background: linear-gradient(to right, var(--accent), var(--success));
     transition: width .2s linear;
 }
 
 /* Sidebar: Counters & Live Feed */
 .rec-sidebar {
-    background: rgba(15,22,36,.85); backdrop-filter: blur(20px);
-    border: 1px solid rgba(255,255,255,.07); border-radius: 14px;
+    background: var(--bg-card); backdrop-filter: blur(20px);
+    border: 1px solid var(--border-glass); border-radius: var(--radius-lg);
     display: flex; flex-direction: column; height: 560px; overflow: hidden;
 }
 .cat-breakdown {
     display: grid; grid-template-columns: repeat(3, 1fr); gap: .45rem; padding: .85rem;
-    border-bottom: 1px solid rgba(255,255,255,.07); background: rgba(15,23,42,.6);
+    border-bottom: 1px solid var(--border-subtle); background: var(--bg-secondary);
 }
 .cat-card {
-    background: rgba(30,41,59,.5); border: 1px solid rgba(255,255,255,.07);
-    border-radius: 8px; padding: .4rem .3rem; text-align: center;
+    background: var(--bg-primary); border: 1px solid var(--border-glass);
+    border-radius: var(--radius-sm); padding: .4rem .3rem; text-align: center;
 }
-.cat-num { font-size: 1.05rem; font-weight: 800; color: #38bdf8; line-height: 1; }
-.cat-lbl { font-size: .63rem; color: #94a3b8; margin-top: .2rem; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cat-num { font-size: 1.05rem; font-weight: 800; color: var(--accent-light); line-height: 1; }
+.cat-lbl { font-size: .63rem; color: var(--text-muted); margin-top: .2rem; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .feed-list {
     flex: 1; overflow-y: auto; padding: .85rem; display: flex; flex-direction: column; gap: .55rem;
 }
 .feed-list::-webkit-scrollbar { width: 4px; }
-.feed-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 4px; }
+.feed-list::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 4px; }
 
 /* Event Cards */
 .rec-ec {
-    background: rgba(15,23,42,.9); border: 1px solid rgba(255,255,255,.07);
-    border-radius: 9px; padding: .65rem .75rem; animation: ec-in .25s ease-out;
+    background: var(--bg-secondary); border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm); padding: .65rem .75rem; animation: ec-in .25s ease-out;
 }
 @keyframes ec-in { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: none; } }
 
@@ -205,12 +205,12 @@
 .b-vehicle       { background: rgba(100,116,139,.15); color: #94a3b8; border: 1px solid rgba(100,116,139,.35); }
 
 /* Audit Table */
-.rec-table { width: 100%; border-collapse: collapse; text-align: left; font-size: .84rem; color: #e2e8f0; }
+.rec-table { width: 100%; border-collapse: collapse; text-align: left; font-size: .84rem; color: var(--text-primary); }
 .rec-table th {
-    padding: .85rem 1rem; background: rgba(15,23,42,.95); border-bottom: 1px solid rgba(255,255,255,.1);
-    text-transform: uppercase; font-size: .72rem; letter-spacing: .05em; color: #94a3b8;
+    padding: .85rem 1rem; background: var(--bg-secondary); border-bottom: 1px solid var(--border-glass);
+    text-transform: uppercase; font-size: .72rem; letter-spacing: .05em; color: var(--text-muted);
 }
-.rec-table td { padding: .75rem 1rem; border-bottom: 1px solid rgba(255,255,255,.05); }
+.rec-table td { padding: .75rem 1rem; border-bottom: 1px solid var(--border-subtle); }
 
 /* Zoom Modal */
 #cropModal {
@@ -245,7 +245,7 @@
     </div>
 
     <!-- Step 1: Upload & Camera Association Card -->
-    <div class="rec-card">
+    <div class="rec-card hud-bracket">
         <div class="rec-card-hdr">
             <h3 class="rec-card-title">📁 Step 1: Upload Footage &amp; Select Camera Source</h3>
             <span id="uploadStatusBadge" class="pill pill-state" style="background:rgba(59,130,246,.2); color:#60a5fa;">Ready For Upload</span>
@@ -291,7 +291,7 @@
     <!-- Step 2: Live Processing Stage & Real-time Sightings -->
     <div class="stage-grid">
         <!-- Player Column -->
-        <div class="rec-card" style="margin-bottom:0;">
+        <div class="rec-card hud-bracket" style="margin-bottom:0;">
             <div class="rec-card-hdr">
                 <h3 class="rec-card-title">🖥️ Step 2: AI Detection &amp; Tracking Stream</h3>
                 <span id="playerStateBadge" class="pill pill-state" style="background:rgba(100,116,139,.2); color:#94a3b8;">Awaiting Video</span>
@@ -308,6 +308,7 @@
                         <span style="font-size:.75rem; font-weight:700; color:#34d399; background:rgba(0,0,0,.7); padding:.2rem .5rem; border-radius:4px;" id="ovlFrameInfo">Frame 0 / 0</span>
                         <span style="font-size:.75rem; font-weight:700; color:#38bdf8; background:rgba(0,0,0,.7); padding:.2rem .5rem; border-radius:4px;" id="ovlTrackInfo">0 Active Tracks</span>
                     </div>
+                    <div class="feed-scanline" style="pointer-events:none;"></div>
                 </div>
             </div>
             <!-- Controls & Progress -->
@@ -344,7 +345,7 @@
         </div>
 
         <!-- Sidebar: Counters & Real-time Feed -->
-        <div class="rec-sidebar">
+        <div class="rec-sidebar hud-bracket">
             <div class="cat-breakdown">
                 <div class="cat-card"><div class="cat-num" id="cntCars">0</div><div class="cat-lbl">🚗 Cars</div></div>
                 <div class="cat-card"><div class="cat-num" id="cntRick">0</div><div class="cat-lbl">🛺 Autos</div></div>
@@ -363,7 +364,7 @@
     </div>
 
     <!-- Step 3: Sighting Audit Table -->
-    <div class="rec-card" style="margin-top:1.5rem;">
+    <div class="rec-card hud-bracket" style="margin-top:1.5rem;">
         <div class="rec-card-hdr">
             <h3 class="rec-card-title">📊 Step 3: Sighting Audit Report (Saved to PostgreSQL)</h3>
             <span id="auditCountBadge" class="pill">0 sightings recorded</span>
@@ -377,13 +378,15 @@
                         <th>Camera Source</th>
                         <th>Vehicle Class</th>
                         <th>License Plate</th>
+                        <th>ANPR / OCR</th>
+                        <th>Watchlist</th>
                         <th>Global Track ID</th>
                         <th>Confidence</th>
                     </tr>
                 </thead>
                 <tbody id="auditTableBody">
                     <tr>
-                        <td colspan="7" style="text-align:center; padding:2.5rem; color:#64748b;">
+                        <td colspan="9" style="text-align:center; padding:2.5rem; color:#64748b;">
                             No sightings logged yet. Processing footage will save vehicle entries to database in real-time.
                         </td>
                     </tr>
@@ -963,12 +966,15 @@ function handleNewDetection(d) {
         </div>
         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:.35rem; font-size:.76rem; color:#94a3b8;">
             ${plate
-                ? `<span style="font-family:monospace;font-weight:700;color:${isAlert ? '#f87171' : '#38bdf8'};">🪪 ${plate}</span>`
+                ? `<div class="hsrp-chip ${isAlert ? 'hsrp-chip--alert' : ''}" style="transform:scale(0.92);transform-origin:left;">
+                     <span class="hsrp-ind"><span class="hsrp-chakra">&#9770;</span>IND</span>
+                     <span class="hsrp-number">${plate}</span>
+                   </div>`
                 : '<span style="color:#475569;font-style:italic;">Scanning plate…</span>'}
             <span>Conf: <strong style="color:#34d399;">${d.confidence}%</strong></span>
         </div>
-        ${isAlert ? '<div style="font-size:.7rem;font-weight:700;color:#f87171;margin-top:.25rem;">🚨 WATCHLIST MATCH</div>' : ''}
-        ${ocrConf != null ? `<div style="font-size:.68rem;color:#64748b;margin-top:.2rem;display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;">OCR <strong style="color:#34d399;">${ocrConf}%</strong> ·  Det <strong style="color:#a78bfa;">${platConf ?? '—'}%</strong>${readCount ? ' · ' + readCount + ' reads' : ''} ${d.anpr_provider ? `<span style="font-size:.62rem;color:#38bdf8;background:rgba(56,189,248,.12);padding:1px 4px;border-radius:2px;">${d.anpr_provider.replace('_', ' ')}</span>` : ''}</div>` : ''}
+        ${isAlert ? '<div style="font-size:.7rem;font-weight:700;color:#f87171;margin-top:.25rem;">&#128680; WATCHLIST MATCH</div>' : ''}
+        ${ocrConf != null ? `<div style="font-size:.68rem;color:#64748b;margin-top:.2rem;display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;">OCR <strong style="color:#34d399;">${ocrConf}%</strong> &middot;  Det <strong style="color:#a78bfa;">${platConf ?? '—'}%</strong>${readCount ? ' &middot; ' + readCount + ' reads' : ''} ${d.anpr_provider ? `<span style="font-size:.62rem;color:#38bdf8;background:rgba(56,189,248,.12);padding:1px 4px;border-radius:2px;">${d.anpr_provider.replace('_', ' ')}</span>` : ''}</div>` : ''}
     `;
     feed.insertBefore(card, feed.firstChild);
     while (feed.children.length > 40) feed.removeChild(feed.lastChild);
@@ -1083,10 +1089,10 @@ function prependAuditRow(d) {
         : '';
 
     const plateHtml = plate
-        ? `<span style="display:inline-block; padding:.2rem .55rem; background:${isAlert ? 'rgba(239,68,68,.15)' : '#1e293b'};
-                  border:1px solid ${isAlert ? 'rgba(239,68,68,.45)' : 'rgba(255,255,255,.18)'};
-                  border-radius:4px; font-family:monospace; font-weight:700; letter-spacing:1px;
-                  color:${isAlert ? '#f87171' : '#38bdf8'};">🪪 ${plate}</span>${plateCropThumb}`
+        ? `<div class="hsrp-chip ${isAlert ? 'hsrp-chip--alert' : ''}">
+             <span class="hsrp-ind"><span class="hsrp-chakra">&#9770;</span>IND</span>
+             <span class="hsrp-number">${plate}</span>
+           </div>${plateCropThumb}`
         : '<span style="color:#475569;font-size:.78rem;">No plate read</span>';
 
     const prov = d.anpr_provider ? `<span style="font-size:.64rem;color:#38bdf8;background:rgba(56,189,248,.12);padding:1px 4px;border-radius:3px;border:1px solid rgba(56,189,248,.25);width:fit-content;">${d.anpr_provider.replace('_', ' ').toUpperCase()}</span>` : '';
@@ -1149,9 +1155,10 @@ function openCropModal(url, title) {
     const cap = document.getElementById('cropModalCaption');
     if (!modal || !img) return;
     img.src = url;
-    cap.textContent = title;
+    if (cap) cap.textContent = title || 'Detection Crop';
     modal.style.display = 'flex';
 }
+window.showCropModal = openCropModal;
 
 // ══ Boot ══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', () => {

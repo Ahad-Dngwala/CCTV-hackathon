@@ -1,11 +1,12 @@
 /**
- * Sentinel — Map Dashboard (static/js/map.js)
+ * EyesOnGuj — Map Dashboard (static/js/map.js)
  *
- * Leaflet map centered on Gujarat, markers from /api/v1/cameras,
- * clustered via Leaflet.markercluster.
+ * Tactical GIS Command Dashboard centered on Gujarat.
+ * Leaflet map, PostGIS boundary rendering, marker clustering via Leaflet.markercluster,
+ * Slide-Over Telemetry Inspector Drawer, animated radar wave status markers,
+ * and high-contrast tactical tile viewports.
  *
- * Department layer-toggle + district dropdown → re-fetch + redraw.
- * Uses plain fetch(), NOT HTMX (see implementation plan Phase 4 note).
+ * Uses plain fetch(), NOT HTMX. Preserves all GIS GeoJSON and XSS protections.
  */
 
 function mapDashboard() {
@@ -22,14 +23,43 @@ function mapDashboard() {
         districtBoundaryLayer: null,
         showDistrictBoundaries: true,
 
+        // Tactical HUD & Telemetry Inspector State
+        darkTiles: false,
+        inspectorOpen: false,
+        selectedCamera: null,
+        selectedCameraStreamUrl: '',
+        selectedCameraStreamLabel: 'Launch Live Stream View',
+        currentTime: '',
+        timeTimer: null,
+
         async init() {
-            // Check if map container is already initialized (fixes hot-reloading / double-init Alpine errors)
+            // Default dark tiles mode to match active theme
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            this.darkTiles = currentTheme !== 'light';
+
+            // Clock ticker for tactical HUD
+            const updateClock = () => {
+                const now = new Date();
+                this.currentTime = now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour12: false }) + ' IST';
+            };
+            updateClock();
+            this.timeTimer = setInterval(updateClock, 1000);
+
+            // Global bridge for popup buttons to open inspector
+            window.eyesongujOpenInspector = (camId) => {
+                const cam = this.allCameras.find(c => String(c.id) === String(camId));
+                if (cam) {
+                    this.openInspector(cam);
+                }
+            };
+
+            // Check if map container is already initialized (hot-reload / Alpine safety)
             const mapContainer = document.getElementById('map');
             if (mapContainer && mapContainer._leaflet_id) {
                 mapContainer._leaflet_id = null;
             }
 
-            // Initialise Leaflet map centered on Gujarat
+            // Initialise Leaflet map centered on Gujarat [22.3, 72.0]
             this.map = L.map('map', {
                 zoomControl: true,
                 attributionControl: true,
@@ -37,14 +67,16 @@ function mapDashboard() {
                 tap: false,
             }).setView([22.3, 72.0], 7);
 
-            // Prevent clicks/drags on control panels from bubbling to map
-            document.querySelectorAll('.map-control-card, .map-stats').forEach(el => {
-                L.DomEvent.disableClickPropagation(el);
-                L.DomEvent.disableScrollPropagation(el);
-            });
+            // Prevent clicks/drags on HUD floating panels from propagating to the Leaflet canvas
+            setTimeout(() => {
+                document.querySelectorAll('.map-control-card, .map-stats, .camera-inspector-drawer').forEach(el => {
+                    L.DomEvent.disableClickPropagation(el);
+                    L.DomEvent.disableScrollPropagation(el);
+                });
+            }, 100);
 
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
                 maxZoom: 19,
             }).addTo(this.map);
 
@@ -63,11 +95,52 @@ function mapDashboard() {
                 this.loadDistricts(),
             ]);
 
-            // Draw real district boundary polygons (on by default)
+            // Draw real PostGIS district boundary polygons
             this.renderDistrictBoundaries();
 
-            // Load cameras and render
+            // Load cameras and render markers
             await this.loadAndRender();
+        },
+
+        openInspector(cam) {
+            this.selectedCamera = cam;
+            this.selectedCameraStreamUrl = '';
+            this.selectedCameraStreamLabel = 'Launch Live Stream View';
+
+            if (cam.vms_url) {
+                this.selectedCameraStreamUrl = cam.vms_url;
+                this.selectedCameraStreamLabel = 'Open VMS Viewer';
+            } else if (cam.hls_url) {
+                this.selectedCameraStreamUrl = cam.hls_url;
+                this.selectedCameraStreamLabel = 'Open HLS Stream';
+            } else if (cam.rtsp_url) {
+                this.selectedCameraStreamUrl = `/api/v1/cameras/${cam.id}/live`;
+                this.selectedCameraStreamLabel = 'Open Live MJPEG View';
+            }
+
+            this.inspectorOpen = true;
+        },
+
+        closeInspector() {
+            this.inspectorOpen = false;
+        },
+
+        resetMapView() {
+            if (this.map) {
+                this.map.setView([22.3, 72.0], 7);
+            }
+        },
+
+        toggleDarkTiles() {
+            this.darkTiles = !this.darkTiles;
+        },
+
+        copyCoords() {
+            if (this.selectedCamera && this.selectedCamera.location && this.selectedCamera.location.coordinates) {
+                const [lon, lat] = this.selectedCamera.location.coordinates;
+                const coordStr = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+                navigator.clipboard.writeText(coordStr);
+            }
         },
 
         async loadDepartments() {
@@ -139,11 +212,10 @@ function mapDashboard() {
                 this.districts = await res.json();
 
                 const select = document.getElementById('district-filter');
-                // Keep the "All Districts" option
                 this.districts.forEach(d => {
                     const opt = document.createElement('option');
                     opt.value = d.id;
-                    opt.textContent = d.name;
+                    opt.textContent = `${d.name} (${d.camera_count || 0} nodes)`;
                     select.appendChild(opt);
                 });
             } catch (e) {
@@ -175,9 +247,6 @@ function mapDashboard() {
             document.getElementById('district-filter').value = districtId;
         },
 
-        // Draws each district's real PostGIS polygon (shared/db/seed.sql —
-        // actual Gujarat district shapes, not bounding boxes) as a Leaflet
-        // GeoJSON layer, click-to-filter + hover highlight.
         renderDistrictBoundaries() {
             if (this.districtBoundaryLayer) {
                 this.map.removeLayer(this.districtBoundaryLayer);
@@ -197,13 +266,34 @@ function mapDashboard() {
 
             if (featureCollection.features.length === 0) return;
 
-            const baseStyle = { color: '#3b82f6', weight: 1.25, opacity: 0.55, fillOpacity: 0.03, fillColor: '#3b82f6' };
-            const hoverStyle = { weight: 2.5, opacity: 0.9, fillOpacity: 0.12 };
+            // Holographic cyber styling for district boundaries
+            const baseStyle = { 
+                color: '#00e5ff', 
+                weight: 1.5, 
+                opacity: 0.65, 
+                fillOpacity: 0.04, 
+                fillColor: '#00e5ff',
+                dashArray: '3, 4'
+            };
+            const hoverStyle = { 
+                color: '#38bdf8', 
+                weight: 2.5, 
+                opacity: 0.95, 
+                fillOpacity: 0.16, 
+                fillColor: '#00e5ff',
+                dashArray: ''
+            };
 
             this.districtBoundaryLayer = L.geoJSON(featureCollection, {
                 style: () => ({ ...baseStyle }),
                 onEachFeature: (feature, layer) => {
-                    layer.bindTooltip(feature.properties.name, { sticky: true, className: 'district-tooltip' });
+                    layer.bindTooltip(
+                        `<div class="district-tooltip-content">
+                            <strong>${feature.properties.name}</strong>
+                            <span class="badge badge--sm badge--info" style="margin-left: 0.35rem;">${feature.properties.camera_count || 0} nodes</span>
+                         </div>`, 
+                        { sticky: true, className: 'district-tooltip', html: true }
+                    );
                     layer.on('mouseover', () => layer.setStyle(hoverStyle));
                     layer.on('mouseout', () => layer.setStyle(baseStyle));
                     layer.on('click', () => this.filterByDistrict(feature.properties.id));
@@ -212,7 +302,6 @@ function mapDashboard() {
 
             if (this.showDistrictBoundaries) {
                 this.districtBoundaryLayer.addTo(this.map);
-                // Keep boundaries under markers/gap overlay so popups/clusters stay clickable on top.
                 this.districtBoundaryLayer.bringToBack();
             }
         },
@@ -233,37 +322,59 @@ function mapDashboard() {
 
             let online = 0, offline = 0, maintenance = 0, total = 0;
 
-            const statusEmoji = {
-                'online': '🟢',
-                'offline': '🔴',
-                'maintenance': '🟡',
+            // High-tech status pins with animated radar pulse wave on online cameras
+            const statusPins = {
+                'online': `<svg class="map-camera-pin map-pin--online" width="34" height="42" viewBox="0 0 34 42" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="17" cy="15" r="14" fill="#00ff88" fill-opacity="0.25" class="radar-pulse-ring"/>
+                    <path d="M17 2C9.82 2 4 7.82 4 15c0 9.5 13 22 13 22s13-12.5 13-22c0-7.18-5.82-13-13-13z" fill="#070d1a" stroke="#00ff88" stroke-width="2"/>
+                    <circle cx="17" cy="15" r="6" fill="#00ff88" fill-opacity="0.3"/>
+                    <circle cx="17" cy="15" r="3" fill="#00ff88"/>
+                </svg>`,
+                'offline': `<svg class="map-camera-pin map-pin--offline" width="34" height="42" viewBox="0 0 34 42" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M17 2C9.82 2 4 7.82 4 15c0 9.5 13 22 13 22s13-12.5 13-22c0-7.18-5.82-13-13-13z" fill="#070d1a" stroke="#ff3366" stroke-width="2"/>
+                    <circle cx="17" cy="15" r="6" fill="#ff3366" fill-opacity="0.2"/>
+                    <line x1="13.5" y1="11.5" x2="20.5" y2="18.5" stroke="#ff3366" stroke-width="2" stroke-linecap="round"/>
+                    <line x1="20.5" y1="11.5" x2="13.5" y2="18.5" stroke="#ff3366" stroke-width="2" stroke-linecap="round"/>
+                </svg>`,
+                'maintenance': `<svg class="map-camera-pin map-pin--maintenance" width="34" height="42" viewBox="0 0 34 42" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M17 2C9.82 2 4 7.82 4 15c0 9.5 13 22 13 22s13-12.5 13-22c0-7.18-5.82-13-13-13z" fill="#070d1a" stroke="#ffaa00" stroke-width="2"/>
+                    <circle cx="17" cy="15" r="6" fill="#ffaa00" fill-opacity="0.2"/>
+                    <line x1="17" y1="10.5" x2="17" y2="15.5" stroke="#ffaa00" stroke-width="2" stroke-linecap="round"/>
+                    <circle cx="17" cy="18.5" r="1" fill="#ffaa00"/>
+                </svg>`
             };
 
             this.allCameras.forEach(cam => {
-                // Skip cameras without location
-                if (!cam.location) return;
+                if (!cam.location || !cam.location.coordinates) return;
 
                 // Department filter
                 const deptId = cam.department_id || '__none__';
                 if (!this.activeDepartments.has(deptId)) return;
 
                 total++;
-                if (cam.connectivity_status === 'online') online++;
-                else if (cam.connectivity_status === 'offline') offline++;
-                else maintenance++;
+                const status = (cam.connectivity_status || '').toLowerCase();
+                if (status === 'online') online++;
+                else if (status === 'offline') offline++;
+                else if (status === 'maintenance') maintenance++;
+                else offline++;
 
                 const [lon, lat] = cam.location.coordinates;
-                const emoji = statusEmoji[cam.connectivity_status] || '⚪';
+                const pinSvg = statusPins[status] || statusPins['offline'];
 
                 const icon = L.divIcon({
-                    html: `<span style="font-size: 1.4rem; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));">${emoji}</span>`,
-                    className: 'sentinel-marker',
-                    iconSize: [28, 28],
-                    iconAnchor: [14, 14],
-                    popupAnchor: [0, -14],
+                    html: pinSvg,
+                    className: 'eyesonguj-marker',
+                    iconSize: [34, 42],
+                    iconAnchor: [17, 39],
+                    popupAnchor: [0, -36],
                 });
 
                 const marker = L.marker([lat, lon], { icon });
+
+                // Wire pin click directly to the Slide-Over Inspector Drawer
+                marker.on('click', () => {
+                    this.openInspector(cam);
+                });
 
                 const escapeHtml = (unsafe) => {
                     return (unsafe || "").toString()
@@ -274,78 +385,77 @@ function mapDashboard() {
                          .replace(/'/g, "&#039;");
                 };
 
-                // Build popup
-                let popupHtml = `
-                    <div class="popup-content">
-                        <div class="popup-title">${emoji} ${escapeHtml(cam.name)}</div>
-                        <div class="popup-row">
-                            <span class="popup-label">Department</span>
-                            <span class="popup-value">${cam.department_name || '—'}</span>
-                        </div>
-                        <div class="popup-row">
-                            <span class="popup-label">District</span>
-                            <span class="popup-value">${cam.district_name || '—'}</span>
-                        </div>
-                        <div class="popup-row">
-                            <span class="popup-label">Type</span>
-                            <span class="popup-value">${cam.camera_type || '—'}</span>
-                        </div>
-                        <div class="popup-row">
-                            <span class="popup-label">Ownership</span>
-                            <span class="popup-value">${cam.ownership || '—'}</span>
-                        </div>
-                        <div class="popup-row">
-                            <span class="popup-label">Status</span>
-                            <span class="popup-value">
-                                <span class="badge badge--${cam.connectivity_status}">
-                                    <span class="badge-dot badge-dot--${cam.connectivity_status}"></span>
-                                    ${cam.connectivity_status}
-                                </span>
-                            </span>
-                        </div>
-                        <div class="popup-row">
-                            <span class="popup-label">Storage</span>
-                            <span class="popup-value">${cam.storage_type || '—'}${cam.retention_days ? ' · ' + cam.retention_days + 'd' : ''}</span>
-                        </div>`;
+                const statusClass = ['online', 'offline', 'maintenance'].includes(status)
+                    ? status
+                    : 'unknown';
 
-                // Manually-onboarded cameras carry their viewer link in
-                // vms_url; grid-catalogue cameras get a browser-openable
-                // https hls_url. Federation-registered cameras whose
-                // *only* link is rtsp_url (e.g. the ONVIF adapter) are
-                // different: a bare rtsp:// URI isn't something a
-                // browser can open in a tab (no scheme handler unless
-                // the OS has one registered), so route those through
-                // this app's own /{id}/live endpoint instead, which
-                // decodes the RTSP stream server-side and serves it as
-                // browser-playable MJPEG.
                 let streamUrl = null;
-                let streamLabel = "🖥️ Open VMS Viewer";
+                let streamLabel = "Open VMS Viewer";
                 if (cam.vms_url) {
                     streamUrl = cam.vms_url;
                 } else if (cam.hls_url) {
                     streamUrl = cam.hls_url;
                 } else if (cam.rtsp_url) {
                     streamUrl = `/api/v1/cameras/${cam.id}/live`;
-                    streamLabel = "🖥️ Open Live View";
-                }
-                if (streamUrl) {
-                    popupHtml += `
-                        <a href="${escapeHtml(streamUrl)}" target="_blank" rel="noopener" class="popup-link">
-                            ${streamLabel}
-                        </a>`;
+                    streamLabel = "Open Live View";
                 }
 
-                popupHtml += `</div>`;
+                // Rich Pop-up Card
+                let popupHtml = `
+                    <div class="popup-content hud-bracket">
+                        <div class="popup-title">
+                            <span class="badge-dot badge-dot--${statusClass}"></span>
+                            <span class="popup-name">${escapeHtml(cam.name)}</span>
+                        </div>
+                        <div class="popup-details">
+                            <div class="popup-row">
+                                <span class="popup-label">Department</span>
+                                <span class="popup-value">${escapeHtml(cam.department_name || '—')}</span>
+                            </div>
+                            <div class="popup-row">
+                                <span class="popup-label">District</span>
+                                <span class="popup-value">${escapeHtml(cam.district_name || '—')}</span>
+                            </div>
+                            <div class="popup-row">
+                                <span class="popup-label">Type</span>
+                                <span class="popup-value">${escapeHtml(cam.camera_type || '—')}</span>
+                            </div>
+                            <div class="popup-row">
+                                <span class="popup-label">Status</span>
+                                <span class="popup-value">
+                                    <span class="badge badge--${statusClass}">
+                                        <span class="badge-dot badge-dot--${statusClass}"></span>
+                                        ${statusClass.toUpperCase()}
+                                    </span>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="popup-action">
+                            <button type="button" class="btn btn--secondary btn--sm btn--block popup-inspect-btn" onclick="window.eyesongujOpenInspector('${escapeHtml(cam.id)}')">
+                                <svg class="svg-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+                                <span>Inspect Telemetry</span>
+                            </button>
+                            ${streamUrl ? `
+                            <a href="${escapeHtml(streamUrl)}" target="_blank" rel="noopener" class="popup-link btn btn--primary btn--sm btn--block" style="margin-top: 0.4rem;">
+                                <svg class="svg-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                <span>${streamLabel}</span>
+                            </a>` : ''}
+                        </div>
+                    </div>`;
 
                 marker.bindPopup(popupHtml, { maxWidth: 300, minWidth: 240 });
                 this.clusterGroup.addLayer(marker);
             });
 
-            // Update stats
-            document.getElementById('stat-online').textContent = online;
-            document.getElementById('stat-offline').textContent = offline;
-            document.getElementById('stat-maintenance').textContent = maintenance;
-            document.getElementById('stat-total').textContent = total;
+            // Update bottom stats dock
+            const elOnline = document.getElementById('stat-online');
+            const elOffline = document.getElementById('stat-offline');
+            const elMaint = document.getElementById('stat-maintenance');
+            const elTotal = document.getElementById('stat-total');
+            if (elOnline) elOnline.textContent = online;
+            if (elOffline) elOffline.textContent = offline;
+            if (elMaint) elMaint.textContent = maintenance;
+            if (elTotal) elTotal.textContent = total;
         },
 
         async toggleGapOverlay(enable) {
@@ -399,23 +509,28 @@ function mapDashboard() {
                     onEachFeature: function(feature, layer) {
                         const p = feature.properties;
                         layer.bindPopup(`
-                            <div class="popup-content">
-                                <div class="popup-title">🚨 Uncovered Region</div>
-                                <div class="popup-row">
-                                    <span class="popup-label">District</span>
-                                    <span class="popup-value">${p.district_name}</span>
+                            <div class="popup-content hud-bracket">
+                                <div class="popup-title">
+                                    <span class="badge-dot badge-dot--critical"></span>
+                                    <span class="popup-name">Uncovered Region</span>
                                 </div>
-                                <div class="popup-row">
-                                    <span class="popup-label">Cameras</span>
-                                    <span class="popup-value">${p.camera_count} active</span>
-                                </div>
-                                <div class="popup-row">
-                                    <span class="popup-label">Coverage</span>
-                                    <span class="popup-value">${p.coverage_pct}%</span>
-                                </div>
-                                <div class="popup-row">
-                                    <span class="popup-label">Uncovered Area</span>
-                                    <span class="popup-value">${p.uncovered_area_sq_km} sq km</span>
+                                <div class="popup-details">
+                                    <div class="popup-row">
+                                        <span class="popup-label">District</span>
+                                        <span class="popup-value">${p.district_name}</span>
+                                    </div>
+                                    <div class="popup-row">
+                                        <span class="popup-label">Cameras</span>
+                                        <span class="popup-value">${p.camera_count} active</span>
+                                    </div>
+                                    <div class="popup-row">
+                                        <span class="popup-label">Coverage</span>
+                                        <span class="popup-value">${p.coverage_pct}%</span>
+                                    </div>
+                                    <div class="popup-row">
+                                        <span class="popup-label">Uncovered Area</span>
+                                        <span class="popup-value">${p.uncovered_area_sq_km} sq km</span>
+                                    </div>
                                 </div>
                             </div>
                         `);

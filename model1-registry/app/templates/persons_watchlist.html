@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 
-{% block title %}Sentinel — Person Watchlist & Facial Biometric Registry{% endblock %}
+{% import "components/icons.html" as icons %}
+
+{% block title %}EyesOnGuj — Person Watchlist & Facial Biometric Registry{% endblock %}
 
 {% block content %}
 <div class="page-container" style="max-width: 1480px; margin: 0 auto; padding: 2rem 1.5rem;" x-data="personsWatchlistPage()" x-init="init()">
@@ -8,10 +10,10 @@
     <div class="page-header" style="margin-bottom: 2rem; display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
         <div>
             <div style="display: flex; align-items: center; gap: 0.65rem;">
-                <h1 class="page-title" style="font-size: 1.75rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.02em;">
-                    Person Watchlist
+                <h1 class="page-title" style="font-size: 1.75rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.02em; display: flex; align-items: center; gap: .6rem;">
+                    {{ icons.icon("person", size=26) }} Person Watchlist
                 </h1>
-                <span class="badge" style="background: rgba(99, 102, 241, 0.15); color: var(--accent-light); border: 1px solid rgba(99, 102, 241, 0.3); font-size: 0.75rem; font-weight: 700;">
+                <span class="badge badge-accent" style="font-size: 0.75rem; font-weight: 700;">
                     512-D PGVECTOR HNSW
                 </span>
             </div>
@@ -19,7 +21,7 @@
                 Facial biometric registry with real-time AI quality gatekeeper (boundary completeness, sharpness, and 3D pose) and 512-dimensional InceptionResnetV1 embeddings for 1:N surveillance identification.
             </p>
         </div>
-        <button class="btn btn--primary" @click="openAddModal()" id="btn-add-person" style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.65rem 1.25rem; font-weight: 600;">
+        <button class="btn btn-primary" @click="openAddModal()" id="btn-add-person" style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.65rem 1.25rem; font-weight: 600;">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
                 <circle cx="9" cy="7" r="4"></circle>
@@ -32,34 +34,34 @@
 
     <!-- Stat Metric Cards -->
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1.25rem; margin-bottom: 2rem;">
-        <div class="card" style="padding: 1.35rem; background: rgba(17, 24, 39, 0.7); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: var(--radius-lg);">
+        <div class="card hud-bracket" style="padding: 1.35rem; background: var(--bg-card); border: 1px solid var(--border-glass); border-radius: var(--radius-lg); box-shadow: var(--shadow-card);">
             <div style="font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Total Active Targets</div>
             <div style="font-size: 1.85rem; font-weight: 800; color: var(--text-primary); margin-top: 0.4rem;" x-text="stats.active">0</div>
         </div>
 
-        <div class="card" style="padding: 1.35rem; background: rgba(239, 68, 68, 0.06); border: 1px solid rgba(239, 68, 68, 0.22); border-radius: var(--radius-lg);">
-            <div style="font-size: 0.78rem; color: #f87171; text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Wanted Suspects</div>
-            <div style="font-size: 1.85rem; font-weight: 800; color: #ef4444; margin-top: 0.4rem;" x-text="stats.wanted">0</div>
+        <div class="card hud-bracket" style="padding: 1.35rem; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: var(--radius-lg);">
+            <div style="font-size: 0.78rem; color: var(--danger); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Wanted Suspects</div>
+            <div style="font-size: 1.85rem; font-weight: 800; color: var(--danger); margin-top: 0.4rem;" x-text="stats.wanted">0</div>
         </div>
 
-        <div class="card" style="padding: 1.35rem; background: rgba(245, 158, 11, 0.06); border: 1px solid rgba(245, 158, 11, 0.22); border-radius: var(--radius-lg);">
-            <div style="font-size: 0.78rem; color: #fbbf24; text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Missing Persons</div>
-            <div style="font-size: 1.85rem; font-weight: 800; color: #f59e0b; margin-top: 0.4rem;" x-text="stats.missing">0</div>
+        <div class="card hud-bracket" style="padding: 1.35rem; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: var(--radius-lg);">
+            <div style="font-size: 0.78rem; color: var(--warning); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Missing Persons</div>
+            <div style="font-size: 1.85rem; font-weight: 800; color: var(--warning); margin-top: 0.4rem;" x-text="stats.missing">0</div>
         </div>
 
-        <div class="card" style="padding: 1.35rem; background: rgba(168, 85, 247, 0.06); border: 1px solid rgba(168, 85, 247, 0.22); border-radius: var(--radius-lg);">
+        <div class="card hud-bracket" style="padding: 1.35rem; background: rgba(168, 85, 247, 0.08); border: 1px solid rgba(168, 85, 247, 0.25); border-radius: var(--radius-lg);">
             <div style="font-size: 0.78rem; color: #c084fc; text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Under Surveillance</div>
             <div style="font-size: 1.85rem; font-weight: 800; color: #a855f7; margin-top: 0.4rem;" x-text="stats.suspect">0</div>
         </div>
 
-        <div class="card" style="padding: 1.35rem; background: rgba(34, 197, 94, 0.06); border: 1px solid rgba(34, 197, 94, 0.22); border-radius: var(--radius-lg);">
-            <div style="font-size: 0.78rem; color: #4ade80; text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Resolved Cases</div>
-            <div style="font-size: 1.85rem; font-weight: 800; color: #22c55e; margin-top: 0.4rem;" x-text="stats.resolved">0</div>
+        <div class="card hud-bracket" style="padding: 1.35rem; background: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.25); border-radius: var(--radius-lg);">
+            <div style="font-size: 0.78rem; color: var(--success); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Resolved Cases</div>
+            <div style="font-size: 1.85rem; font-weight: 800; color: var(--success); margin-top: 0.4rem;" x-text="stats.resolved">0</div>
         </div>
     </div>
 
     <!-- Filters & Search Toolbar -->
-    <div class="card" style="padding: 1.25rem 1.5rem; margin-bottom: 1.75rem; background: rgba(17, 24, 39, 0.7); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: var(--radius-lg);">
+    <div class="card hud-bracket" style="padding: 1.25rem 1.5rem; margin-bottom: 1.75rem; background: var(--bg-card); border: 1px solid var(--border-glass); border-radius: var(--radius-lg);">
         <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: center;">
             <div style="flex: 1; min-width: 280px; position: relative;">
                 <input type="text" class="form-input" placeholder="Search person name or alias..."
@@ -90,11 +92,11 @@
     </div>
 
     <!-- Watchlist Table Card -->
-    <div class="card" style="padding: 0; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: var(--radius-lg); background: rgba(17, 24, 39, 0.75);">
+    <div class="card hud-bracket" style="padding: 0; overflow: hidden; border: 1px solid var(--border-glass); border-radius: var(--radius-lg); background: var(--bg-card); box-shadow: var(--shadow-card);">
         <div class="table-wrapper" style="overflow-x: auto;">
             <table class="table" id="persons-table" style="width: 100%; border-collapse: collapse;">
                 <thead>
-                    <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.08); background: rgba(15, 23, 42, 0.6);">
+                    <tr style="border-bottom: 1px solid var(--border-subtle); background: var(--bg-secondary);">
                         <th style="padding: 1.1rem 1.5rem; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; text-align: left;">Portrait</th>
                         <th style="padding: 1.1rem 1.5rem; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; text-align: left;">Person Name / Alias</th>
                         <th style="padding: 1.1rem 1.5rem; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; text-align: left;">Category</th>
@@ -224,7 +226,7 @@
          @click.self="showAddModal = false"
          style="display: none;">
 
-        <div class="modal-card card" style="width: 100%; max-width: 640px; max-height: 90vh; overflow-y: auto; background: #0f172a; border: 1px solid rgba(255,255,255,0.12); border-radius: var(--radius-xl); padding: 2rem; box-shadow: 0 20px 40px rgba(0,0,0,0.6);"
+        <div class="modal-card card hud-bracket" style="width: 100%; max-width: 640px; max-height: 90vh; overflow-y: auto; background: var(--bg-card); border: 1px solid var(--border-glass); border-radius: var(--radius-xl); padding: 2rem; box-shadow: var(--shadow-modal);"
              x-transition:enter="transition ease-out duration-200"
              x-transition:enter-start="opacity-0 transform scale-95"
              x-transition:enter-end="opacity-100 transform scale-100">
@@ -354,7 +356,7 @@
          @click.self="showPhotoModal = false"
          style="display: none;">
 
-        <div style="background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: var(--radius-xl); padding: 1.5rem; max-width: 420px; width: 100%; text-align: center;">
+        <div class="card hud-bracket" style="background: var(--bg-card); border: 1px solid var(--border-glass); border-radius: var(--radius-xl); padding: 1.5rem; max-width: 420px; width: 100%; text-align: center; box-shadow: var(--shadow-modal);">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                 <div style="font-weight: 700; color: var(--text-primary); font-size: 1rem;" x-text="activePhotoPerson.name"></div>
                 <button type="button" @click="showPhotoModal = false" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.4rem;">&times;</button>
@@ -381,21 +383,21 @@
 }
 
 .status-pill--wanted {
-    background: rgba(239, 68, 68, 0.12);
-    color: #f87171;
-    border: 1px solid rgba(239, 68, 68, 0.25);
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--danger);
+    border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
 .status-pill--missing {
-    background: rgba(245, 158, 11, 0.12);
-    color: #fbbf24;
-    border: 1px solid rgba(245, 158, 11, 0.25);
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--warning);
+    border: 1px solid rgba(245, 158, 11, 0.3);
 }
 
 .status-pill--suspect {
-    background: rgba(168, 85, 247, 0.12);
+    background: rgba(168, 85, 247, 0.15);
     color: #c084fc;
-    border: 1px solid rgba(168, 85, 247, 0.25);
+    border: 1px solid rgba(168, 85, 247, 0.3);
 }
 </style>
 {% endblock %}

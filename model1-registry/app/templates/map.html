@@ -1,61 +1,223 @@
 {% extends "base.html" %}
+{% import "components/icons.html" as icons %}
 
-{% block title %}Sentinel — Map Dashboard{% endblock %}
+{% block title %}EyesOnGuj — Map Dashboard{% endblock %}
 
 {% block content %}
-<div class="map-container" x-data="mapDashboard()" x-init="init()">
+<div class="map-container" :class="{ 'tactical-dark-tiles': darkTiles }" x-data="mapDashboard()" x-init="init()">
     <div id="map"></div>
 
-    <!-- Map Controls (right side) -->
+    <!-- Map Controls (right side floating HUD deck) -->
     <div class="map-controls">
+        <!-- Quick View & Tactical Deck -->
+        <div class="map-control-card hud-bracket" id="quick-controls-card">
+            <div class="map-control-title">
+                {{ icons.icon("map", class="svg-icon", size=14) }}
+                <span>Tactical Deck</span>
+            </div>
+            <div class="deck-actions">
+                <button type="button" class="btn btn--secondary btn--sm btn--block" @click="resetMapView()" title="Center Gujarat Overview">
+                    <svg class="svg-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+                    <span>Gujarat Overview</span>
+                </button>
+                <button type="button" class="btn btn--secondary btn--sm btn--block" @click="toggleDarkTiles()" title="Toggle Tactical High-Contrast Tile Mode">
+                    <svg class="svg-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                    <span x-text="darkTiles ? 'Standard Tiles' : 'Tactical Dark Map'">Tactical Dark Map</span>
+                </button>
+            </div>
+        </div>
+
         <!-- District filter -->
-        <div class="map-control-card" id="district-filter-card">
-            <div class="map-control-title">Filter by District</div>
+        <div class="map-control-card hud-bracket" id="district-filter-card">
+            <div class="map-control-title">
+                {{ icons.icon("district", class="svg-icon", size=14) }}
+                <span>Filter by District</span>
+            </div>
             <select class="form-select" id="district-filter" @change="filterByDistrict($event.target.value)" style="min-width: 0; width: 100%;">
-                <option value="">All Districts</option>
+                <option value="">All Districts (33 Jurisdictions)</option>
             </select>
         </div>
 
         <!-- Department toggles -->
-        <div class="map-control-card" id="department-toggle-card">
-            <div class="map-control-title">Departments</div>
+        <div class="map-control-card hud-bracket" id="department-toggle-card">
+            <div class="map-control-title">
+                {{ icons.icon("department", class="svg-icon", size=14) }}
+                <span>Departments</span>
+            </div>
             <div class="checkbox-list" id="department-checkboxes">
                 <!-- Populated by JS -->
             </div>
         </div>
 
         <!-- Spatial Overlays -->
-        <div class="map-control-card" id="overlay-toggle-card">
-            <div class="map-control-title">Spatial Overlays</div>
+        <div class="map-control-card hud-bracket" id="overlay-toggle-card">
+            <div class="map-control-title">
+                {{ icons.icon("map", class="svg-icon", size=14) }}
+                <span>Spatial Overlays</span>
+            </div>
             <div class="checkbox-list">
                 <label class="checkbox-item">
                     <input type="checkbox" checked @change="toggleDistrictBoundaries($event.target.checked)">
-                    <span>🗺️ District Boundaries</span>
+                    <span>District Boundaries</span>
                 </label>
                 <label class="checkbox-item">
                     <input type="checkbox" @change="toggleGapOverlay($event.target.checked)">
-                    <span>📊 Uncovered Regions</span>
+                    <span>Uncovered Regions</span>
                 </label>
             </div>
         </div>
     </div>
 
-    <!-- Bottom stats -->
+    <!-- Bottom stats dock -->
     <div class="map-stats" id="map-stats">
         <div class="map-stat-pill">
-            <span class="badge-dot badge-dot--online"></span>
-            <span id="stat-online">0</span> Online
+            <span class="badge-dot badge-dot--online radar-pulse-dot"></span>
+            <span id="stat-online" class="stat-count">0</span>
+            <span class="stat-label">Online</span>
         </div>
         <div class="map-stat-pill">
             <span class="badge-dot badge-dot--offline"></span>
-            <span id="stat-offline">0</span> Offline
+            <span id="stat-offline" class="stat-count">0</span>
+            <span class="stat-label">Offline</span>
         </div>
         <div class="map-stat-pill">
             <span class="badge-dot badge-dot--maintenance"></span>
-            <span id="stat-maintenance">0</span> Maintenance
+            <span id="stat-maintenance" class="stat-count">0</span>
+            <span class="stat-label">Maint</span>
         </div>
         <div class="map-stat-pill">
-            📷 <span id="stat-total">0</span> Total
+            {{ icons.icon("camera", class="svg-icon", size=14) }}
+            <span id="stat-total" class="stat-count">0</span>
+            <span class="stat-label">Total Nodes</span>
+        </div>
+    </div>
+
+    <!-- Slide-Over Camera Telemetry Inspector Drawer -->
+    <div id="camera-inspector-drawer" 
+         class="camera-inspector-drawer hud-bracket" 
+         :class="{ 'open': inspectorOpen }"
+         x-cloak>
+        <div class="inspector-header">
+            <div class="inspector-title-group">
+                <span class="inspector-tag">TELEMETRY INTEL</span>
+                <h3 class="inspector-camera-name" x-text="selectedCamera ? selectedCamera.name : 'Select Node'"></h3>
+                <span class="inspector-camera-id mono" x-text="selectedCamera ? ('ID: ' + (selectedCamera.id || '').substring(0, 16)) : ''"></span>
+            </div>
+            <div class="inspector-header-actions">
+                <template x-if="selectedCamera">
+                    <span class="badge" :class="'badge--' + (selectedCamera.connectivity_status || 'offline').toLowerCase()">
+                        <span class="badge-dot" :class="'badge-dot--' + (selectedCamera.connectivity_status || 'offline').toLowerCase()"></span>
+                        <span x-text="(selectedCamera.connectivity_status || 'offline').toUpperCase()"></span>
+                    </span>
+                </template>
+                <button type="button" class="btn btn--icon btn--sm inspector-close-btn" @click="closeInspector()" title="Close Inspector">
+                    <svg class="svg-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+        </div>
+
+        <div class="inspector-body" x-show="selectedCamera">
+            <!-- Viewport Feed / Preview Box -->
+            <div class="inspector-feed-frame">
+                <div class="feed-hud-overlay">
+                    <template x-if="selectedCamera && selectedCamera.connectivity_status === 'online'">
+                        <span class="feed-live-beacon">
+                            <span class="rec-dot"></span> LIVE SENSOR STREAM
+                        </span>
+                    </template>
+                    <template x-if="selectedCamera && selectedCamera.connectivity_status !== 'online'">
+                        <span class="feed-offline-beacon">CARRIER STANDBY</span>
+                    </template>
+                    <span class="feed-timestamp" x-text="currentTime"></span>
+                </div>
+                
+                <div class="feed-display">
+                    <template x-if="selectedCamera && selectedCamera.connectivity_status === 'online' && selectedCameraStreamUrl">
+                        <div class="feed-active-stream">
+                            <img :src="selectedCameraStreamUrl" alt="Live Camera Preview" class="feed-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                            <div class="feed-stream-fallback" style="display: none;">
+                                <div class="stream-pulse-radar"></div>
+                                <span>STREAM HANDSHAKE ESTABLISHED</span>
+                                <small>Direct protocol stream available via launch link</small>
+                            </div>
+                            <div class="feed-scanline"></div>
+                        </div>
+                    </template>
+                    <template x-if="!selectedCamera || selectedCamera.connectivity_status !== 'online' || !selectedCameraStreamUrl">
+                        <div class="feed-no-signal">
+                            <div class="radar-scan-graphic">
+                                <div class="radar-scan-reticle"></div>
+                            </div>
+                            <span class="no-signal-text" x-text="selectedCamera && selectedCamera.connectivity_status === 'maintenance' ? 'NODE IN MAINTENANCE MODE' : 'STANDBY // SENSOR OFFLINE'"></span>
+                            <small class="no-signal-sub">GIS Geolocation Calibrated</small>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Telemetry Matrix Grid -->
+            <div class="inspector-section">
+                <div class="inspector-section-title">
+                    <svg class="svg-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                    <span>Sensor Telemetry</span>
+                </div>
+                <div class="telemetry-grid">
+                    <div class="telemetry-item">
+                        <span class="telemetry-label">Department</span>
+                        <span class="telemetry-value" x-text="selectedCamera ? (selectedCamera.department_name || 'Unassigned') : '—'"></span>
+                    </div>
+                    <div class="telemetry-item">
+                        <span class="telemetry-label">District</span>
+                        <span class="telemetry-value" x-text="selectedCamera ? (selectedCamera.district_name || '—') : '—'"></span>
+                    </div>
+                    <div class="telemetry-item">
+                        <span class="telemetry-label">Sensor Type</span>
+                        <span class="telemetry-value" x-text="selectedCamera ? (selectedCamera.camera_type || 'Standard') : '—'"></span>
+                    </div>
+                    <div class="telemetry-item">
+                        <span class="telemetry-label">Ownership</span>
+                        <span class="telemetry-value" x-text="selectedCamera ? (selectedCamera.ownership || 'Government') : '—'"></span>
+                    </div>
+                    <div class="telemetry-item">
+                        <span class="telemetry-label">Storage Profile</span>
+                        <span class="telemetry-value" x-text="selectedCamera ? ((selectedCamera.storage_type || 'Edge') + (selectedCamera.retention_days ? ' · ' + selectedCamera.retention_days + 'd' : '')) : '—'"></span>
+                    </div>
+                    <div class="telemetry-item">
+                        <span class="telemetry-label">GIS Coordinates</span>
+                        <div class="coord-badge-wrap">
+                            <span class="telemetry-value mono" x-text="selectedCamera && selectedCamera.location ? (selectedCamera.location.coordinates[1].toFixed(4) + ', ' + selectedCamera.location.coordinates[0].toFixed(4)) : '—'"></span>
+                            <button type="button" class="btn-copy-coord" @click="copyCoords()" title="Copy Coordinates">
+                                <svg class="svg-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stream URL Target Info -->
+            <div class="inspector-section" x-show="selectedCamera && (selectedCamera.rtsp_url || selectedCamera.hls_url || selectedCamera.vms_url)">
+                <div class="inspector-section-title">
+                    <svg class="svg-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                    <span>Target Stream Protocol</span>
+                </div>
+                <div class="stream-url-box">
+                    <code class="stream-url-text mono" x-text="selectedCamera ? (selectedCamera.rtsp_url || selectedCamera.hls_url || selectedCamera.vms_url || '') : ''"></code>
+                </div>
+            </div>
+
+            <!-- Tactical Actions -->
+            <div class="inspector-actions">
+                <template x-if="selectedCameraStreamUrl">
+                    <a :href="selectedCameraStreamUrl" target="_blank" rel="noopener" class="btn btn--primary btn--block">
+                        <svg class="svg-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        <span x-text="selectedCameraStreamLabel">Launch Live Stream View</span>
+                    </a>
+                </template>
+                <a :href="'/cameras?search=' + encodeURIComponent(selectedCamera ? selectedCamera.name : '')" class="btn btn--secondary btn--block">
+                    <svg class="svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                    <span>Inspect in Registry</span>
+                </a>
+            </div>
         </div>
     </div>
 </div>

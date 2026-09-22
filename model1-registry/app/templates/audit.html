@@ -1,12 +1,15 @@
 {% extends "base.html" %}
+{% import "components/icons.html" as icons %}
+{% from "components/empty_state.html" import empty_state %}
 
-{% block title %}Sentinel — Audit Log{% endblock %}
+{% block title %}EyesOnGuj — Audit Log{% endblock %}
 
 {% block content %}
 <div class="page-container">
     <div class="page-header">
         <h1 class="page-title">
-            <span class="page-title-icon">📜</span> System Audit Log
+            <span class="page-title-icon">{{ icons.icon("audit", class="svg-icon", size=24) }}</span>
+            <span>System Audit Log</span>
         </h1>
         <p style="color: var(--text-secondary); font-size: 0.9rem;">
             Global trail of camera registry modifications, status transitions, and user activities.
@@ -14,16 +17,16 @@
     </div>
 
     <!-- Audit log table wrapper -->
-    <div class="table-wrapper">
+    <div class="table-wrapper hud-bracket">
         <table class="data-table" id="audit-table">
             <thead>
                 <tr>
-                    <th>Timestamp</th>
-                    <th>Camera</th>
-                    <th>Changed Field</th>
-                    <th>Old Value</th>
-                    <th>New Value</th>
-                    <th>Changed By</th>
+                    <th>Timestamp (IST)</th>
+                    <th>Node / Camera Target</th>
+                    <th>Attribute Mutated</th>
+                    <th>Prior Baseline</th>
+                    <th>Updated Specification</th>
+                    <th>Security Principal</th>
                 </tr>
             </thead>
             <tbody id="audit-tbody">
@@ -46,17 +49,17 @@
                         {{ row.new_value if row.new_value else '—' }}
                     </td>
                     <td>
-                        <span class="badge badge--online" style="font-size: 0.8rem;">👤 {{ row.changed_by_user }}</span>
+                        <span class="badge badge--online" style="font-size: 0.8rem; display: inline-flex; align-items: center; gap: 0.35rem;">
+                            {{ icons.icon("person", class="svg-icon", size=12) }}
+                            <span>{{ row.changed_by_user }}</span>
+                        </span>
                     </td>
                 </tr>
                 {% endfor %}
                 {% else %}
                 <tr>
                     <td colspan="6">
-                        <div class="empty-state">
-                            <div class="empty-state-icon">📋</div>
-                            <div class="empty-state-text">No audit log entries recorded yet.</div>
-                        </div>
+                        {{ empty_state(title="No audit entries recorded", message="No camera registry changes, status transitions, or user activities have been logged yet.", icon_name="audit") }}
                     </td>
                 </tr>
                 {% endif %}
