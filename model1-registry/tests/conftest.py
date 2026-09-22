@@ -398,7 +398,11 @@ def db_session(test_engine):
 
 class CSRFTestClient(TestClient):
     def request(self, method, url, **kwargs):
-        headers = dict(kwargs.get("headers", {}))
+        headers = kwargs.get("headers")
+        if headers is None:
+            headers = {}
+        headers = dict(headers)
+        
         if "csrf_token" in self.cookies:
             headers["x-csrf-token"] = self.cookies.get("csrf_token")
         kwargs["headers"] = headers
