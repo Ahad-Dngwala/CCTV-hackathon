@@ -84,7 +84,6 @@ class Camera(BaseModel):
     stream_height: Optional[int] = None
     stream_fps: Optional[float] = None
     bitrate_kbps: Optional[int] = None
-    rtsp_url: Optional[str] = None
     whep_url: Optional[str] = None
     hls_url: Optional[str] = None
     created_at: datetime

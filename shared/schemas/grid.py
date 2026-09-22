@@ -28,7 +28,6 @@ class CameraStreamResponse(BaseModel):
     source_grid_id: Optional[str] = None
     location_label: Optional[str] = None
     vms_url: Optional[str] = None
-    rtsp_url: Optional[str] = None
     whep_url: Optional[str] = None
     hls_url: Optional[str] = None
     properties: Optional[StreamProperties] = None

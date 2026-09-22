@@ -260,6 +260,30 @@ class StatusHistory(Base):
     )
 
 
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    action = Column(Text, nullable=False)
+    resource_type = Column(Text, nullable=False)
+    resource_id = Column(Text, nullable=True)
+    details = Column(JSONB, nullable=True)
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    department_id = Column(
+        UUID(as_uuid=True), ForeignKey("departments.id", ondelete="SET NULL")
+    )
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default="now()")
+
+    user = relationship("User")
+    department = relationship("Department")
+
+    __table_args__ = (
+        Index("idx_audit_logs_created_at", text("created_at DESC")),
+        Index("idx_audit_logs_department", "department_id"),
+    )
+
 # ── Model 2 — Unified Viewer & Analytics ───────────────────────
 
 
@@ -319,7 +343,12 @@ class PersonWatchlist(Base):
         default="active",
         info={"check": "status IN ('active', 'resolved')"},
     )
+    department_id = Column(
+        UUID(as_uuid=True), ForeignKey("departments.id", ondelete="SET NULL")
+    )
     created_at = Column(DateTime(timezone=True), nullable=False, server_default="now()")
+
+    department = relationship("Department")
 
     __table_args__ = (
         CheckConstraint(

@@ -19,7 +19,7 @@ services:
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-sentinel_dev}"
       POSTGRES_DB: "${POSTGRES_DB:-sentinel}"
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - sentinel_pgdata:/var/lib/postgresql/data
       # Postgres runs every *.sql/*.sh under docker-entrypoint-initdb.d
@@ -115,7 +115,7 @@ services:
       retries: 5
 
   mediamtx:
-    image: bluenviron/mediamtx:latest
+    image: bluenviron/mediamtx:1.8.0
     ports:
       - "8554:8554"          # RTSP
       - "8889:8889"          # WHEP HTTP signaling
