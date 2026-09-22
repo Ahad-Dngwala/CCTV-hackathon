@@ -97,6 +97,16 @@ def _sharpness(crop: Optional[np.ndarray]) -> float:
     return float(cv2.Laplacian(gray, cv2.CV_64F).var())
 
 
+@dataclass
+class _PlateResultProxy:
+    plate_text: Optional[str]
+    normalized_text: Optional[str]
+    confidence: float
+    detection_confidence: Optional[float]
+    provider: str
+    crop: Optional[np.ndarray]
+
+
 class _TrackPlateBuffer:
     """
     Accumulates per-frame plate reads for a single vehicle track,
@@ -282,16 +292,16 @@ class PreRecordedVideoWorker:
             except Exception as e:
                 logger.warning(f"[{self.job_id}] event_callback error: {e}")
 
-    def _find_matching_plate(self, plate: str) -> Optional[str]:
-        """Finds if plate was already observed within Levenshtein distance <= 2."""
+    def _find_matching_plate(self, plate: str, pts_ms: float = 0.0) -> Optional[str]:
+        """Finds if plate was already observed within Levenshtein distance <= 1 and temporal window <= 10,000 ms."""
         if not plate:
             return None
         if plate in self._seen_plates:
             return plate
-        for prev in self._seen_plates:
-            # Match if edit distance <= 2 for plates of similar length
-            if abs(len(prev) - len(plate)) <= 1:
-                if _levenshtein(prev, plate) <= (1 if len(plate) < 9 else 2):
+        for prev, seen_info in self._seen_plates.items():
+            time_diff = abs(pts_ms - seen_info.get("last_seen_ms", pts_ms))
+            if abs(len(prev) - len(plate)) <= 1 and time_diff <= 10000.0:
+                if _levenshtein(prev, plate) <= 1:
                     return prev
         return None
 
@@ -348,7 +358,7 @@ class PreRecordedVideoWorker:
                     fps_frames_count    = 0
                     t_fps_checkpoint    = now
 
-                vehicle_infer_interval = 2
+                vehicle_infer_interval = infer_every
                 plate_infer_interval = max(2, min(self.anpr_rate, 4))
 
                 should_infer_vehicles = (frame_idx % vehicle_infer_interval == 0 or frame_idx == 1)
@@ -497,15 +507,17 @@ class PreRecordedVideoWorker:
                                 if self.db_session_factory:
                                     db_upd = self.db_session_factory()
                                     try:
-                                        class _PR:
-                                            plate_text           = resolved_plate
-                                            normalized_text      = resolved_plate
-                                            confidence           = buf.resolved_conf
-                                            detection_confidence = buf.best_plate_conf
-                                            provider             = "indian_parseq"
-                                            crop                 = buf.best_crop
+                                        prov_name = buf.reads[-1]["provider"] if buf.reads else "indian_parseq"
+                                        pr = _PlateResultProxy(
+                                            plate_text=resolved_plate,
+                                            normalized_text=resolved_plate,
+                                            confidence=buf.resolved_conf,
+                                            detection_confidence=buf.best_plate_conf,
+                                            provider=prov_name,
+                                            crop=buf.best_crop,
+                                        )
                                         self.writer.update_sighting_plate(
-                                            db_upd, existing_det_id, _PR(), self.camera_uuid, self.camera_name, trk["class_name"], vehicle_crop=best_v_crop
+                                            db_upd, existing_det_id, pr, self.camera_uuid, self.camera_name, trk["class_name"], vehicle_crop=best_v_crop
                                         )
                                     finally:
                                         db_upd.close()
@@ -535,7 +547,7 @@ class PreRecordedVideoWorker:
                                 })
                         else:
                             # 1. Cross-track plate de-duplication
-                            match_key = self._find_matching_plate(resolved_plate)
+                            match_key = self._find_matching_plate(resolved_plate, pts_ms=pts_ms)
 
                             if match_key:
                                 seen_info = self._seen_plates[match_key]
@@ -552,15 +564,17 @@ class PreRecordedVideoWorker:
                                     if self.db_session_factory:
                                         db_upd = self.db_session_factory()
                                         try:
-                                            class _PR:
-                                                plate_text           = resolved_plate
-                                                normalized_text      = resolved_plate
-                                                confidence           = buf.resolved_conf
-                                                detection_confidence = buf.best_plate_conf
-                                                provider             = "indian_parseq"
-                                                crop                 = buf.best_crop
+                                            prov_name = buf.reads[-1]["provider"] if buf.reads else "indian_parseq"
+                                            pr = _PlateResultProxy(
+                                                plate_text=resolved_plate,
+                                                normalized_text=resolved_plate,
+                                                confidence=buf.resolved_conf,
+                                                detection_confidence=buf.best_plate_conf,
+                                                provider=prov_name,
+                                                crop=buf.best_crop,
+                                            )
                                             self.writer.update_sighting_plate(
-                                                db_upd, target_det_id, _PR(), self.camera_uuid, self.camera_name, trk["class_name"], vehicle_crop=best_v_crop
+                                                db_upd, target_det_id, pr, self.camera_uuid, self.camera_name, trk["class_name"], vehicle_crop=best_v_crop
                                             )
                                         finally:
                                             db_upd.close()
@@ -612,15 +626,17 @@ class PreRecordedVideoWorker:
                                         det_id = meta["detection_id"]
 
                                         # Update sighting with resolved plate details
-                                        class _PR:
-                                            plate_text           = resolved_plate
-                                            normalized_text      = resolved_plate
-                                            confidence           = buf.resolved_conf
-                                            detection_confidence = buf.best_plate_conf
-                                            provider             = "indian_parseq"
-                                            crop                 = buf.best_crop
+                                        prov_name = buf.reads[-1]["provider"] if buf.reads else "indian_parseq"
+                                        pr = _PlateResultProxy(
+                                            plate_text=resolved_plate,
+                                            normalized_text=resolved_plate,
+                                            confidence=buf.resolved_conf,
+                                            detection_confidence=buf.best_plate_conf,
+                                            provider=prov_name,
+                                            crop=buf.best_crop,
+                                        )
                                         self.writer.update_sighting_plate(
-                                            db, det_id, _PR(), self.camera_uuid, self.camera_name, trk["class_name"], vehicle_crop=best_v_crop
+                                            db, det_id, pr, self.camera_uuid, self.camera_name, trk["class_name"], vehicle_crop=best_v_crop
                                         )
                                     finally:
                                         db.close()

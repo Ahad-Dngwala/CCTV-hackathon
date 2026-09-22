@@ -318,16 +318,11 @@ class DetectionWriter:
 
         # Update high-resolution vehicle crop if provided
         if vehicle_crop is not None and getattr(vehicle_crop, "size", 0) > 0:
-            import cv2
-            vfname = f"{detection_id}.jpg"
-            cv2.imwrite(str(dest_dir / vfname), vehicle_crop)
+            _save_image(vehicle_crop, f"{detection_id}.jpg")
 
         plate_crop_path = None
         if crop is not None and getattr(crop, "size", 0) > 0:
-            import cv2
-            fname = f"plate_{detection_id}.jpg"
-            cv2.imwrite(str(dest_dir / fname), crop)
-            plate_crop_path = f"/detection-image/{fname}"
+            plate_crop_path = _save_image(crop, f"{detection_id}_plate.jpg")
 
         # Check watchlist
         watchlist_match = False
