@@ -217,6 +217,7 @@ async def upload_recorded_video(
         "total_frames": total_frames,
         "duration_s": round(duration_s, 1),
         "uploaded_by": current_user.username,
+        "department_id": str(current_user.department_id) if current_user.department_id else None,
         "state": "ready",
     }
     _JOBS_META[job_id] = meta
@@ -229,6 +230,13 @@ async def upload_recorded_video(
 
 
 # ── 3. Start Video Processing ─────────────────────────────────────
+def _enforce_job_authz(meta_data, user):
+    if user.role != "dept_admin" and meta_data.get("uploaded_by") != user.username:
+        raise HTTPException(status_code=403, detail="You can only control jobs you uploaded.")
+    job_dept_id = meta_data.get("department_id")
+    if user.role == "dept_admin" and job_dept_id and str(user.department_id) != str(job_dept_id):
+        raise HTTPException(status_code=403, detail="You can only control jobs within your department.")
+
 @router.post("/api/v1/recorded/start")
 async def start_recorded_job(
     req: JobControlRequest,
@@ -239,6 +247,8 @@ async def start_recorded_job(
     meta = _JOBS_META.get(job_id)
     if not meta:
         raise HTTPException(status_code=404, detail="Job not found. Upload video first.")
+
+    _enforce_job_authz(meta, current_user)
 
     # Stop any existing worker for this job
     existing = _JOBS.get(job_id)
@@ -269,6 +279,11 @@ async def pause_recorded_job(
     current_user: UserModel = Depends(require_role("dept_admin", "operator")),
 ):
     _capture_running_loop()
+    meta = _JOBS_META.get(req.job_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _enforce_job_authz(meta, current_user)
+
     worker = _JOBS.get(req.job_id)
     if not worker or not worker.is_running:
         raise HTTPException(status_code=400, detail="Job is not actively running")
@@ -284,6 +299,11 @@ async def resume_recorded_job(
     current_user: UserModel = Depends(require_role("dept_admin", "operator")),
 ):
     _capture_running_loop()
+    meta = _JOBS_META.get(req.job_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _enforce_job_authz(meta, current_user)
+
     worker = _JOBS.get(req.job_id)
     if not worker:
         raise HTTPException(status_code=404, detail="Job worker not found")
@@ -299,6 +319,11 @@ async def stop_recorded_job(
     current_user: UserModel = Depends(require_role("dept_admin", "operator")),
 ):
     _capture_running_loop()
+    meta = _JOBS_META.get(req.job_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _enforce_job_authz(meta, current_user)
+
     worker = _JOBS.get(req.job_id)
     if worker:
         worker.stop()
@@ -318,6 +343,7 @@ def get_recorded_job_status(
     meta = _JOBS_META.get(job_id)
     if not meta:
         raise HTTPException(status_code=404, detail="Job not found")
+    _enforce_job_authz(meta, current_user)
 
     worker = _JOBS.get(job_id)
     return {
