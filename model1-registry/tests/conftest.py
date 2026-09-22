@@ -454,7 +454,7 @@ def _independent_client(db_session):
         yield db_session
 
     app.dependency_overrides[get_db] = _override_get_db
-    c = TestClient(app)
+    c = CSRFTestClient(app)
     c.__enter__()
     return c
 
