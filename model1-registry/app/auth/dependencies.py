@@ -65,7 +65,7 @@ def get_current_user(
         )
 
     # CSRF Protection: Enforce on state-changing methods if using cookie auth
-    if request.method in ["POST", "PUT", "PATCH", "DELETE"]:
+    if getattr(request, "method", None) in ["POST", "PUT", "PATCH", "DELETE"]:
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
             # Client relies on cookies, so enforce CSRF
