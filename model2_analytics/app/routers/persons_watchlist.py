@@ -126,7 +126,9 @@ async def create_watchlist_person(
 
     # Validate extension and read uploaded photo bytes with size enforcement
     filename = photo.filename or "portrait.jpg"
-    ext = Path(filename).suffix.lower()
+    import re
+    clean_filename = re.sub(r"[^\w\-.]", "_", filename)
+    ext = Path(clean_filename).suffix.lower()
     if ext not in ALLOWED_PHOTO_EXTENSIONS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -183,6 +185,14 @@ async def create_watchlist_person(
     if full_img is None:
         np_buf = np.frombuffer(photo_bytes, dtype=np.uint8)
         full_img = cv2.imdecode(np_buf, cv2.IMREAD_COLOR)
+        if full_img is None:
+            raise HTTPException(status_code=400, detail="Invalid image file format")
+        h, w = full_img.shape[:2]
+        if h > 4096 or w > 4096:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="Image dimensions exceed maximum (4096x4096)",
+            )
 
     try:
         embedding = encoder.extract_embedding(full_img, landmarks=quality_res.landmarks)

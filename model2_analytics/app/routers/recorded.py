@@ -201,6 +201,13 @@ async def upload_recorded_video(
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 1280
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 720
     cap.release()
+    
+    if width > 4096 or height > 4096:
+        target_path.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Video dimensions exceed maximum permitted size (4096x4096)",
+        )
 
     duration_s = (total_frames / fps) if fps > 0 else 0.0
 
