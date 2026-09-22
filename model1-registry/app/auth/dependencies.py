@@ -64,6 +64,19 @@ def get_current_user(
             detail="User not found or account deactivated.",
         )
 
+    # CSRF Protection: Enforce on state-changing methods if using cookie auth
+    if request.method in ["POST", "PUT", "PATCH", "DELETE"]:
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            # Client relies on cookies, so enforce CSRF
+            csrf_cookie = request.cookies.get("csrf_token")
+            csrf_header = request.headers.get("x-csrf-token")
+            if not csrf_cookie or not csrf_header or csrf_cookie != csrf_header:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="CSRF token missing or invalid.",
+                )
+
     return user
 
 
