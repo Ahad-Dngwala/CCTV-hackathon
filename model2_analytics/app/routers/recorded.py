@@ -375,6 +375,20 @@ async def ws_recorded_feed(
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Unauthorized")
         return
 
+    # Check Authorization (IDOR Fix)
+    meta = _JOBS_META.get(job_id)
+    if meta:
+        if user.role != "dept_admin" and meta.get("uploaded_by") != user.username:
+            logger.warning(f"[{job_id}] Unauthorized WebSocket access attempt by {user.username}.")
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Forbidden")
+            return
+        # If it's a dept_admin, they can only access jobs in their own department
+        job_dept_id = meta.get("department_id")
+        if user.role == "dept_admin" and job_dept_id and str(user.department_id) != str(job_dept_id):
+            logger.warning(f"[{job_id}] Dept Admin {user.username} tried to access job from another department.")
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Forbidden")
+            return
+
     await websocket.accept()
     _JOB_WS[job_id].add(websocket)
     logger.info(f"[{job_id}] WebSocket client connected. Active: {len(_JOB_WS[job_id])}")
