@@ -300,8 +300,9 @@ class DetectionWriter:
         camera_uuid: uuid.UUID,
         camera_name: str,
         vehicle_class: str,
+        vehicle_crop: Optional[np.ndarray] = None,
     ):
-        """Update an existing detection record when a new best plate read is obtained."""
+        """Update an existing detection record when a new best plate read or vehicle crop is obtained."""
         if not plate_result or not detection_id:
             return
 
@@ -312,34 +313,35 @@ class DetectionWriter:
         provider = getattr(plate_result, "provider", "indian_parseq")
         crop = getattr(plate_result, "crop", None)
 
+        dest_dir = Path(__file__).resolve().parents[2] / "detection-image"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+
+        # Update high-resolution vehicle crop if provided
+        if vehicle_crop is not None and getattr(vehicle_crop, "size", 0) > 0:
+            _save_image(vehicle_crop, f"{detection_id}.jpg")
+
         plate_crop_path = None
         if crop is not None and getattr(crop, "size", 0) > 0:
-            import cv2
-            fname = f"plate_{detection_id}.jpg"
-            dest_dir = Path(__file__).resolve().parents[2] / "detection-image"
-            dest_dir.mkdir(parents=True, exist_ok=True)
-            cv2.imwrite(str(dest_dir / fname), crop)
-            plate_crop_path = f"/detection-image/{fname}"
+            plate_crop_path = _save_image(crop, f"{detection_id}_plate.jpg")
 
         # Check watchlist
         watchlist_match = False
         alert_id = None
         if normalized:
             try:
-                matcher = self._get_matcher()
-                matched, entry = matcher.match(normalized)
-                if matched and entry:
+                match = self._get_matcher().check_plate(db, normalized)
+                if match:
                     watchlist_match = True
                     alert_service = self._get_alert_service()
-                    alert_id = alert_service.raise_alert(
+                    alert_id = alert_service.create_alert(
                         db=db,
-                        camera_uuid=camera_uuid,
                         detection_id=detection_id,
-                        plate_number=normalized,
-                        vehicle_type=vehicle_class,
+                        match=match,
                         camera_name=camera_name,
+                        plate_text=normalized,
+                        vehicle_class=vehicle_class,
                         crop_path=plate_crop_path,
-                        watchlist_id=entry.get("id"),
+                        confidence=ocr_conf,
                     )
             except Exception as e:
                 logger.warning(f"Watchlist check on update failed: {e}")

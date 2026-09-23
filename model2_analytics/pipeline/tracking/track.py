@@ -1,4 +1,4 @@
-﻿"""
+"""
 Model 2 - ByteTrack Multi-Object Vehicle Tracker
 Assigns persistent track IDs to detected vehicles across frames.
 """
@@ -123,7 +123,7 @@ class Track:
                 sum(conf for cname, _cid, conf in self._class_votes if cname == "Bus")
                 / max(1, sum(1 for cname, _c, _conf in self._class_votes if cname == "Bus"))
             )
-            if (avg_area < bus_lo or avg_area > bus_hi) and bus_conf_avg < 0.65:
+            if (avg_area < bus_lo or avg_area > bus_hi) and bus_conf_avg < 0.85:
                 best = ("Car", 99)  # class_id sentinel; name is what downstream uses
 
         self.class_name, self.class_id = best
