@@ -15,6 +15,9 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session, joinedload
 from urllib.parse import urlparse
 
+import socket
+import ipaddress
+
 def is_safe_url(url: Optional[str]) -> bool:
     if not url:
         return True
@@ -25,9 +28,15 @@ def is_safe_url(url: Optional[str]) -> bool:
         host = parsed.hostname
         if not host:
             return False
-        forbidden = ["localhost", "127.0.0.1", "169.254.169.254", "0.0.0.0", "::1"]
-        if host in forbidden or host.endswith(".internal"):
+            
+        ip = socket.gethostbyname(host)
+        ip_obj = ipaddress.ip_address(ip)
+        
+        if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local:
             return False
+        if str(ip_obj) == "169.254.169.254":
+            return False
+            
         return True
     except Exception:
         return False
