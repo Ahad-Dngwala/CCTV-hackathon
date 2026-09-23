@@ -36,6 +36,36 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from model3_federation.adapters.base import VMSAdapter
+import socket
+import ipaddress
+from urllib.parse import urlparse
+
+def is_safe_url(url: str) -> bool:
+    if not url:
+        return True
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ["http", "https", "rtsp"]:
+            return False
+        host = parsed.hostname
+        if not host:
+            return False
+        
+        # Resolve the hostname to prevent DNS rebinding or obfuscated IPs
+        ip = socket.gethostbyname(host)
+        ip_obj = ipaddress.ip_address(ip)
+        
+        # Block private, loopback, and link-local ranges
+        if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local:
+            return False
+        
+        # Block cloud metadata specifically just in case (is_link_local covers 169.254.x.x but let's be explicit)
+        if str(ip_obj) == "169.254.169.254":
+            return False
+            
+        return True
+    except Exception:
+        return False
 
 
 @dataclass
