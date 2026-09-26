@@ -89,11 +89,23 @@ def login(
     }
     access_token = create_access_token(token_data)
 
+    csrf_token = str(uuid.uuid4())
+    
     # Set httpOnly cookie
     response.set_cookie(
         key="access_token",
         value=access_token,
         httponly=True,
+        samesite="lax",
+        secure=_COOKIE_SECURE,
+        path="/",
+    )
+    
+    # Set CSRF cookie (NOT httpOnly so JS can read it and send it in headers)
+    response.set_cookie(
+        key="csrf_token",
+        value=csrf_token,
+        httponly=False,
         samesite="lax",
         secure=_COOKIE_SECURE,
         path="/",
@@ -118,6 +130,12 @@ def logout(response: Response):
     # deleting response's attributes line up with how it was set.
     response.delete_cookie(
         key="access_token",
+        path="/",
+        samesite="lax",
+        secure=_COOKIE_SECURE,
+    )
+    response.delete_cookie(
+        key="csrf_token",
         path="/",
         samesite="lax",
         secure=_COOKIE_SECURE,

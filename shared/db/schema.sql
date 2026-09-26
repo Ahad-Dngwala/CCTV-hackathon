@@ -263,3 +263,21 @@ CREATE TABLE person_alerts (
 );
 CREATE INDEX idx_person_alerts_person ON person_alerts (person_id);
 CREATE INDEX idx_person_alerts_created ON person_alerts (created_at DESC);
+
+-- ============================================================
+-- Security & Audit Logging
+-- ============================================================
+
+CREATE TABLE audit_logs (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    action          TEXT NOT NULL,
+    resource_type   TEXT,
+    resource_id     TEXT,
+    details         JSONB,
+    user_id         UUID REFERENCES users(id) ON DELETE SET NULL,
+    department_id   UUID REFERENCES departments(id) ON DELETE SET NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_audit_logs_user ON audit_logs (user_id);
+CREATE INDEX idx_audit_logs_department ON audit_logs (department_id);
+CREATE INDEX idx_audit_logs_resource ON audit_logs (resource_type, resource_id);

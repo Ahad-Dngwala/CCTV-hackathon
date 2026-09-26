@@ -396,6 +396,18 @@ def db_session(test_engine):
     connection.close()
 
 
+class CSRFTestClient(TestClient):
+    def request(self, method, url, **kwargs):
+        headers = kwargs.get("headers")
+        if headers is None:
+            headers = {}
+        headers = dict(headers)
+        
+        if "csrf_token" in self.cookies:
+            headers["x-csrf-token"] = self.cookies.get("csrf_token")
+        kwargs["headers"] = headers
+        return super().request(method, url, **kwargs)
+
 @pytest.fixture()
 def client(db_session):
     """A TestClient whose every request uses the isolated db_session."""
@@ -406,7 +418,7 @@ def client(db_session):
         yield db_session
 
     app.dependency_overrides[get_db] = _override_get_db
-    with TestClient(app) as c:
+    with CSRFTestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
 
@@ -446,7 +458,7 @@ def _independent_client(db_session):
         yield db_session
 
     app.dependency_overrides[get_db] = _override_get_db
-    c = TestClient(app)
+    c = CSRFTestClient(app)
     c.__enter__()
     return c
 

@@ -201,6 +201,13 @@ async def upload_recorded_video(
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 1280
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 720
     cap.release()
+    
+    if width > 4096 or height > 4096:
+        target_path.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Video dimensions exceed maximum permitted size (4096x4096)",
+        )
 
     duration_s = (total_frames / fps) if fps > 0 else 0.0
 
@@ -217,6 +224,7 @@ async def upload_recorded_video(
         "total_frames": total_frames,
         "duration_s": round(duration_s, 1),
         "uploaded_by": current_user.username,
+        "department_id": str(current_user.department_id) if current_user.department_id else None,
         "state": "ready",
     }
     _JOBS_META[job_id] = meta
@@ -229,6 +237,13 @@ async def upload_recorded_video(
 
 
 # ── 3. Start Video Processing ─────────────────────────────────────
+def _enforce_job_authz(meta_data, user):
+    if user.role != "dept_admin" and meta_data.get("uploaded_by") != user.username:
+        raise HTTPException(status_code=403, detail="You can only control jobs you uploaded.")
+    job_dept_id = meta_data.get("department_id")
+    if user.role == "dept_admin" and job_dept_id and str(user.department_id) != str(job_dept_id):
+        raise HTTPException(status_code=403, detail="You can only control jobs within your department.")
+
 @router.post("/api/v1/recorded/start")
 async def start_recorded_job(
     req: JobControlRequest,
@@ -239,6 +254,8 @@ async def start_recorded_job(
     meta = _JOBS_META.get(job_id)
     if not meta:
         raise HTTPException(status_code=404, detail="Job not found. Upload video first.")
+
+    _enforce_job_authz(meta, current_user)
 
     # Stop any existing worker for this job
     existing = _JOBS.get(job_id)
@@ -269,6 +286,11 @@ async def pause_recorded_job(
     current_user: UserModel = Depends(require_role("dept_admin", "operator")),
 ):
     _capture_running_loop()
+    meta = _JOBS_META.get(req.job_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _enforce_job_authz(meta, current_user)
+
     worker = _JOBS.get(req.job_id)
     if not worker or not worker.is_running:
         raise HTTPException(status_code=400, detail="Job is not actively running")
@@ -284,6 +306,11 @@ async def resume_recorded_job(
     current_user: UserModel = Depends(require_role("dept_admin", "operator")),
 ):
     _capture_running_loop()
+    meta = _JOBS_META.get(req.job_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _enforce_job_authz(meta, current_user)
+
     worker = _JOBS.get(req.job_id)
     if not worker:
         raise HTTPException(status_code=404, detail="Job worker not found")
@@ -299,6 +326,11 @@ async def stop_recorded_job(
     current_user: UserModel = Depends(require_role("dept_admin", "operator")),
 ):
     _capture_running_loop()
+    meta = _JOBS_META.get(req.job_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _enforce_job_authz(meta, current_user)
+
     worker = _JOBS.get(req.job_id)
     if worker:
         worker.stop()
@@ -318,6 +350,7 @@ def get_recorded_job_status(
     meta = _JOBS_META.get(job_id)
     if not meta:
         raise HTTPException(status_code=404, detail="Job not found")
+    _enforce_job_authz(meta, current_user)
 
     worker = _JOBS.get(job_id)
     return {
@@ -374,6 +407,20 @@ async def ws_recorded_feed(
         logger.warning(f"[{job_id}] Unauthenticated WebSocket connection to /ws/recorded — rejecting cleanly.")
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Unauthorized")
         return
+
+    # Check Authorization (IDOR Fix)
+    meta = _JOBS_META.get(job_id)
+    if meta:
+        if user.role != "dept_admin" and meta.get("uploaded_by") != user.username:
+            logger.warning(f"[{job_id}] Unauthorized WebSocket access attempt by {user.username}.")
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Forbidden")
+            return
+        # If it's a dept_admin, they can only access jobs in their own department
+        job_dept_id = meta.get("department_id")
+        if user.role == "dept_admin" and job_dept_id and str(user.department_id) != str(job_dept_id):
+            logger.warning(f"[{job_id}] Dept Admin {user.username} tried to access job from another department.")
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Forbidden")
+            return
 
     await websocket.accept()
     _JOB_WS[job_id].add(websocket)

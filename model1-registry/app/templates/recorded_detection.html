@@ -620,6 +620,25 @@ async function startProcessing() {
         });
         if (!resp.ok) throw new Error('Start failed');
 
+        // Reset state & table for fresh run
+        totalSightings = 0;
+        document.getElementById('lblSightings').textContent = '0';
+        document.getElementById('auditCountBadge').textContent = '0 sightings recorded';
+        for (const k in counts) { counts[k] = 0; }
+        document.getElementById('cntCars').textContent = '0';
+        document.getElementById('cntRick').textContent = '0';
+        document.getElementById('cntMini').textContent = '0';
+        document.getElementById('cntTruck').textContent = '0';
+        document.getElementById('cntBus').textContent = '0';
+        document.getElementById('cntBike').textContent = '0';
+
+        const tbody = document.getElementById('auditTableBody');
+        if (tbody) tbody.innerHTML = '';
+        const feed = document.getElementById('feedList');
+        if (feed) feed.innerHTML = '';
+        const empty = document.getElementById('feedEmpty');
+        if (empty) empty.style.display = 'block';
+
         document.getElementById('btnStart').disabled = true;
         document.getElementById('btnPause').disabled = false;
         document.getElementById('btnStop').disabled = false;
@@ -631,6 +650,7 @@ async function startProcessing() {
         alert(e.message);
     }
 }
+
 
 async function togglePause() {
     if (!currentJobId) return;
@@ -704,14 +724,18 @@ function connectJobWebSocket(jobId) {
 function handleWsMessage(msg) {
     switch (msg.type) {
         case 'VIDEO_FRAME':
-            renderVideoFrame(msg.data.jpeg_b64);
+            renderVideoFrame(msg.data.jpeg_b64, msg.data.frame_n);
             break;
         case 'FRAME_BOXES':
             currentBoxes = msg.data.boxes || [];
+            currentPlateBoxes = msg.data.plate_boxes || [];
             document.getElementById('ovlTrackInfo').textContent = `${msg.data.active_tracks || 0} Active Tracks`;
             break;
         case 'NEW_DETECTION':
             handleNewDetection(msg.data);
+            break;
+        case 'DETECTION_UPDATED':
+            handleDetectionUpdated(msg.data);
             break;
         case 'SIGHTING_AGGREGATED':
             handleSightingAggregated(msg.data);
@@ -726,61 +750,192 @@ function handleWsMessage(msg) {
 }
 
 // ══ 5. Canvas Video & Bounding Boxes Rendering ═══════════════════
-const frameImg = new Image();
+let lastRenderedFrameN = -1;
+let isRenderingFrame = false;
+let pendingVideoFrame = null;
+let currentPlateBoxes = [];
 
-function renderVideoFrame(jpegB64) {
-    frameImg.onload = () => {
-        if (canvas.width !== frameImg.width || canvas.height !== frameImg.height) {
-            canvas.width = frameImg.width;
-            canvas.height = frameImg.height;
+function renderVideoFrame(jpegB64, frameN) {
+    if (frameN != null && frameN <= lastRenderedFrameN) {
+        return; // Drop out-of-order or duplicate older frame
+    }
+
+    pendingVideoFrame = { b64: jpegB64, n: frameN || 0 };
+    if (!isRenderingFrame) {
+        isRenderingFrame = true;
+        requestAnimationFrame(processNextVideoFrame);
+    }
+}
+
+async function processNextVideoFrame() {
+    if (!pendingVideoFrame) {
+        isRenderingFrame = false;
+        return;
+    }
+
+    const current = pendingVideoFrame;
+    pendingVideoFrame = null;
+
+    if (current.n > 0 && current.n <= lastRenderedFrameN) {
+        if (pendingVideoFrame) {
+            requestAnimationFrame(processNextVideoFrame);
+        } else {
+            isRenderingFrame = false;
         }
-        ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
+        return;
+    }
 
-        // Draw bounding boxes on top of fresh frame
-        if (currentBoxes && currentBoxes.length) {
-            currentBoxes.forEach(b => {
-                const [nx1, ny1, nx2, ny2] = b.bbox;
-                const x = nx1 * canvas.width;
-                const y = ny1 * canvas.height;
-                const w = (nx2 - nx1) * canvas.width;
-                const h = (ny2 - ny1) * canvas.height;
+    try {
+        const byteChars = atob(current.b64);
+        const byteNumbers = new Uint8Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i++) {
+            byteNumbers[i] = byteChars.charCodeAt(i);
+        }
+        const blob = new Blob([byteNumbers], { type: 'image/jpeg' });
+        const bitmap = await createImageBitmap(blob);
 
-                const cls = (b.class_name || 'Vehicle').toLowerCase();
-                let color = '#38bdf8';
+        if (current.n === 0 || current.n > lastRenderedFrameN) {
+            if (current.n > 0) lastRenderedFrameN = current.n;
+            if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
+                canvas.width = bitmap.width;
+                canvas.height = bitmap.height;
+            }
+            ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+            drawCurrentBoundingBoxes();
+        }
+        bitmap.close();
+    } catch (_) {
+        await new Promise((resolve) => {
+            const tempImg = new Image();
+            tempImg.onload = () => {
+                if (current.n === 0 || current.n > lastRenderedFrameN) {
+                    if (current.n > 0) lastRenderedFrameN = current.n;
+                    if (canvas.width !== tempImg.width || canvas.height !== tempImg.height) {
+                        canvas.width = tempImg.width;
+                        canvas.height = tempImg.height;
+                    }
+                    ctx.drawImage(tempImg, 0, 0, canvas.width, canvas.height);
+                    drawCurrentBoundingBoxes();
+                }
+                resolve();
+            };
+            tempImg.onerror = resolve;
+            tempImg.src = 'data:image/jpeg;base64,' + current.b64;
+        });
+    }
+
+    if (pendingVideoFrame) {
+        requestAnimationFrame(processNextVideoFrame);
+    } else {
+        isRenderingFrame = false;
+    }
+}
+
+function drawCurrentBoundingBoxes() {
+    // 1. Draw Plate Bounding Boxes in Glowing Cyan
+    if (currentPlateBoxes && currentPlateBoxes.length) {
+        currentPlateBoxes.forEach(pb => {
+            const [nx1, ny1, nx2, ny2] = pb.bbox;
+            const px = nx1 * canvas.width;
+            const py = ny1 * canvas.height;
+            const pw = (nx2 - nx1) * canvas.width;
+            const ph = (ny2 - ny1) * canvas.height;
+
+            ctx.strokeStyle = '#00f0ff';
+            ctx.lineWidth = 2.5;
+            ctx.shadowColor = '#00f0ff';
+            ctx.shadowBlur = 8;
+            ctx.strokeRect(px, py, pw, ph);
+            ctx.shadowBlur = 0;
+        });
+    }
+
+    // 2. Draw Vehicle Bounding Boxes & Badges
+    if (currentBoxes && currentBoxes.length) {
+        currentBoxes.forEach(b => {
+            const [nx1, ny1, nx2, ny2] = b.bbox;
+            const x = nx1 * canvas.width;
+            const y = ny1 * canvas.height;
+            const w = (nx2 - nx1) * canvas.width;
+            const h = (ny2 - ny1) * canvas.height;
+
+            const cls = (b.class_name || 'Vehicle').toLowerCase();
+            const hasPlate = !!b.plate;
+            let color = hasPlate ? '#10b981' : '#38bdf8';
+            if (!hasPlate) {
                 if (cls.includes('rickshaw') || cls.includes('cng')) color = '#f59e0b';
-                else if (cls.includes('bike') || cls.includes('motorcycle') || cls.includes('cycle')) color = '#10b981';
+                else if (cls.includes('bike') || cls.includes('motorcycle') || cls.includes('cycle')) color = '#06b6d4';
                 else if (cls.includes('bus')) color = '#a855f7';
                 else if (cls.includes('truck')) color = '#ec4899';
                 else if (cls.includes('car')) color = '#3b82f6';
+            }
 
-                // Bounding box with glow
-                ctx.strokeStyle = color;
-                ctx.lineWidth = 2.5;
-                ctx.shadowColor = color;
-                ctx.shadowBlur = 6;
-                ctx.strokeRect(x, y, w, h);
-                ctx.shadowBlur = 0;
+            // Bounding box with glow
+            ctx.strokeStyle = color;
+            ctx.lineWidth = hasPlate ? 3.0 : 2.0;
+            ctx.shadowColor = color;
+            ctx.shadowBlur = hasPlate ? 10 : 4;
+            ctx.strokeRect(x, y, w, h);
+            ctx.shadowBlur = 0;
 
-                // Label pill
-                const trk = b.track_id ? `#${b.track_id} ` : '';
-                const conf = b.confidence ? ` ${Math.round(b.confidence)}%` : '';
-                const label = `${trk}${b.class_name}${conf}`;
+            // Label pill
+            const trk = b.track_id ? `#${b.track_id} ` : '';
+            const conf = b.confidence ? ` ${Math.round(b.confidence)}%` : '';
+            let label = `${trk}${b.class_name}${conf}`;
+            if (hasPlate) {
+                label = `${trk}${b.class_name} | 🪪 ${b.plate}`;
+            }
 
-                ctx.font = 'bold 11px system-ui, sans-serif';
-                const tw = ctx.measureText(label).width;
-                ctx.fillStyle = 'rgba(7, 15, 35, 0.92)';
-                ctx.fillRect(x, Math.max(0, y - 18), tw + 12, 18);
+            ctx.font = 'bold 12px system-ui, sans-serif';
+            const tw = ctx.measureText(label).width;
+            ctx.fillStyle = 'rgba(7, 15, 35, 0.94)';
+            ctx.fillRect(x, Math.max(0, y - 20), tw + 14, 20);
 
-                ctx.fillStyle = color;
-                ctx.fillText(label, x + 6, Math.max(13, y - 5));
-            });
-        }
-    };
-    frameImg.src = 'data:image/jpeg;base64,' + jpegB64;
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x, Math.max(0, y - 20), tw + 14, 20);
+
+            ctx.fillStyle = color;
+            ctx.fillText(label, x + 7, Math.max(14, y - 6));
+        });
+    }
+
+    // 3. Top Glassmorphism HUD Bar
+    ctx.fillStyle = 'rgba(10, 16, 30, 0.82)';
+    ctx.fillRect(0, 0, canvas.width, 32);
+    ctx.strokeStyle = 'rgba(0, 229, 255, 0.7)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(0, 32);
+    ctx.lineTo(canvas.width, 32);
+    ctx.stroke();
+
+    ctx.font = 'bold 11px system-ui, sans-serif';
+    ctx.fillStyle = '#00e5ff';
+    ctx.fillText('SENTINEL CCTV ANPR', 12, 20);
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText('| FINE-TUNED INDIAN PARSeq (VISION TRANSFORMER)', 145, 20);
+
+    if (currentBoxes && currentBoxes.length) {
+        const resPlates = currentBoxes.filter(b => b.plate).length;
+        ctx.fillStyle = '#34d399';
+        const rightText = `Tracks: ${currentBoxes.length} | Resolved Plates: ${resPlates}`;
+        const rw = ctx.measureText(rightText).width;
+        ctx.fillText(rightText, canvas.width - rw - 14, 20);
+    }
 }
 
 // ══ 6. Sighting Entry & Category Counters ════════════════════════
 function handleNewDetection(d) {
+    // Check if row already exists for this detection_id or track_id -> update in-place without double counting
+    const existing = document.getElementById('audit-row-' + d.detection_id)
+                  || (d.track_id ? document.querySelector(`tr[data-track-id="${d.track_id}"]`) : null);
+    if (existing) {
+        handleDetectionUpdated(d);
+        return;
+    }
+
     totalSightings++;
     document.getElementById('lblSightings').textContent = totalSightings;
     document.getElementById('auditCountBadge').textContent = `${totalSightings} sightings recorded`;
@@ -806,9 +961,11 @@ function handleNewDetection(d) {
     if (empty) empty.style.display = 'none';
 
     const card = document.createElement('div');
+    card.id = 'feed-card-' + (d.detection_id || d.track_id);
+    card.dataset.trackId = d.track_id;
     card.className = 'rec-ec' + (isAlert ? ' rec-ec--alert' : '');
     const badgeCls = BADGE_MAP[cname] || 'b-vehicle';
-    const emoji    = EMOJI_MAP[cname] || '\ud83d\ude98';
+    const emoji    = EMOJI_MAP[cname] || '🚗';
 
     card.innerHTML = `
         <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -834,16 +991,76 @@ function handleNewDetection(d) {
     prependAuditRow(d);
 }
 
+function handleDetectionUpdated(d) {
+    // Update audit table row
+    const tr = document.getElementById('audit-row-' + d.detection_id) || document.querySelector(`tr[data-track-id="${d.track_id}"]`);
+    if (tr) {
+        tr.style.background = 'rgba(16, 185, 129, 0.25)';
+        setTimeout(() => tr.style.background = 'transparent', 3000);
+
+        // Update high-res vehicle crop if provided
+        if (d.crop_path) {
+            const cropImg = tr.children[0].querySelector('img');
+            if (cropImg) {
+                cropImg.src = d.crop_path + '?t=' + Date.now();
+            }
+        }
+
+        const plateCropThumb = d.plate_crop_path
+            ? `<img src="${d.plate_crop_path}?t=${Date.now()}" onclick="openCropModal('${d.plate_crop_path}', 'Plate: ${d.detected_plate}')" loading="lazy"
+                    style="width:64px;height:20px;object-fit:cover;border-radius:3px;border:1px solid rgba(16,185,129,.4);cursor:pointer;display:block;margin-top:3px;">`
+            : '';
+
+        const isAlert = !!(d.watchlist_match || d.alert_id);
+        const plateCell = tr.children[4];
+        if (plateCell && d.detected_plate) {
+            plateCell.innerHTML = `
+                <div class="hsrp-chip ${isAlert ? 'hsrp-chip--alert' : ''}">
+                     <span class="hsrp-ind"><span class="hsrp-chakra">&#9770;</span>IND</span>
+                     <span class="hsrp-number">${d.detected_plate}</span>
+                </div>${plateCropThumb}
+            `;
+        }
+
+        const ocrCell = tr.children[5];
+        if (ocrCell && d.ocr_confidence) {
+            const ocrConf = Math.round(d.ocr_confidence * 100);
+            const platConf = d.plate_confidence ? Math.round(d.plate_confidence * 100) : '—';
+            ocrCell.innerHTML = `
+                <span style="font-size:.7rem;color:#64748b;">OCR <strong style="color:#34d399;">${ocrConf}%</strong></span>
+                <span style="font-size:.7rem;color:#64748b;">Det <strong style="color:#a78bfa;">${platConf}%</strong></span>
+                <span style="font-size:.68rem;color:#94a3b8;">${d.read_count || 1} reads</span>
+                <span style="font-size:.64rem;color:#38bdf8;background:rgba(56,189,248,.12);padding:1px 4px;border-radius:3px;border:1px solid rgba(56,189,248,.25);width:fit-content;">INDIAN PARSEQ</span>
+            `;
+        }
+    }
+
+    // Update feed card
+    const card = document.getElementById('feed-card-' + d.detection_id) || document.querySelector(`.rec-ec[data-track-id="${d.track_id}"]`);
+    if (card && d.detected_plate) {
+        card.style.borderLeftColor = '#10b981';
+        const isAlert = !!(d.watchlist_match || d.alert_id);
+        const plateContainer = card.querySelector('.hsrp-chip') || card.querySelector('span[style*="font-family:monospace"]');
+        if (plateContainer) {
+            plateContainer.outerHTML = `
+                <div class="hsrp-chip ${isAlert ? 'hsrp-chip--alert' : ''}" style="transform:scale(0.92);transform-origin:left;">
+                     <span class="hsrp-ind"><span class="hsrp-chakra">&#9770;</span>IND</span>
+                     <span class="hsrp-number">${d.detected_plate}</span>
+                </div>`;
+        }
+    }
+}
+
 function handleSightingAggregated(d) {
     // Find matching row in audit table and annotate it with final confirmed read_count
     const ptsLabel = d.first_seen_ms != null ? ` @ ${(d.first_seen_ms / 1000).toFixed(1)}s` : '';
-    const msg = `\u2713 Confirmed: ${d.plate || '—'} (${d.read_count} reads${ptsLabel})`;
+    const msg = `✓ Confirmed: ${d.plate || '—'} (${d.read_count} reads${ptsLabel})`;
     const feed = document.getElementById('feedList');
     const pill = document.createElement('div');
     pill.style.cssText = 'font-size:.7rem;color:#34d399;padding:.2rem .55rem;font-weight:600;border-left:2px solid #34d399;margin:.1rem 0;';
     pill.textContent = msg;
     feed.insertBefore(pill, feed.firstChild);
-    while (feed.children.length > 40) feed.removeChild(feed.lastChild);
+    while (feed.children.length > 50) feed.removeChild(feed.lastChild);
 }
 
 function prependAuditRow(d) {
@@ -852,9 +1069,16 @@ function prependAuditRow(d) {
         tbody.innerHTML = '';
     }
 
+    // Check if row already exists for this detection_id or track_id -> update in-place
+    const existing = document.getElementById('audit-row-' + d.detection_id) || document.querySelector(`tr[data-track-id="${d.track_id}"]`);
+    if (existing) {
+        handleDetectionUpdated(d);
+        return;
+    }
+
     const cname       = (d.class_name || '').toLowerCase();
     const badgeCls    = BADGE_MAP[cname] || 'b-vehicle';
-    const emoji       = EMOJI_MAP[cname] || '\ud83d\ude98';
+    const emoji       = EMOJI_MAP[cname] || '🚗';
     const plate       = d.detected_plate;
     const isAlert     = !!(d.watchlist_match || d.alert_id);
     const ocrConf     = d.ocr_confidence  != null ? Math.round(d.ocr_confidence * 100) + '%' : null;
@@ -862,6 +1086,8 @@ function prependAuditRow(d) {
     const readCount   = d.read_count || null;
 
     const tr = document.createElement('tr');
+    tr.id = 'audit-row-' + (d.detection_id || d.track_id);
+    tr.dataset.trackId = d.track_id;
     tr.style.background = 'rgba(56,189,248,.08)';
     setTimeout(() => tr.style.background = 'transparent', 2000);
 
@@ -910,8 +1136,9 @@ function prependAuditRow(d) {
         <td style="padding:.65rem .85rem;"><span style="color:#34d399; font-weight:700;">${d.confidence}%</span></td>
     `;
     tbody.insertBefore(tr, tbody.firstChild);
-    while (tbody.children.length > 50) tbody.removeChild(tbody.lastChild);
+    while (tbody.children.length > 500) tbody.removeChild(tbody.lastChild);
 }
+
 
 function handleJobProgress(p) {
     const pct = p.pct || 0;
